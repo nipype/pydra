@@ -1,0 +1,584 @@
+"""Warm environments in the pool worker (RFC 0005 sections 3.1, 4.3, W5b).
+
+A worker runs a shell job whose environment is declared ``warm=True`` through its warm session of that
+environment: one container, Apptainer instance or Lmod resolution serves the jobs of many tickets. The
+session starts on the first such ticket bound to the union of the ticket's binding roots, restarts once
+when a later ticket needs a root it lacks, runs a job cold beyond ``max_mount_roots``, and is closed when
+the worker exits. The worker runs the reference each job carries and never resolves one. Warmth is
+recorded in the job's pool facts only: the checksum, the slotted context and the stored result are
+those of a cold run.
+
+The runtimes are the fakes of ``test_warm_environments`` (they run each command on the host, mapping
+the container paths back); the worker runs in this process, as in ``test_pool_context``. The O5 cases
+(``singularity``, ``lmod``) need a real Apptainer or Lmod and run on a cluster node.
+"""
+
+import os
+import shutil
+import sys
+import tempfile
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+from pydra.compose import shell
+from pydra.engine.job import Job
+from pydra.engine.lease import LeaseSettings
+from pydra.engine.portable.identity import PydraIdentityV1
+from pydra.engine.portable.store import PortableStore
+from pydra.engine.resident import ResidentKey
+from pydra.engine.submitter import Submitter
+from pydra.environments import base, docker, lmod, singularity
+from pydra.environments.tests.test_warm_environments import IMAGE, FakeRuntime
+
+pytestmark = pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="the fakes run POSIX commands"
+)
+
+LEASE = LeaseSettings(
+    stale_after=4.0, renew_fraction=0.4, attribute_delay=0.0, timeout=10.0
+)
+
+Cp = shell.define("cp <in_file> <out|out_file>")
+COMMITS: list[dict] = []
+
+
+def record_commit(staged, checksum, key, context, digest):
+    COMMITS.append({"checksum": checksum, "context": context})
+
+
+def _sh(script):
+    return shell.define("sh")(executable="sh", append_args=["-c", script])
+
+
+def _input(path: Path, text: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+@pytest.fixture(autouse=True)
+def clean(monkeypatch):
+    """Release every claim a test leaves held, and forget the commits, pass or fail; no warm session
+    may be left served."""
+    from pydra.engine import resident
+    from pydra.workers.pool.storage import Claim
+
+    made = []
+    init = Claim.__init__
+
+    def recording(self, *args, **kwargs):
+        init(self, *args, **kwargs)
+        made.append(self)
+
+    monkeypatch.setattr(Claim, "__init__", recording)
+    device = resident.process_device()
+    COMMITS.clear()
+    yield
+    COMMITS.clear()
+    resident.set_process_device(device)
+    resident.close_process_set()
+    for claim in made:
+        claim.lease.__exit__(None, None, None)
+    assert base._SERVING == []
+
+
+@pytest.fixture
+def roots_below(tmp_path, monkeypatch):
+    """A binding root is a directory directly under ``tmp_path``, so that a test can make jobs that
+    need distinct roots (as ``test_warm_environments`` does)."""
+    (tmp_path / "scratch").mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "scratch"))
+    real = base.top_root
+
+    def top_root(path):
+        path = Path(path).absolute()
+        try:
+            rel = path.relative_to(tmp_path)
+        except ValueError:
+            return real(path)
+        return tmp_path / rel.parts[0] if rel.parts else tmp_path
+
+    monkeypatch.setattr(base, "top_root", top_root)
+
+
+def _settings(**kwargs):
+    from pydra.workers.pool.settings import PoolSettings
+
+    fields = dict(lease=LEASE, poll_s=0.05, idle_polls=2, timeout_grace=60.0)
+    fields.update(kwargs)
+    return PoolSettings(**fields)
+
+
+def _class(name="cpu", **kwargs):
+    from pydra.workers.pool.classes import WorkerClass
+
+    fields = dict(name=name, device="cpu", quantum_jobs=64, quantum_s=600.0)
+    fields.update(kwargs)
+    return WorkerClass(**fields)
+
+
+def _store(tmp_path: Path, name: str = "store") -> PortableStore:
+    root = tmp_path / name
+    root.mkdir(mode=0o700, exist_ok=True)
+    return PortableStore(
+        root,
+        trust="private",
+        pickle=True,
+        identity=PydraIdentityV1(recorded_only={"pool"}),
+        on_commit=record_commit,
+    )
+
+
+class Queue:
+    """A pool root, a submitting process's submitter in a (warm) environment and the tickets put on
+    the pool, for a worker run in this process."""
+
+    def __init__(self, tmp_path: Path, store, environment):
+        from pydra.workers.pool.storage import PoolRoot
+        from pydra.workers.pool.worker import class_record
+
+        self.pool = PoolRoot.open(tmp_path / "pool", LEASE, probe=False)
+        self.submitter = Submitter(
+            store=store, worker="debug", environment=environment, telemetry=False
+        )
+        self.store = store
+        self.pool.put_class("cpu", class_record(_class()))
+
+    def jobs(self, tasks, prefix="j"):
+        return [
+            Job(task=t, submitter=self.submitter, name=f"{prefix}{i}")
+            for i, t in enumerate(tasks)
+        ]
+
+    def put(self, jobs, queue="cpu") -> str:
+        from pydra.workers.pool.codec import PrivatePickle, write_payload
+        from pydra.workers.pool.storage import Ticket, TicketJob
+
+        entries = []
+        for job in jobs:
+            fingerprint = self.store.identity.fingerprint(job.context)
+            g = self.pool._next_generation((job.checksum, fingerprint))
+            job.attempt = f"{self.pool.pool_id}.{g}"
+            entries.append(
+                TicketJob(
+                    checksum=job.checksum,
+                    fingerprint=fingerprint,
+                    payload=write_payload(PrivatePickle(), job, self.pool.path),
+                    attempt=job.attempt,
+                    runner_attempt=0,
+                    units=1.0,
+                )
+            )
+        return self.pool.put(
+            queue, Ticket(queue=queue, node="wf/node", jobs=entries, residency=())
+        )
+
+    def work(self, cls=None, **kwargs):
+        """Run a worker in this process until it is idle; it must exit cleanly, and never resolve an
+        environment's reference (`_never_resolve`)."""
+        from pydra.workers.pool.worker import Worker
+
+        settings = kwargs.pop("settings", _settings())
+        worker = Worker(
+            self.pool.path,
+            cls or _class(),
+            settings=settings,
+            device_memory=lambda: None,
+            **kwargs,
+        )
+        with pytest.MonkeyPatch.context() as m:
+            _never_resolve(m)
+            assert worker.run() == 0
+        return worker
+
+    def close(self):
+        self.pool.close()
+        self.submitter.close()
+
+
+@pytest.fixture
+def queue_of(tmp_path):
+    made = []
+
+    def make(store, environment):
+        q = Queue(tmp_path, store, environment)
+        made.append(q)
+        return q
+
+    yield make
+    for q in made:
+        q.close()
+
+
+def _never_resolve(monkeypatch):
+    """Any resolution fails: the worker must run the references the jobs carry."""
+
+    def refuse(self):
+        raise AssertionError("a worker resolved an environment reference")
+
+    for cls in (docker.Docker, singularity.Singularity, lmod.Lmod):
+        monkeypatch.setattr(cls, "resolve", refuse)
+
+
+def _env_facts(commit) -> dict:
+    (entry,) = [
+        e for e in commit["context"]["pool"]["residency"] if e["kind"] == "environment"
+    ]
+    return entry
+
+
+# -- the worker runs shell jobs warm -------------------------------------------------------------
+
+
+def test_shell_task_in_warm_docker_worker_equals_debug(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """Three shell jobs of one ticket run in one started container, one ``docker exec`` each, with the
+    reference they carry. Each has the checksum, the slotted context and the stored output of a cold
+    ``debug`` run, and a cold ``debug`` lookup afterwards is served from the warm worker's entries.
+    """
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    srcs = [_input(tmp_path / "inputs" / f"in{i}.txt", f"in{i}\n") for i in range(3)]
+    tasks = [Cp(in_file=s) for s in srcs]
+
+    # the cold debug run, in a store of its own
+    cold_env = docker.Docker(image=IMAGE)
+    with Submitter(
+        worker="debug", store=_store(tmp_path, "cold-store"), environment=cold_env
+    ) as sub:
+        cold_jobs = [Job(task=t, submitter=sub, name="c") for t in tasks]
+        cold_outputs = [Path(sub(t).outputs.out_file).read_text() for t in tasks]
+    assert len(fake.cold) == 3
+    COMMITS.clear()
+
+    store = _store(tmp_path)
+    q = queue_of(store, docker.Docker(image=IMAGE, warm=True))
+    jobs = q.jobs(tasks)
+    q.put(jobs)
+    calls = len(fake.calls)
+    worker = q.work()
+
+    assert len(fake.starts) == 1 and len(fake.execs) == 3
+    assert len(fake.cold) == 3  # only the debug run's
+    assert worker.sessions == []  # closed at exit
+    (started,) = fake.starts
+    assert started[-2] == IMAGE  # the carried reference, never resolved here
+    assert list(fake.started)[0] in fake.stopped
+    # identity: warmth is never keyed, and the pool facts are recorded only
+    identity = store.identity
+    assert [c["checksum"] for c in COMMITS] == [j.checksum for j in cold_jobs]
+    assert [identity.fingerprint(c["context"]) for c in COMMITS] == [
+        identity.fingerprint(j.context) for j in cold_jobs
+    ]
+    assert all("pool" not in j.context for j in jobs + cold_jobs)
+    facts = [_env_facts(c) for c in COMMITS]
+    assert [f["run"] for f in facts] == ["warm"] * 3
+    assert [f["state"] for f in facts] == ["cold", "warm", "warm"]
+    assert [f["since_load"] for f in facts] == [0, 1, 2]
+    assert all(isinstance(f["load_s"], float) for f in facts)
+    key = ResidentKey("environment", "docker", jobs[0].resolved.key).digest()
+    assert {f["key"] for f in facts} == {key}
+    assert [c["context"]["pool"]["residency"][0]["kind"] for c in COMMITS] == [
+        "environment"
+    ] * 3
+    # served from the warm entries by a cold debug lookup: nothing runs again
+    calls = len(fake.calls)
+    with Submitter(worker="debug", store=store, environment=cold_env) as sub:
+        served = [Path(sub(t).outputs.out_file).read_text() for t in tasks]
+    assert served == cold_outputs == ["in0\n", "in1\n", "in2\n"]
+    assert len(fake.calls) == calls
+
+
+def test_new_root_restarts_environment_once(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """The first ticket starts the container with its own roots. A later ticket whose jobs need two
+    roots the container lacks restarts it once, bound to the union; a third ticket within those roots
+    needs no restart."""
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE, warm=True))
+
+    def ticket(n, *dirs):
+        srcs = [_input(tmp_path / d / f"in{n}.txt", f"{d}{n}\n") for d in dirs]
+        jobs = q.jobs([Cp(in_file=s) for s in srcs], prefix=f"t{n}-")
+        q.put(jobs)
+        return jobs
+
+    ticket(1, "a")
+    ticket(2, "b", "c")
+    ticket(3, "a", "c")
+    worker = q.work()
+
+    assert len(fake.starts) == 2  # one start, one restart for b and c together
+    assert len(fake.execs) == 5 and fake.cold == []
+    first, second = (
+        {h for h, _, m in fake.started[n]["binds"] if m == "ro"} for n in ("id0", "id1")
+    )
+    assert tmp_path / "a" in first and not {tmp_path / "b", tmp_path / "c"} & first
+    assert {tmp_path / d for d in "abc"} <= second
+    assert fake.stopped[:1] == ["id0"] and "id1" in fake.stopped
+    assert worker.sessions == []
+    assert [_env_facts(c)["state"] for c in COMMITS] == [
+        "cold",
+        "cold",
+        "warm",
+        "warm",
+        "warm",
+    ]
+
+
+def test_beyond_max_mount_roots_runs_cold_in_the_worker(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """A ticket whose union exceeds ``max_mount_roots`` starts nothing for the ticket; each job is
+    judged alone, and the one whose roots no start can hold runs through the cold ``execute`` in the
+    same worker, with the outputs of a warm run."""
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    # the store (holding the cache and the scratch) and one input directory are two roots
+    q = queue_of(
+        _store(tmp_path), docker.Docker(image=IMAGE, warm=True, max_mount_roots=2)
+    )
+    srcs = [_input(tmp_path / d / "in.txt", f"{d}\n") for d in ("a", "b")]
+    jobs = q.jobs([Cp(in_file=s) for s in srcs])
+    q.put(jobs)
+    q.work()
+
+    assert len(fake.starts) == 1 and len(fake.execs) == 1 and len(fake.cold) == 1
+    assert [_env_facts(c)["run"] for c in COMMITS] == ["warm", "cold"]
+    with Submitter(
+        worker="debug", store=q.store, environment=q.submitter.environment
+    ) as sub:
+        assert [
+            Path(sub(Cp(in_file=s)).outputs.out_file).read_text() for s in srcs
+        ] == [
+            "a\n",
+            "b\n",
+        ]
+
+
+def test_lmod_ticket_resolved_once_in_the_worker(tmp_path, queue_of, monkeypatch):
+    """Lmod: the submitting process resolves the requested names once; the worker purges and loads
+    the carried full names once for all its jobs, and never resolves."""
+    loads = []
+
+    def purge_and_load(names):
+        loads.append(list(names))
+        env = dict(os.environ, TOOL_VERSION="2.0", LOADEDMODULES="tool/2.0")
+        return dict(os.environ), ["tool/2.0"], ["/tree/tool/2.0.lua"], env
+
+    monkeypatch.setenv("MODULESHOME", str(tmp_path / "lmod"))
+    monkeypatch.setattr(lmod.Lmod, "_purge_and_load", staticmethod(purge_and_load))
+    q = queue_of(_store(tmp_path), lmod.Lmod(modules=["tool"], warm=True))
+    tasks = [_sh(f"echo $TOOL_VERSION {i}") for i in range(5)]
+    jobs = q.jobs(tasks)
+    q.put(jobs[:2])
+    q.put(jobs[2:])
+    assert loads == [["tool"]]  # the submitting process's one resolution
+    q.work()
+
+    assert loads == [["tool"], ["tool/2.0"]]
+    assert [_env_facts(c)["since_load"] for c in COMMITS] == [0, 1, 2, 3, 4]
+    with Submitter(
+        worker="debug", store=q.store, environment=lmod.Lmod(modules=["tool"])
+    ) as sub:
+        assert [sub(t).outputs.stdout.split() for t in tasks] == [
+            ["2.0", str(i)] for i in range(5)
+        ]
+    assert len(loads) == 3  # the cold lookup resolved; nothing ran again
+
+
+def test_python_and_cold_shell_jobs_untouched(tmp_path, queue_of, monkeypatch):
+    """A shell job whose environment is not declared warm runs through its cold ``execute``: the
+    worker opens no session and its pool facts have no environment entry."""
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE))
+    src = _input(tmp_path / "inputs" / "in.txt", "x\n")
+    q.put(q.jobs([Cp(in_file=src)]))
+    worker = q.work()
+    assert fake.starts == [] and len(fake.cold) == 1
+    assert worker.served and worker.sessions == []
+    assert [e["kind"] for e in COMMITS[0]["context"]["pool"]["residency"]] == []
+
+
+def test_orphaned_container_reaped_and_own_closed(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """A container a dead worker left on this host is removed at the worker's first warm start, and
+    the worker's own container and scratch directory are gone when it exits."""
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    host, _ = base.owner()
+    proc = __import__("subprocess").Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    ns = base.pid_namespace() or "-"
+    fake.labels = {"orphan": f"{host}:{os.getuid()}:{ns}:{proc.pid}"}
+    q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE, warm=True))
+    src = _input(tmp_path / "inputs" / "in.txt", "x\n")
+    q.put(q.jobs([Cp(in_file=src)]))
+    q.work()
+    assert "orphan" in fake.stopped
+    assert fake.stopped[-1] == list(fake.started)[0]
+    assert not list(Path(q.store.path).rglob(".pydra-warm-*"))
+
+
+def test_drain_stops_the_warm_command(tmp_path, roots_below, queue_of, monkeypatch):
+    """On a drain (SIGTERM) whose ``drain_s`` has passed, the command the warm container runs is
+    stopped by closing the container; the job is released unsettled and the worker exits cleanly.
+    """
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    fake.exec_delay = 5.0
+    returned = []
+    execute = fake.execute
+
+    def recording(cmd, *args, **kwargs):
+        out = execute(cmd, *args, **kwargs)
+        if [str(c) for c in cmd[:2]] == ["docker", "exec"]:
+            returned.append(out[0])
+        return out
+
+    monkeypatch.setattr(base, "execute", recording)
+    q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE, warm=True))
+    src = _input(tmp_path / "inputs" / "in.txt", "x\n")
+    q.put(q.jobs([Cp(in_file=src)]))
+    from pydra.workers.pool.worker import Worker
+
+    worker = Worker(
+        q.pool.path,
+        _class(),
+        settings=_settings(drain_s=0.01),
+        device_memory=lambda: None,
+    )
+
+    def drain():
+        while not fake.execs:
+            time.sleep(0.02)
+        worker.stop.set()
+        worker._wake.set()
+
+    threading.Thread(target=drain, daemon=True).start()
+    began = time.monotonic()
+    assert worker.run() == 0
+    assert time.monotonic() - began < fake.exec_delay  # the call was not waited for
+    (name,) = fake.started
+    assert name in fake.stopped
+    for thread in threading.enumerate():
+        if thread.name == "pydra-pool-call":
+            thread.join(30)
+    assert returned == [137]  # the command was killed with its container
+    assert COMMITS == []
+
+
+# -- O5: real runtimes on a cluster node (``module load apptainer``; Lmod's MODULEPATH) -----------
+
+
+def _o5_jobs(default: int) -> int:
+    return int(os.environ.get("PYDRA_O5_JOBS", default))
+
+
+@pytest.mark.singularity
+@pytest.mark.timeout(3600)
+@pytest.mark.skipif(
+    not (shutil.which("apptainer") or shutil.which("singularity")),
+    reason="no apptainer",
+)
+def test_warm_apptainer_shell_jobs(tmp_path, queue_of, monkeypatch, record_property):
+    """O5: 500 shell jobs of one Apptainer image on one worker start one instance; their outputs
+    equal a cold ``debug`` run's (sampled), no job sees what another wrote to ``$HOME`` or ``/tmp``,
+    and the wall per job is recorded warm against cold."""
+    n, sample = _o5_jobs(500), int(os.environ.get("PYDRA_O5_COLD", 20))
+    monkeypatch.setenv("APPTAINER_CACHEDIR", str(tmp_path / "apptainer-cache"))
+    monkeypatch.setenv("SINGULARITY_CACHEDIR", str(tmp_path / "apptainer-cache"))
+    monkeypatch.setenv("PYDRA_IMAGE_CACHE", str(tmp_path / "images"))
+    ref = singularity.Singularity(image="docker://alpine", tag="3.20").resolve()
+    cold_env = singularity.Singularity(image=ref.run)
+    warm_env = singularity.Singularity(image=ref.run, warm=True)
+    srcs = [_input(tmp_path / "inputs" / f"in{i}.txt", f"line {i}\n") for i in range(n)]
+    tasks = [Cp(in_file=s) for s in srcs]
+
+    began = time.monotonic()
+    with Submitter(
+        worker="debug", store=_store(tmp_path, "cold"), environment=cold_env
+    ) as sub:
+        cold = [Path(sub(t).outputs.out_file).read_bytes() for t in tasks[:sample]]
+    cold_wall = (time.monotonic() - began) / sample
+
+    starts = []
+    real_warm = singularity.Singularity.warm
+
+    def counting(self, *args, **kwargs):
+        handle = real_warm(self, *args, **kwargs)
+        starts.append(handle)
+        return handle
+
+    monkeypatch.setattr(singularity.Singularity, "warm", counting)
+    store = _store(tmp_path)
+    q = queue_of(store, warm_env)
+    jobs = q.jobs(tasks)
+    for i in range(0, n, 50):
+        q.put(jobs[i : i + 50])
+    writers = q.jobs(
+        [_sh(f'echo {i} > "$HOME/x"; echo {i} > /tmp/y') for i in range(3)], "w"
+    )
+    q.put(writers)
+    (reader,) = q.jobs(
+        [_sh('test -e "$HOME/x" && echo seen-x; test -e /tmp/y && echo seen-y; true')],
+        "r",
+    )
+    q.put([reader])
+    COMMITS.clear()
+    began = time.monotonic()
+    q.work()
+    warm_wall = (time.monotonic() - began) / (n + 4)
+
+    assert len(starts) == 1  # one instance for every job
+    assert len(COMMITS) == n + 4
+    assert all(_env_facts(c)["run"] == "warm" for c in COMMITS)
+    with Submitter(worker="debug", store=store, environment=cold_env) as sub:
+        warm = [Path(sub(t).outputs.out_file).read_bytes() for t in tasks]
+        assert "seen" not in sub(reader.task).outputs.stdout
+    assert warm[:sample] == cold
+    assert warm == [s.read_bytes() for s in srcs]
+    record_property("warm_wall_per_job_s", round(warm_wall, 4))
+    record_property("cold_wall_per_job_s", round(cold_wall, 4))
+    print(
+        f"apptainer: {n} jobs warm {warm_wall * 1000:.0f} ms/job (pool included), "
+        f"cold debug {cold_wall * 1000:.0f} ms/job over {sample}"
+    )
+
+
+@pytest.mark.lmod
+@pytest.mark.timeout(1800)
+@pytest.mark.skipif("MODULEPATH" not in os.environ, reason="modules not available")
+def test_lmod_resolved_once(tmp_path, queue_of, monkeypatch):
+    """O5: 200 shell jobs under an ``Lmod`` environment on one worker: the submitting process
+    resolves the names once, the worker loads the carried full names once, and every output is the
+    module's."""
+    n = _o5_jobs(200)
+    modules = tmp_path / "modules" / "tool"
+    modules.mkdir(parents=True)
+    (modules / "2.0.lua").write_text('setenv("TOOL_VERSION", "2.0")\n')
+    monkeypatch.setenv("MODULEPATH", str(tmp_path / "modules"))
+    calls = []
+    real = lmod.Lmod._purge_and_load.__func__
+
+    def counting(cls, names):
+        calls.append(list(names))
+        return real(cls, names)
+
+    monkeypatch.setattr(lmod.Lmod, "_purge_and_load", classmethod(counting))
+    q = queue_of(_store(tmp_path), lmod.Lmod(modules=["tool"], warm=True))
+    tasks = [_sh(f"echo $TOOL_VERSION {i}") for i in range(n)]
+    jobs = q.jobs(tasks)
+    for i in range(0, n, 50):
+        q.put(jobs[i : i + 50])
+    assert calls == [["tool"]]
+    q.work()
+    assert calls == [["tool"], ["tool/2.0"]]  # one resolution per worker
+    assert len(COMMITS) == n
+    with Submitter(
+        worker="debug", store=q.store, environment=lmod.Lmod(modules=["tool"])
+    ) as sub:
+        outputs = [sub(t).outputs.stdout.split() for t in tasks]
+    assert outputs == [["2.0", str(i)] for i in range(n)]

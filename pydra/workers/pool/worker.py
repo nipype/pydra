@@ -21,7 +21,12 @@ one loop:
    a job's own binding uses too); a failure there is a load fault, never a job's.
 4. **Run** each job through ``Job.run`` on a thread, with ``chdir=False``, under the attempt of its
    newest follow generation (a ``restart`` generation first when that attempt already started), with
-   the claim as its de-duplication lease, proved before ``publish``. The call record is written before
+   the claim as its de-duplication lease, proved before ``publish``. A shell job whose environment is
+   declared ``warm=True`` runs through the worker's warm session of that environment (`PoolSession`,
+   served process-wide): started on the first such ticket bound to the union of the ticket's binding
+   roots and the class's ``mounts``, restarted once when a ticket needs a root it lacks, run cold
+   beyond ``max_mount_roots`` or for another reference, always with the reference the job carries.
+   The call record is written before
    the call and its deadline sent to the beater; ``done`` is written after it. Each call goes through
    the bisection engine (`pydra.workers.pool.bisect`): a resource fault or a crash reloads the
    residency; a lone job out of memory moves up the ladder, and one that crashes is run again under a
@@ -37,7 +42,8 @@ one loop:
 7. **Exit** after ``idle_polls`` empty polls; on SIGTERM after settling finished jobs and releasing the
    rest; for a substrate-started worker after ``orphan_after_s`` without a live coordinator; and,
    recycling (exit `EXIT_RECYCLE`), after a call's deadline passed or the beater died. Resident state is
-   closed on exit, process groups included.
+   closed on exit, process groups and warm environments included; a warm container a dead worker left
+   is removed by the next warm start on its host.
 """
 
 from __future__ import annotations
@@ -61,6 +67,7 @@ from pathlib import Path
 import attrs
 
 from pydra.engine.lease import BeaterClient, BeaterDead, DirectoryLease, LeaseLost
+from pydra.environments.base import WarmContainer, WarmSession, serving
 from pydra.utils.storagedir import StoreUnavailable
 from pydra.workers.pool.beater import expiry_payload, pool_beater
 from pydra.workers.pool.classes import WorkerClass, parse_size
@@ -113,6 +120,7 @@ __all__ = [
     "EXIT_REUSED",
     "EXIT_SETTINGS",
     "EXIT_USAGE",
+    "PoolSession",
     "Worker",
     "WrongHardware",
     "check_hardware",
@@ -120,6 +128,7 @@ __all__ = [
     "class_record",
     "main",
     "run_worker",
+    "warm_shell_job",
 ]
 
 logger = logging.getLogger("pydra.pool")
@@ -256,6 +265,66 @@ class _Call:
         self.wall = 0.0
 
 
+class PoolSession(WarmSession):
+    """A worker's warm session of one environment: a `WarmSession` that also records, in the
+    ``environment`` entry of the job's pool facts, how its call ran (``run``: ``warm`` or ``cold``;
+    ``state``: ``cold`` for the first job of a start; ``since_load``; ``load_s``, the start's seconds).
+    The facts are recorded only: they never enter a job's checksum or slotted context.
+    """
+
+    def execute(self, job: "Job") -> dict[str, ty.Any]:
+        cold_runs = self.cold_runs
+        try:
+            return super().execute(job)
+        finally:
+            self._note(job, self.cold_runs > cold_runs)
+
+    def _handle_for(self, job, needed=None, writable=None):
+        starts = self.starts
+        handle = super()._handle_for(job, needed, writable)
+        if self.starts > starts and self.handle is not None:
+            logger.info(
+                "started the warm environment %s with %d binding roots (start %d) in %.2fs",
+                self.handle.key.spec,
+                len(self.handle.roots),
+                self.starts,
+                self.start_s or 0.0,
+                extra={"event": "warm-start"},
+            )
+        return handle
+
+    def _note(self, job: "Job", cold: bool) -> None:
+        facts = getattr(job, "pool_facts", None)
+        if not isinstance(facts, dict):
+            return
+        entry = next(
+            (e for e in facts.get("residency", ()) if e.get("kind") == "environment"),
+            None,
+        )
+        handle = self.handle
+        if entry is None:
+            return
+        if cold or handle is None:
+            entry.update(run="cold", state="cold", since_load=0, load_s=None)
+            return
+        since = max(handle.jobs_run - 1, 0)
+        entry.update(
+            run="warm",
+            state="cold" if since == 0 else "warm",
+            since_load=since,
+            load_s=None if self.start_s is None else round(self.start_s, 6),
+        )
+
+
+def warm_shell_job(job: "Job") -> bool:
+    """Whether ``job`` is a shell job whose environment is declared ``warm=True``."""
+    from pydra.compose.shell.task import Task as ShellTask
+
+    return isinstance(job.task, ShellTask) and bool(
+        getattr(job.environment, "warm_requested", False)
+    )
+
+
 class Worker:
     """A pool worker of one class; `run` is the loop of RFC 0005 section 4.3.
 
@@ -356,6 +425,9 @@ class Worker:
         self._lost: set[Path] = set()
         self._expired: set[Path] = set()
         self._warm: dict[str, int] = {}
+        # the warm sessions of the environments of this worker's shell jobs, served process-wide
+        self.sessions: list[PoolSession] = []
+        self._serving = contextlib.ExitStack()
         self._seq = 0
         self._filled_gpu_mem = False
         self._baseline_bytes: int | None = None
@@ -603,6 +675,9 @@ class Worker:
         try:
             from pydra.engine import resident
 
+            self._close_environments()
+            self._serving.close()
+            self.sessions = []
             resident.close_process_set()
             resident.set_process_device(None)
         finally:
@@ -867,6 +942,7 @@ class Worker:
         except Exception as exc:
             self._load_fault(claim, [e for e, _ in jobs], exc, jobs[0][1])
             return
+        self._warm_environments([job for _, job in jobs])
         queue = claim.queue
         cold = queue not in self._warm or loaded
         if cold:
@@ -989,6 +1065,46 @@ class Worker:
                 for a, b in zip(after, before)
             )
         return took, loaded
+
+    def _warm_environments(self, jobs: ty.Sequence["Job"]) -> None:
+        """Open the warm session of each warm environment among ``jobs``' shell jobs (once per
+        environment, served in this process for the worker's life), and start it, or restart it once,
+        bound to the union of the ticket's binding roots. A start that fails leaves its jobs to run
+        cold: correctness never depends on warmth."""
+        warm = [job for job in jobs if warm_shell_job(job)]
+        for job in warm:
+            if not any(s.accepts(job) for s in self.sessions):
+                session = PoolSession(
+                    job.environment, device=self._device(), roots=self.cls.mounts
+                )
+                self._serving.enter_context(serving(session, close=False))
+                self.sessions.append(session)
+        for session in self.sessions:
+            try:
+                session.prepare(warm)
+            except Exception as err:
+                logger.warning(
+                    "preparing the warm environment %s failed, its jobs are judged one by "
+                    "one: %r",
+                    session.environment,
+                    err,
+                )
+
+    def _close_environments(self) -> None:
+        """Close every warm session's environment; the next job of one starts it again. The handle is
+        closed directly, not through the session, whose lock a call abandoned in flight may hold.
+        """
+        for session in self.sessions:
+            handle = session.handle
+            try:
+                if handle is not None:
+                    handle.close()
+            except Exception as err:
+                logger.warning(
+                    "closing the warm environment %s failed: %r",
+                    session.environment,
+                    err,
+                )
 
     def _held_bytes(self) -> tuple[int | None, int | None]:
         """The host resident bytes and the device bytes of this worker's own processes (itself and
@@ -1480,6 +1596,8 @@ class Worker:
                     "load_s": None if load_s is None else round(load_s, 6),
                 }
             )
+        if warm_shell_job(job):
+            residency.insert(0, self._environment_fact(job))
         hw = self._hardware or HardwareClass()
         gpu = hw.gpus[0] if hw.gpus else None
         return {
@@ -1500,6 +1618,30 @@ class Worker:
             "residency": residency,
             "batch": {"size": 1, "index": 0},
             "losses_survived": self._losses(claim, entry),
+        }
+
+    @staticmethod
+    def _environment_fact(job: "Job") -> dict:
+        """The ``environment`` entry of a warm shell job's pool facts, keyed by the reference the job
+        carries (never resolved here); `PoolSession` fills in how the call ran."""
+        from pydra.engine.resident import ResidentKey
+
+        env = job.environment
+        try:
+            name = env.plugin_name()
+            ref = job.resolved if job.resolves_reference else env.resolve()
+            key: str | None = ResidentKey("environment", name, ref.key).digest()
+        except Exception:
+            name, key = type(env).__name__, None
+        return {
+            "key": key,
+            "kind": "environment",
+            "name": name,
+            "version": None,
+            "state": "cold",
+            "since_load": 0,
+            "load_s": None,
+            "run": "cold",
         }
 
     def _losses(self, claim: Claim, entry: TicketJob) -> int:
@@ -1630,16 +1772,18 @@ class Worker:
     def _stop_call(self) -> bool:
         """Stop the call in flight where it runs in a process-owning provider's process: stop each
         such provider's group and evict it from the process's resident set, so the next job loads
-        afresh rather than reaching a dead process. An in-process call cannot be stopped. Return
-        whether any provider was stopped."""
+        afresh rather than reaching a dead process; where it is a warm container's command, close
+        the container (`_stop_warm_command`). An in-process call cannot be stopped. Return whether
+        any provider or warm command was stopped."""
+        command = self._stop_warm_command()
         if "pydra.engine.procgroup" not in sys.modules:
-            return False
+            return command
         from pydra.engine import resident
         from pydra.engine.procgroup import ProcessHandle
 
         rs = resident.existing_process_set()
         if rs is None:
-            return False
+            return command
         stopped = False
         for key, obj in rs.items():
             if isinstance(obj, ProcessHandle):
@@ -1649,6 +1793,23 @@ class Worker:
                 stopped = True
         if stopped:
             self._warm.clear()
+        return stopped or command
+
+    def _stop_warm_command(self) -> bool:
+        """Close each warm container that is running a job's command now, which ends that command;
+        its session starts a fresh container for its next job. Return whether one was closed.
+        """
+        stopped = False
+        for session in self.sessions:
+            handle = session.handle
+            if (
+                isinstance(handle, WarmContainer)
+                and not handle.closed
+                and handle._lock.locked()
+            ):
+                with contextlib.suppress(Exception):
+                    handle.close()
+                stopped = True
         return stopped
 
     def _classify_call(self, error: BaseException, phase: str) -> FaultRecord:
@@ -1674,6 +1835,7 @@ class Worker:
         from pydra.engine import resident
 
         resident.close_process_set()
+        self._close_environments()
         self._warm.clear()
         self._load_bytes.clear()
         group["reload"] = True
