@@ -958,10 +958,13 @@ def test_try_take_keeps_its_bounds_between_attempts(tmp_path):
         stale_after=10, timeout=15, attribute_delay=0, max_wait=0.2
     )
     holder = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
-    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    clock = FakeTime(0.0)  # the wait's monotonic clock, moved past max_wait by hand
+    waiter = DirectoryLease(
+        "abc", tmp_path, lockfile, settings=settings, monotonic=clock.monotonic
+    )
     with holder:
         assert waiter.try_take() is not None
-        time.sleep(0.3)
+        clock.t += 0.3
         with pytest.raises(LeaseTimeout):
             waiter.try_take()
         assert not waiter.held
