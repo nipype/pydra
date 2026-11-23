@@ -181,6 +181,12 @@ def requires_converter(
         raise e
 
 
+class Unfilled(enum.Enum):
+    """The ``fill`` of a field that does not fill absent values."""
+
+    NO_FILL = "no fill"
+
+
 @attrs.define(kw_only=True)
 class Field:
     """Base class for input and output fields to tasks
@@ -333,6 +339,13 @@ class Arg(Field):
         If True the input field can’t be provided by the user but it aggregates other
         input fields (for example the fields with argstr: -o {fldA} {fldB}), by default
         it is False
+    absent: "propagate" | "accept" | "drop" | "fill" | None, optional
+        What the field does with a :class:`~pydra.engine.absent.Absent` value:
+        ``"propagate"`` (the default, None) completes the element absent without running
+        it, ``"accept"`` passes the value as resolved, ``"drop"`` passes a combined value
+        without its absent elements, ``"fill"`` replaces each with ``fill``
+    fill: object, optional
+        The value an ``Absent`` is replaced with under ``absent="fill"``
     """
 
     allowed_values: frozenset = attrs.field(factory=frozenset, converter=frozenset)
@@ -340,6 +353,20 @@ class Arg(Field):
     copy_collation: File.CopyCollation = File.CopyCollation.any
     copy_ext_decomp: File.ExtensionDecomposition = File.ExtensionDecomposition.single
     readonly: bool = False
+    absent: ty.Literal["propagate", "accept", "drop", "fill"] | None = attrs.field(
+        default=None,
+        validator=attrs.validators.optional(
+            attrs.validators.in_(("propagate", "accept", "drop", "fill"))
+        ),
+    )
+    fill: ty.Any = attrs.field(default=Unfilled.NO_FILL)
+
+    @fill.validator
+    def _fill_needs_its_mode(self, _attribute, value) -> None:
+        if (self.absent == "fill") != (value is not Unfilled.NO_FILL):
+            raise ValueError(
+                f"absent='fill' and fill= go together (got absent={self.absent!r})"
+            )
 
     def _additional_descriptors(self, **kwargs) -> list[str]:
         """Get additional descriptors for the field"""

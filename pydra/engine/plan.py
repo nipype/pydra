@@ -34,11 +34,14 @@ class PlanNode:
     expected_hits : int
         How many unfinished elements with a checksum have a stored result to reuse, as the
         store answers (``expected_hits`` or ``recorded``; 0 for a store with neither)
-    state : "pending" | "waiting" | "deferred"
-        Released or releasable; a workflow job whose lease another process holds; or not
-        known yet (a workflow job not expanded, a split over an upstream output)
+    state : "pending" | "waiting" | "deferred" | "absent"
+        Released or releasable; a workflow job whose lease another process holds; not
+        known yet (a workflow job not expanded, a split over an upstream output); or absent
+        as a whole (RFC 0002 section 2.3(a)), with no elements
     gated : int
         Elements a gate switches off
+    absent : int
+        Elements that complete absent because a propagating input holds an ``Absent``
     placement : object, optional
         What the worker's executor's ``place(jobs)`` returned (RFC 0005 section 7.4)
     provisional : bool
@@ -53,8 +56,9 @@ class PlanNode:
     resources: "ComputeResources | None"
     worker: str | None
     expected_hits: int
-    state: ty.Literal["pending", "waiting", "deferred"]
+    state: ty.Literal["pending", "waiting", "deferred", "absent"]
     gated: int = 0
+    absent: int = 0
     placement: object | None = None
     provisional: bool = False
     known_elements: int | None = None
@@ -103,6 +107,8 @@ def _view(node: "NodeExecution", graph) -> "NodeExecution | None":
     twin._state = copy.deepcopy(node.node._state)
     view = NodeExecution(twin, node.submitter, node.workflow, node.path)
     view.graph = node.graph
+    if view._inherit_absent():  # absent as a whole, as the runner would make it
+        return view
     try:
         mode = view._classify()
         if mode == "error":
@@ -219,7 +225,20 @@ def _node(
     if node.done:
         return None
     view = _view(node, frame.graph)
+    if view is not None and view.absent is not None:
+        return PlanNode(
+            path="/".join((*node.path, node.name)),
+            elements=0,
+            resources=node.node._resources or node.node._task._resources,
+            worker=None,
+            expected_hits=0,
+            state="absent",
+            known_elements=0,
+        )
     jobs, unformed = _elements(view, node) if view is not None else ([], 0)
+    # elements completing absent are counted, and never routed, placed or looked up
+    absent = sum(j._propagated_absent is not None for j in jobs)
+    jobs = [j for j in jobs if j._propagated_absent is None]
     workflow_node = is_workflow(node.node._task)
     if workflow_node and view is not None:
         if any(
@@ -262,6 +281,7 @@ def _node(
         worker=worker,
         expected_hits=_hits(runner, unhanded, listed),
         state="deferred" if deferred else "pending",
+        absent=absent,
         placement=placement,
         provisional=provisional,
         known_elements=known,

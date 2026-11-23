@@ -28,6 +28,7 @@ import typing as ty
 from collections import defaultdict
 from traceback import format_exc
 import attrs
+from pydra.engine.absent import Absent
 from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.progress import UNSET, changed
 from pydra.engine.state import (
@@ -653,6 +654,8 @@ class PartialExpansion:
                 self._set_status(bkey, "failed")
             elif all(status == "ok" for _, status in statuses):
                 self._expand(bkey, self.blocks[bkey])
+                if ex.absent is not None:  # the node became absent as a whole
+                    return
 
     def _expand(self, bkey: tuple, block: _BlockState) -> None:
         from pydra.engine.runner import _check_splittable, error_entry
@@ -664,6 +667,10 @@ class PartialExpansion:
         for term, lf in spec.inner.items():
             if positions[lf._node.name] is None:  # the whole output of a source
                 value = lf._get_value(workflow=ex.workflow, graph=self.graph)
+                if isinstance(value, Absent) and not ex._tasks:
+                    # every block reads this one value: the node is absent as a whole
+                    ex._become_absent(value)
+                    return
                 _check_splittable(ex.name, term, value)
         try:
             for term in rpn_terms(spec.rpn):

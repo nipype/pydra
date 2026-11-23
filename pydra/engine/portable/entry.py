@@ -724,7 +724,7 @@ def _declared(
             out[name] = value
             continue
         try:
-            out[name] = TypeParser(field.type)(value)
+            out[name] = TypeParser(field.type, accepts_absent=True)(value)
         except Exception as err:
             if _has_fileset(field.type):
                 raise CorruptEntry(
