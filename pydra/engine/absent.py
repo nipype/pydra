@@ -18,6 +18,14 @@ Every read of a node that is absent as a whole (a splitter input resolved to an
 applies its mode: ``"accept"`` passes the ``Absent``, ``"drop"`` an empty list, ``"fill"``
 the fill, and ``"propagate"`` completes the reader absent.
 
+Per element (a partial node), an upstream element whose output is an ``Absent``
+gives that element's sub-state no elements. A read of a group all of whose sub-states are
+absent is the ``Absent``, and the reader applies its mode as above; a read of every element
+holds only the elements that exist. A partial node downstream forms the group too, from
+the absent sub-states its sources record. A barrier node, or a barrier reader of a partial
+node, reads such an element as an empty sub-state. A combine that would keep its group
+where no chain of partial nodes forms it raises ``AbsentGroupError``.
+
 A task whose checksum may not see an accepted or dropped ``Absent`` (a supplied checksum,
 or a field the checksum skips), or that filled one, has :func:`absence_suffix` of
 :func:`absence_triples` appended to its job checksum.
