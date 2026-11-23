@@ -486,7 +486,9 @@ def test_ack_timeout_is_beater_death(tmp_path, callbacks):
         bound = f"{SHORT.renew_interval:g}s"
         # the wait for the acknowledgement ran out at renew_interval, neither sooner nor
         # later: the message names the bound the wait was given
-        with pytest.raises(BeaterDead, match=f"did not acknowledge hold within {bound}"):
+        with pytest.raises(
+            BeaterDead, match=f"did not acknowledge hold within {bound}"
+        ):
             client.hold(second)
         assert not client.alive
         assert wait_for(lambda: client.process.poll() is not None, 30)  # stopped
