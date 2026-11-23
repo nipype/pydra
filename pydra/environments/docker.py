@@ -1,16 +1,44 @@
+import json
+import os
 import typing as ty
 import logging
+from pathlib import Path
+import attrs
 from pydra.compose import shell
 from pydra.environments import base, images
 
 logger = logging.getLogger("pydra")
 
+SLEEP_FOREVER = str(2**31 - 1)
+"""The keep-alive container's ``sleep``: the largest value ``sleep`` accepts everywhere (a signed
+32-bit count of seconds)."""
+
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+    from pydra.engine.resident import Device
 
 
+@attrs.define
 class Docker(base.Container):
-    """Docker environment."""
+    """Docker environment.
+
+    Parameters
+    ----------
+    read_only : bool
+        A warm container's root file system is read-only, with a ``tmpfs`` on ``/tmp``
+    """
+
+    read_only: bool = attrs.field(default=False, kw_only=True)
+
+    def _warm_handle(
+        self,
+        ref: base.ResolvedRef,
+        roots: frozenset[Path],
+        device: "Device | None",
+        writable: frozenset[Path],
+        scratch: Path | None,
+    ) -> "WarmDocker":
+        return WarmDocker(self, ref, roots, device, writable, scratch)
 
     def _ref_key(self) -> ty.Hashable:
         repository, digest = images.split_reference(self.image)
@@ -127,6 +155,127 @@ class Docker(base.Container):
             else:
                 raise RuntimeError(output["stdout"])
         return output
+
+
+def user_flag() -> list[str]:
+    """``--user <uid>:<gid>`` of this process, so files a container writes are owned
+    by the submitting user; nothing where there are no POSIX ids"""
+    if not hasattr(os, "getuid"):
+        return []
+    return ["--user", f"{os.getuid()}:{os.getgid()}"]
+
+
+def split_entrypoint(xargs: list[str]) -> tuple[list[str], list[str] | None]:
+    """``xargs`` without an ``--entrypoint`` option, and the entrypoint it names
+    (``[]`` for an empty one), or ``None`` when it names none"""
+    rest, entrypoint, i = [], None, 0
+    while i < len(xargs):
+        arg = xargs[i]
+        if arg == "--entrypoint" and i + 1 < len(xargs):
+            entrypoint, i = xargs[i + 1], i + 2
+            continue
+        if arg.startswith("--entrypoint="):
+            entrypoint = arg.partition("=")[2]
+        else:
+            rest.append(arg)
+        i += 1
+    if entrypoint is None:
+        return rest, None
+    return rest, [entrypoint] if entrypoint else []
+
+
+class WarmDocker(base.WarmContainer):
+    """One ``docker run -d`` of the resolved reference, with the roots bound and a
+    sleeper as entrypoint, then a ``docker exec`` per job (RFC 0005 section 3.1). Each
+    exec runs the image's entrypoint (or the one ``xargs`` names) before the
+    command, as a cold ``docker run`` does."""
+
+    container_id: str | None = None
+    entrypoint: list[str] = []
+
+    def _start(self) -> None:
+        env: Docker = self.environment
+        xargs, override = split_entrypoint(env.xargs)
+        cmd = ["docker", "run", "-d", "--rm", "--init", "--name", self.name]
+        cmd.extend(["--label", f"{base.OWNER_LABEL}={base.owner_label()}"])
+        cmd.extend(["--label", f"{base.UID_LABEL}={base.uid()}"])
+        cmd.extend(user_flag())
+        devices = base.visible_devices(self.device)
+        if devices is not None:
+            cmd.extend(["--gpus", "all" if devices == "all" else f'"device={devices}"'])
+        if env.read_only:
+            cmd.append("--read-only")
+        for source, mounted, mode in self._mounts():
+            cmd.extend(["-v", f"{source}:{mounted}:{mode}"])
+        cmd.extend(xargs)
+        cmd.extend(["--entrypoint", "sleep", self.ref.run, SLEEP_FOREVER])
+        rc, out, err = base.execute(cmd, strip=True)
+        if rc or not out:
+            raise RuntimeError(
+                f"'docker run -d' of {self.ref.run!r} failed ({rc}): {err}{out}"
+            )
+        self.container_id = out.splitlines()[-1]
+        self.entrypoint = override if override is not None else self._entrypoint()
+
+    def _entrypoint(self) -> list[str]:
+        """The image's ``ENTRYPOINT``, read once the container has pulled it"""
+        rc, out, err = base.execute(
+            [
+                "docker",
+                "image",
+                "inspect",
+                "--format",
+                "{{json .Config.Entrypoint}}",
+                self.ref.run,
+            ],
+            strip=True,
+        )
+        if rc:
+            raise RuntimeError(
+                f"'docker image inspect' of {self.ref.run!r} failed ({rc}): {err}"
+            )
+        value = json.loads(out or "null")
+        if isinstance(value, str):
+            return [value]
+        return list(value or [])
+
+    def _exec_command(
+        self, job: "Job", env: dict[str, str], args: list[str]
+    ) -> list[str]:
+        cmd = ["docker", "exec", "-w", self.environment.mounted(job.cache_dir)]
+        for name, value in env.items():
+            cmd.extend(["-e", f"{name}={value}"])
+        return cmd + [self.container_id] + self.entrypoint + args
+
+    def _stop(self) -> None:
+        # removes the container after its processes are killed, and waits; by name
+        # after a start that failed before its id was read
+        base.execute(["docker", "rm", "-f", self.container_id or self.name])
+
+    def _reap(self) -> None:
+        """Remove this user's warm containers whose owner has ended in this host's
+        pid namespace (`base.label_owner_dead`); never another user's"""
+        rc, out, _ = base.execute(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                f"label={base.UID_LABEL}={base.uid()}",
+                "--filter",
+                f"label={base.OWNER_LABEL}",
+                "--format",
+                f'{{{{.ID}}}}\t{{{{.Label "{base.OWNER_LABEL}"}}}}',
+            ],
+            strip=True,
+        )
+        if rc:
+            return
+        for line in out.splitlines():
+            container, _, label = line.partition("\t")
+            if container and base.label_owner_dead(label):
+                logger.info("Removing the orphaned warm container %s", container)
+                base.execute(["docker", "rm", "-f", container])
 
 
 # Alias so it can be referred to as docker.Environment
