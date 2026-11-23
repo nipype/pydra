@@ -344,6 +344,31 @@ def _rebuild(args: dict[str, ty.Any]) -> "PortableStore":
     return PortableStore(**args)
 
 
+def _check_legacy(root: os.PathLike, legacy: tuple[Root, ...]) -> None:
+    """Refuse a ``legacy=`` root that is not a `Root`, is declared ``shared``, or holds the
+    store's own root (a legacy root is never written, RFC 0003 section 8.1)."""
+    own = os.path.realpath(os.fspath(root))
+    for item in legacy:
+        if not isinstance(item, Root):
+            raise TypeError(f"a legacy root is a Root, got {item!r}")
+        if item.trust == "shared":
+            raise ValueError(
+                f"the legacy root {os.fspath(item.path)!r} is declared shared; reading a "
+                "PickleStore cache unpickles its results, so a legacy root is read only when "
+                "declared private or trusted (RFC 0003 section 8.1)"
+            )
+        path = os.path.realpath(os.fspath(item.path))
+        try:
+            inside = os.path.commonpath([own, path]) == path
+        except ValueError:  # another drive
+            inside = False
+        if inside:
+            raise ValueError(
+                f"the legacy root {path!r} holds the store's root {own!r}; a legacy root is "
+                "never written"
+            )
+
+
 def _record_of(key: KeyRecord) -> "dict[str, ty.Any] | None":
     """``Result.record`` of an entry: its key record (``pydra-identity@2``), or None for an
     identity whose key is None"""
@@ -382,8 +407,14 @@ class PortableStore:
         (`CommitHookError`): it writes through `write_sidecar` or the audit directory. It is
         called with the staging directory of the entry before its rename, after
         ``Reuse.compare`` (section 7.4). If it raises, nothing is committed.
-    legacy
-        Accepted and not yet used.
+    legacy : sequence of Root
+        `PickleStore` cache roots read in place (RFC 0003 section 8.1), each declared
+        ``"private"`` or ``"trusted"``, since reading one unpickles its results; ``"shared"`` is
+        refused. When `find` admits no entry of this store or its read-only roots, the job's
+        slots there are ranked by the reuse hook and the first usable one is published into
+        ``root`` under its stored context, with the job's key record, then served from there,
+        so each result is read from the old cache once. A legacy root is never written and
+        must not hold ``root``.
     dedupe : bool, optional
         Whether two submitters of one job compute it once, through a lease at
         ``<root>/leases/`` (RFC 0003 section 5.3). Default True unless ``trust`` is
@@ -446,6 +477,8 @@ class PortableStore:
                 "a shared root needs work_dir=: a work directory holds a job's pickles and crash "
                 "file, which other users of the root must not read (RFC 0003 section 5.4)"
             )
+        legacy = tuple(legacy)
+        _check_legacy(root, legacy)
         self._args = dict(
             root=root,
             trust=trust,
@@ -2810,11 +2843,15 @@ class PortableStore:
             Look only if this root holds an entry at the job's own address, which costs one
             ``lstat`` (as `read_succeeded`), and otherwise answer `Miss` with nothing read:
             what a runner's ``ready()`` asks of every released job, leaving entries of other
-            contexts and read-only roots to the lookup under the job's lease.
+            contexts, read-only roots and ``legacy`` roots to the lookup under the job's lease.
+
+        When the hook admits no entry and the store has ``legacy`` roots, the job's result is
+        published from one of them into this root (`~pydra.engine.portable.migrate.publish_legacy`)
+        and the entries are ranked again.
         """
         if probe and not self._present(job.checksum, job.context):
             return Miss()
-        return self._find(job.checksum, job.context, job.task)
+        return self._find(job.checksum, job.context, job.task, job=job)
 
     def lookup(
         self,
@@ -2837,9 +2874,18 @@ class PortableStore:
         context: Context,
         task: "Task | None",
         own: EntryRef | None = None,
+        job: "Job | None" = None,
     ) -> Lookup:
+        legacy = job is not None and bool(self.legacy)
         for _ in range(_RERANKS):
             ranked = self.reuse.rank(context, self.stored(checksum), task)
+            if not ranked and legacy:
+                from pydra.engine.portable.migrate import publish_legacy
+
+                legacy = False  # read the old caches once per lookup
+                if publish_legacy(self, ty.cast("Job", job)):
+                    continue
+                return Miss()
             outcome = self._consider(checksum, ranked, context, task, own)
             if outcome is not _CONTENDED:
                 return ty.cast(Lookup, outcome)
