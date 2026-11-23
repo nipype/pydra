@@ -374,7 +374,8 @@ def test_one_run_n_exec(kind, monkeypatch, tmp_path):
     if kind == "docker":
         assert start[:5] == ["docker", "run", "-d", "--rm", "--init"]
         assert start[-3:] == ["sleep", IMAGE, "2147483647"]
-        assert f"pydra.warm.owner={host}:{pid}" in start
+        assert f"pydra.warm.owner={base.owner_label()}" in start
+        assert f"pydra.warm.uid={os.getuid()}" in start
     else:
         # the instance starts from the local SIF, never from the docker:// URI
         assert start[:5] == ["apptainer", "instance", "start", "-c", "--no-home"]
@@ -470,6 +471,9 @@ def test_inputs_stay_read_only(kind, monkeypatch, tmp_path):
     cold_env, warm_env = ENVIRONMENTS[kind](), ENVIRONMENTS[kind](warm=True)
     a = _sub(tmp_path / "cache", cold_env)(Cp(in_file=src))
     produced = Path(a.outputs.out_file)
+    # writable on the host, so only the bind's mode can refuse the edit (the fake's
+    # cold cp copied it from a read-only copy of its input)
+    produced.chmod(0o644)
     edit = Mutate(script='echo mutated >> "$0"', in_file=produced)
     with pytest.raises(RuntimeError, match="ermission denied"):
         _sub(tmp_path / "cache", cold_env)(edit)
@@ -760,16 +764,53 @@ def _dead_pid():
 def test_orphaned_containers_reaped(monkeypatch, tmp_path):
     fake = FakeRuntime(monkeypatch, tmp_path)
     host, pid = base.owner()
+    uid, ns = os.getuid(), base.pid_namespace() or "-"
     dead = _dead_pid()
     fake.labels = {
-        "orphan": f"{host}:{dead}",
-        "elsewhere": f"otherhost:{dead}",
-        "live": f"{host}:{pid}",
+        "orphan": f"{host}:{uid}:{ns}:{dead}",
+        "elsewhere": f"otherhost:{uid}:{ns}:{dead}",
+        "live": f"{host}:{uid}:{ns}:{pid}",
     }
     with docker.Docker(image=IMAGE, warm=True).warm([tmp_path]):
         pass
     assert "orphan" in fake.stopped
     assert "elsewhere" not in fake.stopped and "live" not in fake.stopped
+    (listing,) = fake.of("docker", "ps", "-a")
+    assert f"label=pydra.warm.uid={uid}" in listing
+
+
+def test_reaping_spares_other_users_and_pid_namespaces(monkeypatch, tmp_path):
+    """Another user's container, or one whose owner lives in another pid namespace
+    (pydra in a container with the host's network), is never removed, nor one whose
+    label does not say both"""
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    host, _ = base.owner()
+    uid, ns = os.getuid(), base.pid_namespace() or "-"
+    dead = _dead_pid()
+    fake.labels = {
+        "other-user": f"{host}:{uid + 1}:{ns}:{dead}",
+        "other-pidns": f"{host}:{uid}:4026599999:{dead}",
+        "unlabelled-uid": f"{host}:{dead}",
+    }
+    with docker.Docker(image=IMAGE, warm=True).warm([tmp_path]):
+        pass
+    assert not set(fake.labels) & set(fake.stopped)
+
+
+def test_failing_setup_leaves_no_scratch(monkeypatch, tmp_path):
+    FakeRuntime(monkeypatch, tmp_path)
+
+    @attrs.define
+    class Failing(docker.Docker):
+        _plugin_name: ty.ClassVar[str] = "docker"
+
+        def setup(self):
+            raise RuntimeError("setup failed")
+
+    with pytest.raises(RuntimeError, match="setup failed"):
+        Failing(image=IMAGE, warm=True).warm([tmp_path], scratch=tmp_path / "cache")
+    assert not list((tmp_path / "cache").glob(".pydra-warm-*"))
+    assert base._OPEN == set()
 
 
 def test_orphaned_instances_reaped(monkeypatch, tmp_path):
