@@ -177,7 +177,7 @@ jobs:
           echo "NO_ET=TRUE" >> $GITHUB_ENV
       - name: Restore built Singularity
         id: singularity-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.SINGULARITY_PREFIX }}
           key: singularity-v3.7.1-ubuntu-22.04
@@ -359,7 +359,7 @@ jobs:
         cache-from: type=gha,scope=slurm-${{ hashFiles('.github/slurm/**') }}
         cache-to: type=gha,mode=max,scope=slurm-${{ hashFiles('.github/slurm/**') }}
     - name: Restore the container's uv cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ${{ env.UV_CACHE_HOST }}
         key: slurm-uv-${{ hashFiles('pyproject.toml') }}
