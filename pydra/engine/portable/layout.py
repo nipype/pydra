@@ -9,6 +9,7 @@ import os
 import re
 import time
 import typing as ty
+import unicodedata
 import uuid
 
 import attrs
@@ -30,6 +31,10 @@ __all__ = [
     "StoreLayoutAbsent",
     "LayoutHeader",
     "open_layout",
+    "read_header",
+    "check_layout_names",
+    "fold",
+    "is_reserved",
     "cdir_for",
     "shard_for",
 ]
@@ -46,6 +51,11 @@ _CDIR_RAW = re.compile(r"[a-z0-9][a-z0-9_-]{0,199}")
 _FORMAT_RE = re.compile(r"pydra-store@(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 _HEX2 = re.compile(r"[0-9a-f]{2}")
 _TEMP_RE = re.compile(r"\.pydra-store\.[0-9a-f]{32}\.tmp")
+DEFAULT_DIRS: ty.Mapping[str, ty.Any] = {
+    "staging": "staging",
+    "quarantine": "quarantine",
+    "sidecars": {},
+}
 
 
 class StoreLayoutUnknown(StoreUnavailable):
@@ -133,11 +143,7 @@ class LayoutHeader:
                 "recorded_only": sorted(identity.recorded_only),
             },
             shard=shard,
-            dirs=dict(
-                dirs
-                if dirs is not None
-                else {"staging": "staging", "quarantine": "quarantine", "sidecars": {}}
-            ),
+            dirs=dict(dirs if dirs is not None else {**DEFAULT_DIRS, "sidecars": {}}),
             modes={
                 "file": _mode(policy.file_mode),
                 "entry": _mode(policy.entry_mode),
@@ -249,6 +255,18 @@ def _read(root: StorageDir) -> bytes | None:
     return data
 
 
+def read_header(root: StorageDir) -> LayoutHeader | None:
+    """The header of ``root`` as stored, or None if it has none.
+
+    Raises
+    ------
+    StoreLayoutUnknown
+        The header is of a format major other than 1, or cannot be read.
+    """
+    data = _read(root)
+    return None if data is None else LayoutHeader.from_json(data)
+
+
 def _check(stored: LayoutHeader, expected: LayoutHeader) -> LayoutHeader:
     key = _differing_key(stored, expected)
     if key is not None:
@@ -338,7 +356,11 @@ def _legacy(root: StorageDir, others: list[str]) -> StoreUnavailable:
 
 
 def open_layout(
-    root: StorageDir, expected: LayoutHeader, *, create: bool = True
+    root: StorageDir,
+    expected: LayoutHeader,
+    *,
+    create: bool = True,
+    existing: bool = False,
 ) -> LayoutHeader:
     """Check ``root``'s header against ``expected``, creating it if the root is empty.
 
@@ -353,6 +375,10 @@ def open_layout(
     create : bool
         With False nothing is written (a read-only root works) and an empty root raises
         `StoreLayoutAbsent`.
+    existing : bool
+        Write the header into a root that already holds names, which a new root may not:
+        the adoption of a store already in this shape (RFC 0003 section 8.2,
+        `~pydra.engine.portable.adopt.adopt`).
 
     Returns
     -------
@@ -375,7 +401,7 @@ def open_layout(
         if data is not None:
             return _check(LayoutHeader.from_json(data), expected)
         others = _sweep_and_scan(root, sweep=create)
-        if others:
+        if others and not existing:
             data = _read(root)  # another opener may have linked it since the first read
             if data is not None:
                 return _check(LayoutHeader.from_json(data), expected)
@@ -405,6 +431,92 @@ def open_layout(
         if made:
             return expected
     raise StoreUnavailable(f"could not settle the header of {root.path}")
+
+
+SHARD_RULES = ("sha256-2", "prefix2")
+RESERVED_NAMES = frozenset({"leases", "work", "audit", HEADER_NAME})
+"""Names under the root that the store owns whatever the header says"""
+SIDECAR_ROOT = "sidecars"
+"""Where a sidecar the header does not map is kept; never staging or quarantine"""
+_TEMP_FOLDED = re.compile(_TEMP_RE.pattern, re.IGNORECASE)
+
+
+def fold(name: str) -> str:
+    """``name`` as a case-insensitive, normalization-insensitive filesystem (APFS, NTFS)
+    compares it: NFC, then case-folded. Names the store must keep apart are compared
+    folded on every platform."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def is_reserved(name: str) -> bool:
+    """Whether ``name``, folded, is one the store owns under the root whatever the header
+    says: ``leases``, ``work``, ``audit``, the header or a header temporary."""
+    return fold(name) in {fold(n) for n in RESERVED_NAMES} or bool(
+        _TEMP_FOLDED.fullmatch(unicodedata.normalize("NFC", name))
+    )
+
+
+def _component(name: ty.Any) -> bool:
+    return (
+        isinstance(name, str)
+        and name not in ("", ".", "..")
+        and "/" not in name
+        and "\\" not in name
+        and "\0" not in name
+    )
+
+
+def check_layout_names(dirs: ty.Any, entries: str, shard: ty.Any) -> None:
+    """Refuse a ``dirs`` or ``shard`` under which ``collect`` or a writer could reach what is
+    not theirs: ``staging``, ``quarantine`` and the first component of each sidecar
+    directory must be single path components (a sidecar a relative path of them), staging
+    and quarantine must differ, neither may be ``sidecars`` (where an unmapped sidecar is
+    kept), no sidecar may start at either, and none may be ``entries``, ``leases``,
+    ``work``, ``audit``, the header or a header temporary; ``shard`` must be a known rule.
+    Names are compared `fold`-ed, as a case- and normalization-insensitive filesystem
+    compares them, on every platform. A header can be written by anyone who can write the
+    root (RFC 0003 section 6.4), so these are checked wherever a store takes them from one.
+
+    Raises
+    ------
+    StoreLayoutMismatch
+        ``key`` is ``"dirs"`` or ``"shard"``.
+    """
+    if shard not in SHARD_RULES:
+        raise StoreLayoutMismatch(
+            "shard", f"the shard rule {shard!r} is not one of {SHARD_RULES}"
+        )
+
+    def refuse(why: str) -> ty.NoReturn:
+        raise StoreLayoutMismatch("dirs", f"the layout's dirs {dirs!r}: {why}")
+
+    if not isinstance(dirs, ty.Mapping):
+        refuse("not a mapping")
+    staging, quarantine = dirs.get("staging"), dirs.get("quarantine")
+    for key, name in (("staging", staging), ("quarantine", quarantine)):
+        if not _component(name):
+            refuse(f"{key} {name!r} is not a single path component")
+    if fold(staging) == fold(quarantine):
+        refuse("staging and quarantine are one directory")
+    for key, name in (("staging", staging), ("quarantine", quarantine)):
+        if fold(name) == fold(SIDECAR_ROOT):
+            refuse(f"{key} {name!r} is where unmapped sidecars are kept")
+    sidecars = dirs.get("sidecars") or {}
+    if not isinstance(sidecars, ty.Mapping):
+        refuse("sidecars is not a mapping")
+    tops = {staging, quarantine}
+    for name, relative in sidecars.items():
+        parts = (
+            [p for p in relative.split("/") if p] if isinstance(relative, str) else []
+        )
+        if not parts or not all(_component(p) for p in parts):
+            refuse(f"the sidecar {name!r} at {relative!r} is not a path below the root")
+        if fold(parts[0]) in (fold(staging), fold(quarantine)):
+            refuse(f"the sidecar {name!r} is inside {parts[0]!r}")
+        tops.add(parts[0])
+    for top in tops:
+        if fold(top) == fold(entries) or is_reserved(top):
+            refuse(f"{top!r} is a name the store owns")
 
 
 def cdir_for(checksum: str) -> str:
