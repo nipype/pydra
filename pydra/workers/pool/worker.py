@@ -85,6 +85,7 @@ from pydra.workers.pool.faults import (
     attached,
     fault_of,
 )
+from pydra.workers.pool.placement import warm_environment_label
 from pydra.workers.pool.calibration import (
     DirectoryCalibration,
     Sample,
@@ -280,6 +281,7 @@ class PoolSession(WarmSession):
         super().__init__(environment, retry=True, **kwargs)
         self.ref = ref
         self.used = 0
+        self.label: str | None = None  # the environment's hold label
 
     def accepts(self, job: "Job") -> bool:
         """Whether ``job``'s environment is this session's and its reference this session's."""
@@ -327,6 +329,16 @@ class PoolSession(WarmSession):
             since_load=since,
             load_s=None if self.start_s is None else round(self.start_s, 6),
         )
+
+
+class WarmStartFailed(Exception):
+    """A warm environment did not start: ``error`` is the start's own error, ``label`` the
+    environment's hold label (`pydra.workers.pool.placement.warm_environment_label`)."""
+
+    def __init__(self, error: BaseException, label: str | None):
+        super().__init__(str(error))
+        self.error = error
+        self.label = label
 
 
 class _Unresolved:
@@ -968,9 +980,16 @@ class Worker:
             return
         if self._refuse(claim, jobs):
             return
+        if self._environment_held(claim, jobs):
+            return
         try:
             load_s, loaded = self._load(jobs[0][1])
             self._warm_environments([job for _, job in jobs])
+        except WarmStartFailed as exc:
+            self._load_fault(
+                claim, [e for e, _ in jobs], exc.error, jobs[0][1], label=exc.label
+            )
+            return
         except Exception as exc:
             self._load_fault(claim, [e for e, _ in jobs], exc, jobs[0][1])
             return
@@ -1100,8 +1119,10 @@ class Worker:
     def _warm_environments(self, jobs: ty.Sequence["Job"]) -> None:
         """Open the warm session of each (environment, reference) among ``jobs``' warm shell jobs
         (`_session_for`) and start it, or restart it once, bound to the union of their binding roots.
-        A start that fails raises: the caller types it a load fault (RFC 0005 section 4.3 step 3), so
-        the ticket is released uncharged and a later claim tries the start again."""
+        A start that fails raises `WarmStartFailed` naming the environment's hold label: the caller
+        types it a load fault of that label (RFC 0005 section 4.3 step 3), so the ticket is released
+        uncharged, a later claim tries the start again, and a hold at the budget names only that
+        environment."""
         warm = [_Unresolved(job) for job in jobs if warm_shell_job(job)]
         touched: list[PoolSession] = []
         for job in warm:
@@ -1109,7 +1130,10 @@ class Worker:
             if session not in touched:
                 touched.append(session)
         for session in touched:
-            session.prepare(warm)
+            try:
+                session.prepare(warm)
+            except Exception as err:
+                raise WarmStartFailed(err, session.label) from err
 
     def _session_for(self, job: "Job") -> PoolSession:
         """The session serving ``job``'s environment and reference, opened when there is none. An
@@ -1137,6 +1161,7 @@ class Worker:
             roots=self.cls.mounts,
         )
         session.used = self._uses
+        session.label = warm_environment_label(job)
         block = serving(session, close=False)
         block.__enter__()
         self._serving[id(session)] = block
@@ -1218,10 +1243,12 @@ class Worker:
         entries: list[TicketJob],
         exc: BaseException,
         job: "Job | None" = None,
+        label: str | None = None,
     ) -> None:
         """A load failed: a resource fault is kept as an `UnfitRecord` (`_unfit`) and moves the
         ticket's jobs up the ladder (`_resource`); anything else is one infrastructure fault of the
-        residency (`_infrastructure`). The claim is released."""
+        residency (`_infrastructure`), or of the warm environment whose hold label is ``label``. The
+        claim is released."""
         fault = fault_of(exc, "load", self.classify)
         logger.error("loading the residency of %s failed: %r", claim.digest, exc)
         if fault.kind == "resource":
@@ -1229,7 +1256,9 @@ class Worker:
                 self._unfit(claim, exc, job)
             self._resource(claim, entries, fault, "load")
         else:
-            self._infrastructure(claim, entries, fault, {"stop": False}, phase="load")
+            self._infrastructure(
+                claim, entries, fault, {"stop": False}, phase="load", label=label
+            )
         self._release(claim)
 
     def _unfit(self, claim: Claim, exc: BaseException, job: "Job | None") -> None:
@@ -1288,17 +1317,25 @@ class Worker:
         group: dict,
         sample: Sample | None = None,
         phase: str = "call",
+        label: str | None = None,
     ) -> str:
-        """One infrastructure fault of the ticket's residency at ``phase`` (``call`` or ``load``):
-        below the budget its jobs are requeued, uncharged, each under a ``restart`` generation
-        written now; at it the residency is held (`_count_fault`). The caller releases the ticket.
-        Return ``"held"`` or ``"stopped"``."""
+        """One infrastructure fault of the ticket's residency at ``phase`` (``call`` or ``load``), or
+        of the warm environment ``label`` names: below the budget its jobs are requeued, uncharged,
+        each under a ``restart`` generation written now; at it the residency or the environment is
+        held (`_count_fault`). The caller releases the ticket. Return ``"held"`` or ``"stopped"``.
+        """
         group["stop"] = True
         entries = [e for e in entries if claim.current(e) is not None]
         if not entries:
             return "stopped"
         return self._count_fault(
-            claim, fault, phase, requeue=entries, group=group, sample=sample
+            claim,
+            fault,
+            phase,
+            requeue=entries,
+            group=group,
+            sample=sample,
+            label=label,
         )
 
     def _count_fault(
@@ -1310,17 +1347,21 @@ class Worker:
         requeue: list[TicketJob],
         group: dict,
         sample: Sample | None = None,
+        label: str | None = None,
     ) -> str:
-        """Record an infrastructure fault of the ticket's residency for the newest coordinator epoch.
+        """Record an infrastructure fault of the ticket's residency for the newest coordinator epoch,
+        or of the warm environment whose hold label is ``label`` (a failed warm start).
         Below ``infrastructure_replacements`` faults in that epoch, ``requeue``'s jobs are requeued
-        under ``restart`` generations; at it the residency is held on its queue
+        under ``restart`` generations; at it the residency (or the environment) is held on its queue
         (``held-<epoch>-<label>``), remembered by this worker so that no gathered ticket of it runs,
         and every open job of the ticket is settled ``held`` with a reason naming the residency and
-        the latest cause (RFC 0005 section 6)."""
+        the latest cause, and ``hold`` naming the label (RFC 0005 section 6). A held environment
+        holds only the tickets with a job of it (`_environment_held`)."""
         self._gap(fault)
         epochs = self.pool.epochs()
         epoch = epochs[-1] if epochs else 1
-        label = claim.ticket.residency_label
+        what = "residency" if label is None else "warm environment"
+        label = label or claim.ticket.residency_label
         budget = self.faults.infrastructure_replacements
         count = self.pool.infrastructure_fault(
             claim.queue,
@@ -1337,8 +1378,9 @@ class Worker:
             for entry in requeue:
                 claim.restart(entry, phase=phase)
             logger.warning(
-                "infrastructure fault %d of residency %s on %r in epoch %d at %s: %s: %s%s",
+                "infrastructure fault %d of %s %s on %r in epoch %d at %s: %s: %s%s",
                 count,
+                what,
                 label,
                 claim.queue,
                 epoch,
@@ -1350,7 +1392,7 @@ class Worker:
             return "stopped"
         self.pool.hold(claim.queue, epoch, label)
         reason = (
-            f"residency {label} held on queue {claim.queue!r} after {count} infrastructure "
+            f"{what} {label} held on queue {claim.queue!r} after {count} infrastructure "
             f"faults in coordinator epoch {epoch} (the budget is {budget}); the latest, at "
             f"{phase}: {fault.type}: {fault.message}"
         )
@@ -1362,7 +1404,7 @@ class Worker:
             current = claim.current(entry)
             if current is None:
                 continue
-            fields = {"reason": reason, "fault": fault.to_json()}
+            fields = {"reason": reason, "fault": fault.to_json(), "hold": label}
             if sample is not None and entry.key in faulted:
                 self._settle(
                     claim, entry, current[1]["attempt"], "held", sample, **fields
@@ -1370,6 +1412,37 @@ class Worker:
             else:
                 claim.outcome(entry, current[1]["attempt"], "held", **fields)
         return "held"
+
+    def _environment_held(
+        self, claim: Claim, jobs: list[tuple[TicketJob, "Job"]]
+    ) -> bool:
+        """Whether a job of the ticket runs in a warm environment held on its queue (by any worker,
+        in the newest coordinator epoch, until ``pydracli pool release-hold`` lifts the label); if
+        so settle the ticket's open jobs ``held``, unrun and unloaded. A ticket with no job of a held
+        environment runs: a broken image holds only its own tickets, never the class's other work.
+        """
+        labels = {warm_environment_label(job) for _, job in jobs} - {None}
+        if not labels:
+            return False
+        hit = sorted(labels & set(self.pool.holds(claim.queue)))
+        if not hit:
+            return False
+        label = hit[0]
+        own = self._holds.get((claim.queue, label))
+        reason = (
+            own[1]
+            if own is not None
+            else f"warm environment {label} held on queue {claim.queue!r} after repeated "
+            "failed starts"
+        )
+        fields: dict[str, ty.Any] = {"reason": reason, "hold": label}
+        if own is not None:
+            fields["fault"] = own[2].to_json()
+        for entry in claim.open_jobs():
+            current = claim.current(entry)
+            if current is not None:
+                claim.outcome(entry, current[1]["attempt"], "held", **fields)
+        return True
 
     def _held_here(self, claim: Claim) -> bool:
         """Whether this worker held the claim's residency in the newest coordinator epoch and the
@@ -1477,6 +1550,8 @@ class Worker:
                     # a warm environment closed, spent or reloaded since the ticket's start is
                     # started here, on the loop thread, as a load: never inside the call
                     self._warm_environments([current])
+                except WarmStartFailed as exc:
+                    raise attach(exc, fault_of(exc.error, "load", self.classify))
                 except Exception as exc:
                     raise attach(exc, fault_of(exc, "load", self.classify))
                 if loaded:  # a reload after a fault: this call is cold
@@ -1516,7 +1591,13 @@ class Worker:
                 if record is None or record.phase != "load":
                     raise
                 # a load inside the call: never split or retried; every open job of the ticket
-                self._load_fault(claim, claim.open_jobs() or [entry], exc, job)
+                self._load_fault(
+                    claim,
+                    claim.open_jobs() or [entry],
+                    exc,
+                    job,
+                    label=exc.label if isinstance(exc, WarmStartFailed) else None,
+                )
                 group["stop"] = True
                 return "stopped"
             verdict = self._settle_job(claim, entry, settled, state, group, tries)

@@ -923,8 +923,8 @@ class WarmPool:
             name = placement.worker_class
             if name in self._broken and key in self._break_held.get(name, ()):
                 self.release_hold(name)  # a retry of a job the break held
-            broken = self._broken.get(name) or self._held.get(
-                (placement.queue, _label(residency))
+            broken = self._broken.get(name) or self._held_reason(
+                placement.queue, job, residency
             )
             if broken is not None:
                 if name in self._broken:
@@ -1440,10 +1440,10 @@ class WarmPool:
                         self._waiting.setdefault(j.queue, collections.deque()).append(j)
                     continue
                 if verdict[0] == "held":
-                    # the job's residency is held on its queue for this epoch: its other jobs too
-                    self._held.setdefault(
-                        (t.queue, _label(j.residency)), verdict[1].reason
-                    )
+                    # the job's residency (or, named by ``hold``, its warm environment) is held on
+                    # its queue for this epoch: its other jobs too
+                    label = outcome.get("hold") or _label(j.residency)
+                    self._held.setdefault((t.queue, label), verdict[1].reason)
                 self._forget(j)
                 reports.append((j.job, j, verdict[1]))
                 if outcome.get("outcome") == "done" and _sampled(
@@ -2026,6 +2026,21 @@ class WarmPool:
         self._broken[cls.name] = why
         self._hold_broken()
 
+    def _held_reason(
+        self, queue: str, job: "Job", residency: ty.Sequence[dict]
+    ) -> str | None:
+        """Why a worker held ``job`` on ``queue`` in this epoch: its residency is held, or its warm
+        environment (`pydra.workers.pool.placement.warm_environment_label`) is; None otherwise. A
+        held environment never holds a job of another environment or of none."""
+        why = self._held.get((queue, _label(residency)))
+        if why is None and self._held:
+            from pydra.workers.pool.placement import warm_environment_label
+
+            label = warm_environment_label(job)
+            if label is not None:
+                why = self._held.get((queue, label))
+        return why
+
     def _hold_broken(self) -> None:
         """Report every open job placed on a broken class, or of a residency a worker held on its
         queue in this epoch, ``NotRun(held=True)``: queued, followed, or re-placed onto it since.
@@ -2039,8 +2054,8 @@ class WarmPool:
                 if j.twin_of is not None:
                     continue  # reported with its primary
                 queue = j.queue if j.ticket is None else j.ticket.queue
-                why = self._broken.get(_queue_class(queue)) or self._held.get(
-                    (queue, _label(j.residency))
+                why = self._broken.get(_queue_class(queue)) or self._held_reason(
+                    queue, j.job, j.residency
                 )
                 if why is None:
                     continue

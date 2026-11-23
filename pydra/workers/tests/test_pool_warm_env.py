@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from pydra.compose import shell
+from pydra.compose import python, shell
 from pydra.engine.job import Job
 from pydra.engine.lease import LeaseSettings
 from pydra.engine.portable.identity import PydraIdentityV1
@@ -43,6 +43,11 @@ LEASE = LeaseSettings(
 
 Cp = shell.define("cp <in_file> <out|out_file>")
 COMMITS: list[dict] = []
+
+
+@python.define
+def Inc(x: int) -> int:
+    return x + 1
 
 
 def record_commit(staged, checksum, key, context, digest):
@@ -689,6 +694,129 @@ def test_warm_sessions_bounded_lru(tmp_path, roots_below, queue_of, monkeypatch)
     # the third environment evicts the first; the first, back, evicts the second
     assert fake.stopped[:2] == ["id0", "id1"]
     assert sorted(fake.stopped) == ["id0", "id1", "id2", "id3"]
+
+
+def _env_label(job) -> str:
+    """The hold label of a warm Docker job's environment: the residency label of its resident key
+    alone (the plugin name and the reference the job carries)."""
+    import hashlib
+
+    import attrs
+
+    from pydra.utils.digest import jcs
+
+    key = ResidentKey("environment", "docker", job.resolved.key)
+    return hashlib.sha256(jcs([attrs.asdict(key)])).hexdigest()
+
+
+def _broken_image(tmp_path, queue_of, monkeypatch):
+    """A queue with a ticket of a warm image whose start always fails, a plain Python ticket, and a
+    second ticket of the image, in that order."""
+    from pydra.environments import native
+
+    fake = FakeRuntime(monkeypatch, tmp_path, fail_start=True)
+    q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE, warm=True))
+    srcs = [_input(tmp_path / "inputs" / f"in{i}.txt", f"{i}\n") for i in range(2)]
+    (a,) = q.jobs([Cp(in_file=srcs[0])], "a")
+    image_a = (a, q.put([a]))
+    (p,) = q.jobs([Inc(x=1)], "p", environment=native.Native())
+    plain = (p, q.put([p]))
+    (c,) = q.jobs([Cp(in_file=srcs[1])], "c")
+    image_c = (c, q.put([c]))
+    return fake, q, image_a, plain, image_c
+
+
+def _budget():
+    from pydra.workers.pool.faults import FaultBudgets
+
+    return FaultBudgets(infrastructure_replacements=2)
+
+
+def _outcome(q, digest) -> dict:
+    (outcome,) = q.pool.outcomes("cpu", digest).values()
+    return outcome
+
+
+def test_repeated_warm_start_faults_hold_that_environment(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """Warm-start faults count toward a hold whose label names the environment and its resolved
+    reference: at the budget the ticket is held under that label, and a later ticket of the same
+    image is settled ``held`` without another start."""
+    fake, q, (a, da), _, (c, dc) = _broken_image(tmp_path, queue_of, monkeypatch)
+    q.work(faults=_budget())
+
+    label = _env_label(a)
+    assert label in q.pool.holds("cpu")
+    for digest in (da, dc):
+        outcome = _outcome(q, digest)
+        assert outcome["outcome"] == "held" and outcome["hold"] == label
+        assert label in outcome["reason"]
+    assert (
+        len(fake.starts) == 2
+    )  # the budget's two faults, nothing started after the hold
+
+
+def test_plain_python_ticket_runs_beside_a_held_environment(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """One broken image never holds the class's other work: the plain Python ticket queued behind
+    it runs and commits, and the class's empty residency is not held."""
+    _, q, (a, _), (p, dp), _ = _broken_image(tmp_path, queue_of, monkeypatch)
+    q.work(faults=_budget())
+
+    assert _outcome(q, dp)["outcome"] == "done"
+    assert p.checksum in [c["checksum"] for c in COMMITS]
+    assert list(q.pool.holds("cpu")) == [_env_label(a)]
+
+
+def test_coordinator_holds_only_that_environments_jobs(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """The coordinator keys a held outcome by its ``hold`` label: it reports later jobs of that
+    environment held, and neither a plain job nor a job of another image."""
+    from pydra.workers.pool.pool import WarmPool, _label
+
+    _, q, (a, _), (p, _), _ = _broken_image(tmp_path, queue_of, monkeypatch)
+    src = _input(tmp_path / "inputs" / "other.txt", "o\n")
+    (other,) = q.jobs(
+        [Cp(in_file=src)],
+        "o",
+        environment=docker.Docker(image=f"org/tool@sha256:{'2' * 64}", warm=True),
+    )
+    coordinator = WarmPool.__new__(WarmPool)  # only the held-reason bookkeeping
+    coordinator._held = {("cpu", _env_label(a)): "held: the image does not start"}
+    assert coordinator._held_reason("cpu", a, ()) == "held: the image does not start"
+    assert coordinator._held_reason("cpu", p, ()) is None
+    assert coordinator._held_reason("cpu", other, ()) is None
+    assert coordinator._held_reason("gpu", a, ()) is None
+    coordinator._held = {("cpu", _label(())): "residency held"}
+    assert coordinator._held_reason("cpu", p, ()) == "residency held"
+
+
+def test_release_hold_clears_the_environment_hold(
+    tmp_path, roots_below, queue_of, monkeypatch
+):
+    """``release-hold`` of the environment's label lifts the hold: once the image starts again, a
+    new ticket of it runs warm."""
+    from pydra.workers.pool.pool import release_hold
+
+    fake, q, (a, _), _, _ = _broken_image(tmp_path, queue_of, monkeypatch)
+    q.work(faults=_budget())
+    label = _env_label(a)
+    assert label in q.pool.holds("cpu")
+
+    fake.fail_start = False
+    assert release_hold(q.pool.path, "cpu", label) == 1
+    assert q.pool.holds("cpu") == {}
+    src = _input(tmp_path / "inputs" / "in-new.txt", "new\n")
+    (d,) = q.jobs([Cp(in_file=src)], "d")
+    dd = q.put([d])
+    COMMITS.clear()
+    q.work(faults=_budget())
+    assert _outcome(q, dd)["outcome"] == "done"
+    (commit,) = COMMITS
+    assert _env_facts(commit)["run"] == "warm"
 
 
 # -- O5: real runtimes on a cluster node (``module load apptainer``; Lmod's MODULEPATH) -----------
