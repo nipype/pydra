@@ -1,4 +1,4 @@
-"""One ``squeue`` per poll cycle and ``sbatch --array`` for split nodes, with Slurm faked."""
+"""One ``squeue`` per poll cycle and ``sbatch --array`` for a round of split nodes, with Slurm faked."""
 
 import asyncio
 import sys
@@ -116,6 +116,7 @@ def make(tmp_path, monkeypatch, n, split=True, plans=None, queue_cycles=3, **kwa
             uid=f"u{i}",
             cache_root=tmp_path,
             resources=None,
+            rerun=False,
             lockfile=tmp_path / f"c{i}-key.lock",
             state_index=i if split else None,
         )
@@ -125,16 +126,11 @@ def make(tmp_path, monkeypatch, n, split=True, plans=None, queue_cycles=3, **kwa
 
 
 def run_all(worker, jobs, reruns=None):
-    reruns = reruns or [False] * len(jobs)
+    for job, rerun in zip(jobs, reruns or [False] * len(jobs)):
+        job.rerun = rerun
 
     async def go():
-        return await asyncio.wait_for(
-            asyncio.gather(
-                *(worker.run(j, rerun=r) for j, r in zip(jobs, reruns)),
-                return_exceptions=True,
-            ),
-            30,
-        )
+        return await asyncio.wait_for(worker.submit_many(jobs), 30)
 
     return asyncio.run(go())
 

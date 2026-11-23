@@ -417,7 +417,7 @@ jobs:
         docker exec slurm bash -c "uv pip install --python /opt/venv/bin/python -e /pydra[test,psij] && /opt/venv/bin/python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
-        docker exec slurm bash -c "cd /pydra; /opt/venv/bin/pytest pydra/workers/tests/test_worker.py pydra/engine/tests/test_executor.py --only-worker=slurm --color=yes"
+        docker exec slurm bash -c "cd /pydra; /opt/venv/bin/pytest pydra/workers/tests/test_worker.py pydra/engine/tests/test_executor.py pydra/workers/tests/test_submit_many.py --only-worker=slurm --color=yes"
     - name: Return ownership of the uv cache to the runner
       if: always()
       run: docker exec slurm bash -c "chown -R $(id -u):$(id -g) /root/.cache/uv"

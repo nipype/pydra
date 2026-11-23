@@ -50,13 +50,11 @@ def test_no_resources_leaves_args_unchanged(make_job):
     assert qsub_args(worker, make_job(None)) == "-q all.q"
 
 
-def test_jobs_with_equal_resources_share_an_array(make_job):
+def test_jobs_with_equal_resources_share_an_array_key(make_job):
     worker = sge.SgeWorker()
     res = ComputeResources(cpus=2)
-    qsub_args(worker, make_job(res))
-    qsub_args(worker, make_job(res))
-    ((key, queued),) = worker.tasks_to_run_by_threads_requested.items()
-    assert key == "-pe smp 2" and len(queued) == 2
+    assert qsub_args(worker, make_job(res)) == qsub_args(worker, make_job(res))
+    assert qsub_args(worker, make_job(res)) == "-pe smp 2"
 
 
 def test_node_resources_replace_worker_wide_args(make_job):
@@ -89,9 +87,11 @@ def test_site_names_are_configurable(make_job):
 
 def test_jobs_with_different_resources_do_not_share_an_array(make_job):
     worker = sge.SgeWorker()
-    qsub_args(worker, make_job(ComputeResources(cpus=2)))
-    qsub_args(worker, make_job(ComputeResources(cpus=4)))
-    assert set(worker.tasks_to_run_by_threads_requested) == {"-pe smp 2", "-pe smp 4"}
+    keys = {
+        qsub_args(worker, make_job(ComputeResources(cpus=2))),
+        qsub_args(worker, make_job(ComputeResources(cpus=4))),
+    }
+    assert keys == {"-pe smp 2", "-pe smp 4"}
 
 
 @pytest.mark.parametrize(
@@ -108,15 +108,11 @@ def test_memory_is_normalised_to_gigabytes(cmd, gigabytes):
 
 
 def test_array_length_counts_megabytes_as_megabytes(make_job):
-    import asyncio
-
     worker = sge.SgeWorker(max_mem_free=4, max_job_array_length=100)
     args = qsub_args(worker, make_job(ComputeResources(mem=512)))
     _, _, cmd = worker._requested(args)
-    queued = worker.tasks_to_run_by_threads_requested[args]
-    queued.extend([("p", i, False) for i in range(20)])
     # 4 GB across 512 MB jobs is 8 per array, not 4 / 512 -> 1
-    assert len(asyncio.run(worker.get_tasks_to_run(args, cmd))) == 8
+    assert worker._array_length(cmd) == 8
 
 
 def test_rerun_removes_the_evicted_jobs_lockfiles(tmp_path, monkeypatch):
@@ -145,3 +141,21 @@ def test_rerun_removes_the_evicted_jobs_lockfiles(tmp_path, monkeypatch):
     assert jobid == "2"
     assert set(worker.job_pkls_rerun) == set(tasks)
     assert worker.result_files_by_jobid["2"] == "results"
+
+
+@pytest.mark.parametrize(
+    "kwargs", [dict(max_threads=0), dict(default_threads_per_task=0)]
+)
+def test_thread_counts_below_one_are_refused(kwargs):
+    with pytest.raises(ValueError):
+        sge.SgeWorker(**kwargs)
+
+
+def test_a_job_asking_for_no_threads_is_refused():
+    with pytest.raises(ValueError, match="at least one thread"):
+        sge.SgeWorker(max_threads=4)._requested("-pe smp 0")
+
+
+def test_a_job_asking_for_more_than_max_threads_is_refused():
+    with pytest.raises(ValueError, match="max_threads"):
+        sge.SgeWorker(max_threads=2)._requested("-pe smp 4")
