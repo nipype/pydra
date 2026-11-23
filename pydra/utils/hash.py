@@ -1704,9 +1704,11 @@ def _class_source_file(klass: type) -> str | None:
     none), or None if it cannot be found or if `klass` was not defined in it: a
     function compiled in a class body of `klass`'s qualified name, but not from that
     file (unpickled by value, so named ``"<dynamic-code>"`` by cloudpickle >= 3.1.3,
-    or named after another file), does not have the code compiled from it. Such a
-    class is a copy unpickled where the file of its module holds another definition
-    (another ``__main__``, an edited file)."""
+    or named after another file), does not have the code compiled from it, or `klass`
+    is not held by its module and its constant attributes are not those the file's
+    definition assigns (see `_constants_match`). Such a class is a copy unpickled
+    where the file of its module holds another definition (another ``__main__``, an
+    edited file)."""
     try:
         source_file = inspect.getsourcefile(klass)
     except (OSError, TypeError):
@@ -1723,7 +1725,50 @@ def _class_source_file(klass: type) -> str | None:
                 lines = _source_lines(klass, source_file)
             if not _compiled_from(f, source_file, lines):
                 return None
+    if _owner_name(klass) is None and not _constants_match(
+        klass, source_file, lines or _source_lines(klass, source_file)
+    ):
+        return None
     return source_file
+
+
+def _constants_match(klass: type, source_file: str, lines: list[str]) -> bool:
+    """Whether a definition of a class of `klass`'s name in a source (at
+    ``__firstlineno__`` if `klass` has it) assigns each attribute of `klass` that holds
+    a constant (see `_STAMPED_CONSTANTS`), and that the definition assigns a literal
+    at the top of its body, the value `klass` holds; True if there is no such
+    definition"""
+    first = getattr(klass, "__firstlineno__", None)
+    nodes = [
+        node
+        for line, defined in _definition_nodes(source_file, lines).items()
+        if first is None or line == first
+        for node in defined
+        if isinstance(node, ast.ClassDef) and node.name == klass.__name__
+    ]
+    held = vars(klass)
+
+    def matches(node: ast.ClassDef) -> bool:
+        for stmt in node.body:
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                target, value = stmt.targets[0], stmt.value
+            elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+                target, value = stmt.target, stmt.value
+            else:
+                continue
+            if not (
+                isinstance(target, ast.Name)
+                and isinstance(value, ast.Constant)
+                and not target.id.startswith("__")
+                and type(held.get(target.id)) in _STAMPED_CONSTANTS
+            ):
+                continue
+            literal, attribute = value.value, held[target.id]
+            if type(literal) is not type(attribute) or literal != attribute:
+                return False
+        return True
+
+    return not nodes or any(matches(n) for n in nodes)
 
 
 def _class_members(klass: type) -> list[tuple[str, types.FunctionType]]:

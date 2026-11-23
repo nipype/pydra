@@ -2260,6 +2260,7 @@ class AttrsFields:
 
 class Const:
     x = 1
+    flag = True
 
 
 def make_obj(n):
@@ -2486,19 +2487,36 @@ def test_by_value_class_changed_after_hashing_is_not_trusted(
     assert digest != expected
 
 
-def test_by_value_class_is_not_read_from_another_definition(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "name, edit",
+    [
+        ("Obj", ("other.n == self.n", "other.n != self.n")),
+        (
+            "Fields",
+            ('    a: int = 1\n    b: str = "x"', '    a: int = 7\n    b: str = "x"'),
+        ),
+        ("Const", ("class Const:\n    x = 1", "class Const:\n    x = 2")),
+        ("Const", ("    flag = True", "    flag = 1")),
+    ],
+)
+def test_by_value_class_is_not_read_from_another_definition(
+    tmp_path, monkeypatch, name, edit
+):
     """A class pickled by value before it is hashed, unpickled where its module's file
-    holds another definition at its name, is not encoded from that file"""
+    holds another definition at its name, is not encoded from that file: one whose
+    method differs, a dataclass whose default differs, a class whose constant
+    differs in value or in type"""
     module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
     other = tmp_path / "other"
     other.mkdir()
+    assert _CLASS_BY_VALUE_SOURCE.count(edit[0]) == 1
     (other / Path(module.__file__).name).write_text(
-        _CLASS_BY_VALUE_SOURCE.replace("other.n == self.n", "other.n != self.n")
+        _CLASS_BY_VALUE_SOURCE.replace(*edit)
     )
     code = (
         "import importlib; from pydra.utils import hash as H; "
         f"m = importlib.import_module({module.__name__!r}); "
-        "print(H._class_code(m.Obj, H.Cache()).decode('latin-1'))"
+        f"print(H._class_code(m.{name}, H.Cache()).decode('latin-1'))"
     )
     own = (
         subprocess.run(
@@ -2512,7 +2530,7 @@ def test_by_value_class_is_not_read_from_another_definition(tmp_path, monkeypatc
         .strip()
     )
     [(_, copy)] = _digests_in_subprocess(
-        tmp_path, module, [module.Obj], extra_path=other
+        tmp_path, module, [getattr(module, name)], extra_path=other
     )
     assert own.startswith("class:ast@1:")
     assert copy != own
