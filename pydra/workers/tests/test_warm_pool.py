@@ -1211,7 +1211,9 @@ def test_submit_and_cancel_stay_responsive_while_a_result_read_blocks(
     pool.bind(lambda job, outcome: reported.append((job, outcome)))
     (first,) = _round(sub, tasks, [1])
     pool.submit([first])
-    _wait(lambda: len(_tickets(pool.root)) == 1, "the first ticket")
+    # followed by the pool: its put is whole (the ticket file is written before the job's
+    # generation, and a ticket settled in between would get no outcome for the job)
+    _wait(lambda: len(pool._tickets) == 1, "the first ticket followed")
     _settle_ticket(pool.root, "cpu", _digest(_tickets(pool.root)[0]), "done")
     try:
         assert entered.wait(BOUND), "the follower did not read the result"
