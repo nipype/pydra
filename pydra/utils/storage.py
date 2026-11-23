@@ -93,7 +93,9 @@ class StorageCapabilities:
 
 def storage_now(directory: os.PathLike) -> float:
     """The current time on the storage holding ``directory``: the mtime of a file just
-    created in it, which the storage stamps. The file is removed."""
+    created in it, which the storage stamps. The file is removed when it can be: on
+    Windows another process (a scanner) may hold it open, and a refused removal does
+    not fail the read; stores skip names starting with `CLOCK_PREFIX`."""
     probe = Path(directory) / f"{CLOCK_PREFIX}{uuid.uuid4().hex}"
     fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
@@ -102,7 +104,7 @@ def storage_now(directory: os.PathLike) -> float:
         os.close(fd)
         try:
             os.unlink(probe)
-        except FileNotFoundError:
+        except OSError:
             pass
 
 
