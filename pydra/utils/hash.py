@@ -85,14 +85,19 @@ class _LRUCache:
 
 FUNCTION_BYTES_CACHE_SIZE = 4096
 SOURCE_NODES_CACHE_SIZE = 128
-# Encoded code of functions, keyed by (source file, source-file mtime, weak reference
-# to the code object)
+# Encoded code of functions with the stamp of their code (see `_code_stamp`), keyed by
+# (source file, source-file mtime, weak reference to the code object)
 _function_bytes_cache = _LRUCache(FUNCTION_BYTES_CACHE_SIZE)
 # Function and lambda nodes of parsed sources by first line, keyed by (file, source
 # digest)
 _source_nodes_cache = _LRUCache(SOURCE_NODES_CACHE_SIZE)
 
 AST_ENCODING = "ast@1"
+# The function attribute that carries a function's `ast@1` encoding, as (code stamp,
+# encoding), so that a copy pickled by value, which has no readable source, keeps it
+CARRIED_ENCODING_ATTR = "__pydra_hash_bytes__"
+# The co_filename cloudpickle (>= 3.1.3) gives code it pickles by value
+_BY_VALUE_FILENAME = "<dynamic-code>"
 
 CODE_HASH_TIERS = ("function", "module", "user")
 CODE_HASH_ENV_VAR = "PYDRA_CODE_HASH"
@@ -1034,16 +1039,22 @@ def _definition_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.
     return nodes
 
 
-def _encode_function_code(obj: types.FunctionType) -> str | None:
+def _encode_function_code(
+    obj: types.FunctionType, source: tuple[str, list[str]] | None = None
+) -> str | None:
     """Encode the AST node that `obj` was compiled from, or None if it cannot be
-    singled out in the function's source. The node is matched by the code's name and
-    first line, and by the source positions of its instructions, so that lambdas
-    sharing a line are told apart."""
+    singled out in the function's source, or in `source` (a file name and its lines)
+    if given. The node is matched by the code's name and first line, and by the source
+    positions of its instructions, so that lambdas sharing a line are told apart."""
     code = obj.__code__
-    try:
-        lines, _ = inspect.findsource(obj)
-    except (OSError, TypeError):
-        return None
+    if source is None:
+        try:
+            lines, _ = inspect.findsource(obj)
+        except (OSError, TypeError):
+            return None
+        source_file = code.co_filename
+    else:
+        source_file, lines = source
     positions = [
         (line, col, end_line, end_col)
         for line, end_line, col, end_col in code.co_positions()
@@ -1061,9 +1072,74 @@ def _encode_function_code(obj: types.FunctionType) -> str | None:
             start <= p[:2] and p[2:] <= end for p in positions
         )
 
-    nodes = _definition_nodes(code.co_filename, lines).get(code.co_firstlineno, [])
+    nodes = _definition_nodes(source_file, lines).get(code.co_firstlineno, [])
     encodings = {encode_ast(n) for n in nodes if matches(n)}
     return encodings.pop() if len(encodings) == 1 else None
+
+
+def _module_source(obj: types.FunctionType) -> tuple[str, list[str]] | None:
+    """The file and lines of the loaded module `obj` names, for code pickled by value:
+    code whose ``co_filename`` cloudpickle (>= 3.1.3) replaced with
+    ``"<dynamic-code>"``, or names a file that is not there. None for other code, such
+    as code generated into another pseudo-file (``<string>``, ``<attrs generated
+    ...>``), or if the module is not loaded"""
+    filename = obj.__code__.co_filename
+    if filename != _BY_VALUE_FILENAME and (
+        filename.startswith("<") or os.path.exists(filename)
+    ):
+        return None
+    module = sys.modules.get(getattr(obj, "__module__", None) or "")
+    if module is None:
+        return None
+    try:
+        source_file = inspect.getsourcefile(module)
+        if not source_file or source_file == obj.__code__.co_filename:
+            return None
+        lines, _ = inspect.findsource(module)
+    except (OSError, TypeError):
+        return None
+    return source_file, lines
+
+
+def _const_stamp(value: ty.Any) -> str:
+    """A text of a code constant that is the same in every process"""
+    if isinstance(value, types.CodeType):
+        return "code:" + _code_stamp(value).hex()
+    if isinstance(value, tuple):
+        return "(" + ",".join(_const_stamp(v) for v in value) + ")"
+    if isinstance(value, frozenset):
+        return "{" + ",".join(sorted(_const_stamp(v) for v in value)) + "}"
+    return f"{type(value).__name__}:{value!r}"
+
+
+def _code_stamp(code: types.CodeType) -> bytes:
+    """A digest of what a code object runs, but not of the file it names, to check an
+    encoding carried on a function against the code it now holds"""
+    parts = (
+        code.co_code.hex(),
+        code.co_name,
+        code.co_qualname,
+        str(code.co_firstlineno),
+        repr(code.co_names),
+        repr(code.co_varnames),
+        repr(code.co_freevars),
+        _const_stamp(code.co_consts),
+    )
+    return blake2b("\0".join(parts).encode(), digest_size=16).digest()
+
+
+def _carried_encoding(obj: types.FunctionType) -> bytes | None:
+    """The encoding carried on `obj` (see `CARRIED_ENCODING_ATTR`) if it was computed
+    for the code `obj` holds"""
+    carried = vars(obj).get(CARRIED_ENCODING_ATTR)
+    if not (
+        isinstance(carried, tuple)
+        and len(carried) == 2
+        and all(isinstance(c, bytes) for c in carried)
+        and carried[1].startswith(AST_ENCODING.encode() + b":")
+    ):
+        return None
+    return carried[1] if carried[0] == _code_stamp(obj.__code__) else None
 
 
 def check_code_hash(code_hash: str) -> str:
@@ -1364,9 +1440,19 @@ def _global_chains(code: types.CodeType) -> tuple[tuple[str, ...], ...]:
     return result
 
 
+def _carry_encoding(obj: types.FunctionType, stamp: bytes, encoding: bytes) -> None:
+    if vars(obj).get(CARRIED_ENCODING_ATTR) != (stamp, encoding):
+        setattr(obj, CARRIED_ENCODING_ATTR, (stamp, encoding))
+
+
 def _function_code(obj: types.FunctionType, cache: Cache) -> bytes:
     """The encoded code of a function: its `ast@1` encoding, or its byte-code tagged
-    with the Python version when its source is not available"""
+    with the Python version when its source is not available.
+
+    The source is the file the code was compiled from; failing that, the encoding
+    carried on the function (see `CARRIED_ENCODING_ATTR`) if it was computed for the
+    code the function holds; failing that, the file of the loaded module the function
+    names (see `_module_source`)."""
     source_file = obj.__code__.co_filename
     try:
         mtime_ns = os.stat(source_file).st_mtime_ns
@@ -1375,15 +1461,26 @@ def _function_code(obj: types.FunctionType, cache: Cache) -> bytes:
     cache_key = (source_file, mtime_ns, weakref.ref(obj.__code__))
     cached = _function_bytes_cache.get(cache_key)
     if cached is not None:
-        return cached
+        result, stamp = cached
+        _carry_encoding(obj, stamp, result)
+        return result
     encoded = _encode_function_code(obj)
+    if encoded is None:
+        carried = _carried_encoding(obj)
+        if carried is not None:
+            return carried
+        source = _module_source(obj)
+        if source is not None:
+            encoded = _encode_function_code(obj, source)
     if encoded is None:
         # not cached, because the code object's bytes depend on the cache arg
         version = f"bytecode@{sys.version_info[0]}.{sys.version_info[1]}:"
         return version.encode() + b"".join(bytes_repr(obj.__code__, cache))
     result = f"{AST_ENCODING}:{encoded}".encode()
+    stamp = _code_stamp(obj.__code__)
+    _carry_encoding(obj, stamp, result)
     if mtime_ns is not None:
-        _function_bytes_cache.put(cache_key, result)
+        _function_bytes_cache.put(cache_key, (result, stamp))
     return result
 
 
