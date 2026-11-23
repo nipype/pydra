@@ -1421,27 +1421,17 @@ def test_refused_starts_hold_the_jobs_before_the_backoff_ladder_ends(
     """A class whose every start is refused breaks once ``start_deadline_failures`` starts have failed
     over ``start_deadline_s``: its jobs are ``NotRun(held=True)`` naming the latest start error,
     well before ``start_failures`` backed-off starts would have broken it."""
-    import time
-
-    poll, budget = 0.5, FaultBudgets().start_failures
-    ladder = sum(
-        poll * 2**i for i in range(budget - 1)
-    )  # seconds the budget alone takes
+    budget = FaultBudgets().start_failures
+    settings = _settings(poll_s=0.5, start_deadline_s=1.0)
+    # the backoff after failed starts 1 and 2 (0.5 s, then 1 s) puts start 3 past the
+    # deadline, so the deadline breaks the class at start 3, whatever the machine's speed
+    assert settings.start_deadline_failures == 3 < budget
     sub = _submitter(tmp_path)
     substrate = RefusesStarts()
-    pool = _warm(
-        tmp_path,
-        pools,
-        sub,
-        substrate=substrate,
-        settings=_settings(poll_s=poll, start_deadline_s=1.0),
-    )
-    began = time.monotonic()
+    pool = _warm(tmp_path, pools, sub, substrate=substrate, settings=settings)
     with pytest.raises(RunIncomplete) as info:
         _drive(sub, tasks.Many(xs=[1, 2]), pool)
-    took = time.monotonic() - began
-    assert took < ladder / 4, (took, ladder)
-    assert substrate.starts < budget
+    assert substrate.starts == settings.start_deadline_failures
     assert len(info.value.not_run) == 2
     for _, outcome in info.value.not_run:
         assert isinstance(outcome, NotRun) and outcome.held
