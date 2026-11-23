@@ -21,6 +21,9 @@ PROBE_PREFIX = ".pydra-probe-"
 CLOCK_PREFIX = ".pydra-clock-"
 """The name prefix of the file `storage_now` makes and removes."""
 
+WARM_PREFIX = ".pydra-warm-"
+"""The name prefix of the scratch directory a warm container keeps in a cache root."""
+
 UNSUPPORTED_ERRNOS = frozenset(
     e
     for e in (
