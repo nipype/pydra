@@ -1953,8 +1953,15 @@ def test_rerun_after_collect_fresh_attempt(tmp_path, tasks, pools):
     )
     assert first.done
     (ticket,) = _tickets(tmp_path / "pool")
-    report = collect_pool(tmp_path / "pool", payload_age=0)
-    assert report["tickets"] == 1 and _tickets(tmp_path / "pool") == []
+    # the driver sees the job done before the worker's release resolves the ticket
+    collected = []
+
+    def collect() -> bool:
+        collected.append(collect_pool(tmp_path / "pool", payload_age=0)["tickets"])
+        return sum(collected) == 1
+
+    _wait(collect, "the ticket to resolve and be collected")
+    assert _tickets(tmp_path / "pool") == []
     again = _drive(
         sub,
         tasks.Marks(xs=[1], where=str(marks)),
@@ -1968,6 +1975,69 @@ def test_rerun_after_collect_fresh_attempt(tmp_path, tasks, pools):
     assert [g["cause"] for g in gens][-1] == "put"
     attempts = {g["attempt"] for g in gens}
     assert len(attempts) == len(gens) and gens[-1]["attempt"].endswith(".1")
+
+
+HOLD_RELEASE = """
+import os
+
+if os.environ.get("PYDRA_TEST_HOLD_RELEASE"):
+    import sys
+    import time
+    from pathlib import Path
+
+    from pydra.workers.pool import storage
+
+    root = Path(os.environ["PYDRA_TEST_HOLD_RELEASE"])
+    release = storage.Claim.release
+
+    def held(self, *args, **kwargs):
+        # a claim released after its ticket ran waits until the worker is told to stop
+        if sys._getframe(2).f_code.co_name == "_run_held":
+            deadline = time.monotonic() + 120
+            while not list(root.glob("workers/*/stop.json")):
+                if time.monotonic() > deadline:
+                    break
+                time.sleep(0.05)
+        return release(self, *args, **kwargs)
+
+    storage.Claim.release = held
+"""
+
+
+def test_stop_without_signals_lets_the_release_finish(
+    tmp_path, tasks, pools, monkeypatch
+):
+    """On Windows a process cannot be sent SIGTERM: ``send_signal`` is TerminateProcess and no
+    handler runs. A pool closed while its worker is between a ticket's ``done`` outcome and its
+    release still lets the release finish, so the ticket resolves, and stops the worker without a
+    signal."""
+    from pydra.workers.pool import substrate
+    from pydra.workers.pool.pool import collect_pool
+
+    hold = tmp_path / "hold"
+    hold.mkdir()
+    (hold / "sitecustomize.py").write_text(HOLD_RELEASE)
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join([str(hold), os.environ.get("PYTHONPATH", "")])
+    )
+    monkeypatch.setenv("PYDRA_TEST_HOLD_RELEASE", str(tmp_path / "pool"))
+    monkeypatch.setattr(substrate, "IS_WINDOWS", True)
+    signals = []
+
+    def terminate(self, sig):  # TerminateProcess: whatever the signal, killed at once
+        signals.append((self.pid, sig))
+        os.kill(self.pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+
+    monkeypatch.setattr(subprocess.Popen, "send_signal", terminate)
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    sub = _submitter(tmp_path)
+    pool = _warm(tmp_path, pools, sub)
+    assert _drive(sub, tasks.Marks(xs=[1], where=str(marks)), pool).done
+    assert collect_pool(tmp_path / "pool", payload_age=0)["tickets"] == 1
+    (handle,) = pool.substrate.handles
+    assert handle.process.poll() == 0
+    assert [sig for pid, sig in signals if pid == handle.process.pid] == []
 
 
 def _without_the_run_cache(tmp_path, tasks, pools, store):

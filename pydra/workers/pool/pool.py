@@ -776,13 +776,25 @@ class WarmPool:
                         )
                         live = list(self._started.values())
                     if live:
-                        self.substrate.stop(live)
+                        self._stop_workers(live)
         finally:
             try:
                 if self._lease is not None:
                     self._lease.__exit__(None, None, None)
             finally:
                 self.pool.close()
+
+    def _stop_workers(self, handles: ty.Sequence[WorkerHandle]) -> None:
+        """Write each worker's ``stop.json`` mark, on which it drains as on SIGTERM, then stop them
+        with the substrate."""
+        for h in handles:
+            try:
+                self.pool.write_worker_record(h.token, "stop.json", {"at": time.time()})
+            except (OSError, ValueError) as err:
+                logger.warning(
+                    "writing the stop mark of worker %s failed: %s", h.token, err
+                )
+        self.substrate.stop(handles)
 
     def place(self, jobs: ty.Sequence["Job"]) -> list[Placement | Unplaceable]:
         """Each job's placement, as `submit` would make it, for ``plan()`` (RFC 0005 section 7.4)."""
@@ -1913,7 +1925,7 @@ class WarmPool:
                     surplus = mine
                 if surplus:
                     self._stopped.update(h.token for h in surplus)
-                    self.substrate.stop(surplus)
+                    self._stop_workers(surplus)
 
     def _listing_failed(self, err: Exception, now: float) -> None:
         """Count a failed listing against each class with work that shows no progress: no live

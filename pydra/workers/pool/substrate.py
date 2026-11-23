@@ -312,7 +312,7 @@ class LocalSubstrate:
     python : str
         The interpreter that runs the workers.
     stop_wait : float
-        Seconds `stop` waits for a worker given SIGTERM before it kills its process group.
+        Seconds `stop` waits for a worker to drain and exit before it kills its process group.
     """
 
     def __init__(
@@ -429,14 +429,18 @@ class LocalSubstrate:
         return handle
 
     def stop(self, workers: ty.Sequence[WorkerHandle]) -> None:
-        """SIGTERM each worker (it settles what finished and releases the rest), then kill the
-        process group of any still running after ``stop_wait``."""
+        """Let each worker drain (it settles what finished and releases the rest), then kill the
+        process group of any still running after ``stop_wait``. A worker drains on its
+        ``stop.json`` mark, which `WarmPool` writes before calling this, and on POSIX also on the
+        SIGTERM sent here. Windows has no SIGTERM: ``send_signal`` would terminate the worker at
+        once, mid-release, so none is sent."""
         running = [
             h for h in workers if h.process is not None and h.process.poll() is None
         ]
-        for h in running:
-            with contextlib.suppress(ProcessLookupError, PermissionError):
-                h.process.send_signal(signal.SIGTERM)
+        if not IS_WINDOWS:
+            for h in running:
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    h.process.send_signal(signal.SIGTERM)
         deadline = time.monotonic() + self.stop_wait
         for h in running:
             try:
