@@ -1,5 +1,8 @@
+import os
 import typing as ty
 import logging
+from pathlib import Path
+import attrs
 from pydra.compose import shell
 from pydra.environments import base, images
 
@@ -7,10 +10,25 @@ logger = logging.getLogger("pydra")
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+    from pydra.engine.resident import Device
 
 
+@attrs.define
 class Docker(base.Container):
-    """Docker environment."""
+    """Docker environment.
+
+    Parameters
+    ----------
+    read_only : bool
+        A warm container's root file system is read-only, with a ``tmpfs`` on ``/tmp``
+    """
+
+    read_only: bool = attrs.field(default=False, kw_only=True)
+
+    def _warm_handle(
+        self, ref: base.ResolvedRef, roots: frozenset[Path], device: "Device | None"
+    ) -> "WarmDocker":
+        return WarmDocker(self, ref, roots, device)
 
     def _ref_key(self) -> ty.Hashable:
         repository, digest = images.split_reference(self.image)
@@ -128,6 +146,54 @@ class Docker(base.Container):
             else:
                 raise RuntimeError(output["stdout"])
         return output
+
+
+def user_flag() -> list[str]:
+    """``--user <uid>:<gid>`` of this process, so files a container writes are owned
+    by the submitting user; nothing where there are no POSIX ids"""
+    if not hasattr(os, "getuid"):
+        return []
+    return ["--user", f"{os.getuid()}:{os.getgid()}"]
+
+
+class WarmDocker(base.WarmContainer):
+    """One ``docker run -d`` of the resolved reference, with the roots bound and a
+    sleeper as entrypoint, then a ``docker exec`` per job (RFC 0005 section 3.1)"""
+
+    container_id: str | None = None
+
+    def _start(self) -> None:
+        env: Docker = self.environment
+        cmd = ["docker", "run", "-d", "--rm", "--init", "--name", self.name]
+        cmd.extend(user_flag())
+        devices = base.visible_devices(self.device)
+        if devices is not None:
+            cmd.extend(["--gpus", "all" if devices == "all" else f'"device={devices}"'])
+        if env.read_only:
+            cmd.extend(["--read-only", "--tmpfs", "/tmp"])
+        for host, mounted in self._binds():
+            cmd.extend(["-v", f"{host}:{mounted}:rw"])
+        cmd.extend(env.xargs)
+        cmd.extend(["--entrypoint", "sleep", self.ref.run, "2147483647"])
+        rc, out, err = base.execute(cmd, strip=True)
+        if rc or not out:
+            raise RuntimeError(
+                f"'docker run -d' of {self.ref.run!r} failed ({rc}): {err}{out}"
+            )
+        self.container_id = out.splitlines()[-1]
+
+    def _exec_command(
+        self, job: "Job", env: dict[str, str], args: list[str]
+    ) -> list[str]:
+        cmd = ["docker", "exec", "-w", self.environment.mounted(job.cache_dir)]
+        for name, value in env.items():
+            cmd.extend(["-e", f"{name}={value}"])
+        return cmd + [self.container_id] + args
+
+    def _stop(self) -> None:
+        if self.container_id is not None:
+            # removes the container after its processes are killed, and waits
+            base.execute(["docker", "rm", "-f", self.container_id])
 
 
 # Alias so it can be referred to as docker.Environment
