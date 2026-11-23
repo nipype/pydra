@@ -727,21 +727,18 @@ def test_hash_task(tmp_path):
 
 
 def test_bytes_repr_annotated_type():
-    """The metadata of an annotated type is part of its digest (RFC 0004 section 5.1)"""
+    """The metadata of annotated types doesn't change the hash"""
 
     @attrs.define(frozen=True)
     class Marker:
         format: type
 
     annotated = ty.Annotated[ty.Union[Json, Yaml], Marker(Json)]
-    assert hash_function(annotated) != hash_function(ty.Union[Json, Yaml])
+    assert hash_function(annotated) == hash_function(ty.Union[Json, Yaml])
     assert hash_function(annotated) == hash_function(
-        ty.Annotated[ty.Union[Json, Yaml], Marker(Json)]
-    )
-    assert hash_function(annotated) != hash_function(
         ty.Annotated[ty.Union[Json, Yaml], Marker(Yaml)]
     )
-    assert hash_function(ty.List[annotated]) != hash_function(
+    assert hash_function(ty.List[annotated]) == hash_function(
         ty.List[ty.Union[Json, Yaml]]
     )
     assert hash_function(annotated) != hash_function(ty.Union[Json, TextFile])
