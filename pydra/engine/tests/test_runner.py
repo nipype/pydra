@@ -24,17 +24,35 @@ def Fan(x):
 
 
 @python.define
-def Hold(x: int, logdir: str) -> int:
+def Hold(x: int, logdir: str, partners: int = 0, total: int = 0) -> int:
+    """Records when it ran; given ``partners``, first waits (a bound only) until that
+    many of the ``total`` jobs run at once, itself included, or all have started"""
     t0 = time.time()
+    sync = logdir + "-sync"
+    if partners:
+        os.makedirs(sync, exist_ok=True)
+        open(os.path.join(sync, f"start-{x}"), "w").close()
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            names = os.listdir(sync)
+            started = sum(n.startswith("start-") for n in names)
+            running = started - sum(n.startswith("end-") for n in names)
+            if running >= partners or started == total:
+                break
+            time.sleep(0.02)
     time.sleep(0.6)
     with open(os.path.join(logdir, f"{x}.txt"), "w") as f:
         f.write(f"{t0} {time.time()}")
+    if partners:
+        open(os.path.join(sync, f"end-{x}"), "w").close()
     return x
 
 
 @workflow.define
-def HoldMany(xs: list[int], logdir: str) -> list[int]:
-    h = workflow.add(Hold(logdir=logdir).split(x=xs))
+def HoldMany(
+    xs: list[int], logdir: str, partners: int = 0, total: int = 0
+) -> list[int]:
+    h = workflow.add(Hold(logdir=logdir, partners=partners, total=total).split(x=xs))
     return h.out
 
 
@@ -145,10 +163,15 @@ def test_max_concurrent_caps_running_jobs(any_worker, tmp_path):
     """No more than ``max_concurrent`` jobs of a workflow run at once"""
     logdir = tmp_path / "log"
     logdir.mkdir()
+    # on cf each job waits for a second one to run beside it, so the cap is reached
+    # whatever the machine's speed; a serial worker has no second one to wait for
+    partners = 2 if any_worker == "cf" else 0
     with Submitter(
         worker=any_worker, cache_root=tmp_path / "cache", max_concurrent=2
     ) as sub:
-        result = sub(HoldMany(xs=list(range(8)), logdir=str(logdir)))
+        result = sub(
+            HoldMany(xs=list(range(8)), logdir=str(logdir), partners=partners, total=8)
+        )
     assert not result.errored
     spans = [tuple(map(float, f.read_text().split())) for f in logdir.iterdir()]
     assert len(spans) == 8
