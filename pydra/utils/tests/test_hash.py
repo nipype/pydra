@@ -35,7 +35,7 @@ from pydra.utils.hash import (
 import shutil
 import random
 from fileformats.generic import Directory, File
-from pydra.utils.hash import hash_function
+from pydra.utils.hash import hash_function, type_digest
 from pydra.utils.tests.utils import (
     Concatenate,
     OtherSpecificFuncTask,
@@ -276,7 +276,7 @@ def test_bytes_repr_custom_obj():
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
+    assert re.match(rb".*\.MyClass:{class@1:[0-9a-f]{64},str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_slots_obj():
@@ -287,7 +287,7 @@ def test_bytes_repr_slots_obj():
             self.x = x
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
+    assert re.match(rb".*\.MyClass:{class@1:[0-9a-f]{64},str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_attrs_slots():
@@ -296,7 +296,7 @@ def test_bytes_repr_attrs_slots():
         x: int
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
+    assert re.match(rb".*\.MyClass:{class@1:[0-9a-f]{64},str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_attrs_no_slots():
@@ -305,7 +305,7 @@ def test_bytes_repr_attrs_no_slots():
         x: int
 
     obj_repr = join_bytes_repr(MyClass(1))
-    assert re.match(rb".*\.MyClass:{str:1:x=.{16},}", obj_repr)
+    assert re.match(rb".*\.MyClass:{class@1:[0-9a-f]{64},str:1:x=.{16},}", obj_repr)
 
 
 def test_bytes_repr_type1():
@@ -331,29 +331,33 @@ def test_bytes_repr_type2():
     obj_repr = join_bytes_repr(MyClass[int])
     assert re.match(
         (
-            rb"type:\(origin:\(type:\(__dict__:\(str:6:method=.{16},\),annotations:\(str:1:a=.{16},"
-            rb"str:1:b=.{16},\),mro:\(type:\(typing.Generic\)\)\)\),args:\(type:\(builtins.int\)\)\)"
+            rb"type:\(origin:\(type:\(.*\.MyClass,class:\(class@1:[0-9a-f]{64}\)\)\),"
+            rb"args:\(type:\(builtins.int\)\)\)"
         ),
         obj_repr,
     )
 
 
+def type_token(tp) -> bytes:
+    """The digest of a type as it appears inside another type's bytes"""
+    return type_digest(tp).removeprefix("type@1:").encode()
+
+
+def union_repr(*members) -> bytes:
+    """A union is the sorted digests of its members, so its spelling and the Python
+    minor do not matter"""
+    return b"type:(union:(" + b",".join(sorted(type_token(m) for m in members)) + b"))"
+
+
 def test_bytes_special_form1():
-    obj_repr = join_bytes_repr(ty.Union[int, float])
-    assert obj_repr == (
-        b"type:(origin:(type:(typing.Union)),args:(type:(builtins.int)"
-        b"type:(builtins.float)))"
-    )
+    assert join_bytes_repr(ty.Union[int, float]) == union_repr(int, float)
+    assert join_bytes_repr(ty.Union[float, int]) == union_repr(int, float)
 
 
 @pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
 def test_bytes_special_form1a():
-    obj_repr = join_bytes_repr(int | float)
-    assert re.match(
-        rb"type:\(origin:\(type:\((types.UnionType|typing.Union)\)\),args:\(type:\(builtins.int\)"
-        rb"type:\(builtins.float\)\)\)",
-        obj_repr,
-    )
+    assert join_bytes_repr(int | float) == union_repr(int, float)
+    assert join_bytes_repr(float | int) == join_bytes_repr(ty.Union[int, float])
 
 
 def test_bytes_special_form2():
@@ -362,21 +366,12 @@ def test_bytes_special_form2():
 
 
 def test_bytes_special_form3():
-    obj_repr = join_bytes_repr(ty.Optional[Path])
-    assert obj_repr == (
-        b"type:(origin:(type:(typing.Union)),args:(type:(pathlib.Path)"
-        b"type:(builtins.NoneType)))"
-    )
+    assert join_bytes_repr(ty.Optional[Path]) == union_repr(Path, type(None))
 
 
 @pytest.mark.skipif(condition=sys.version_info < (3, 10), reason="requires python3.10")
 def test_bytes_special_form3a():
-    obj_repr = join_bytes_repr(Path | None)
-    assert re.match(
-        rb"type:\(origin:\(type:\((types.UnionType|typing.Union)\)\),args:\(type:\(pathlib.Path\)"
-        rb"type:\(builtins.NoneType\)\)\)",
-        obj_repr,
-    )
+    assert join_bytes_repr(Path | None) == join_bytes_repr(ty.Optional[Path])
 
 
 def test_bytes_special_form4():
@@ -726,18 +721,21 @@ def test_hash_task(tmp_path):
 
 
 def test_bytes_repr_annotated_type():
-    """The metadata of annotated types doesn't change the hash"""
+    """The metadata of an annotated type is part of its digest (RFC 0004 section 5.1)"""
 
     @attrs.define(frozen=True)
     class Marker:
         format: type
 
     annotated = ty.Annotated[ty.Union[Json, Yaml], Marker(Json)]
-    assert hash_function(annotated) == hash_function(ty.Union[Json, Yaml])
+    assert hash_function(annotated) != hash_function(ty.Union[Json, Yaml])
     assert hash_function(annotated) == hash_function(
+        ty.Annotated[ty.Union[Json, Yaml], Marker(Json)]
+    )
+    assert hash_function(annotated) != hash_function(
         ty.Annotated[ty.Union[Json, Yaml], Marker(Yaml)]
     )
-    assert hash_function(ty.List[annotated]) == hash_function(
+    assert hash_function(ty.List[annotated]) != hash_function(
         ty.List[ty.Union[Json, Yaml]]
     )
     assert hash_function(annotated) != hash_function(ty.Union[Json, TextFile])
@@ -788,6 +786,16 @@ _HASH_IN_SUBPROCESS = (
 )
 
 
+@pytest.mark.xfail(
+    condition=tuple(map(int, cloudpickle.__version__.split(".")[:3])) >= (3, 1, 3),
+    reason=(
+        "cloudpickle 3.1.3 sets co_filename to '<dynamic-code>' on a function it pickles "
+        "by value, so a process without the source hashes its bytecode (pydra issue "
+        "#936). A worker does not hash it: it takes the digests carried from the "
+        "submitting process, and rehashes only files and values with __bytes_repr__ "
+        "(test_identity_classes.py::test_worker_without_source_uses_the_carried_digests)"
+    ),
+)
 def test_hash_function_pickled_by_value():
     """A function pickled by value, as the cf worker sends it, keeps its hash in
     another process"""

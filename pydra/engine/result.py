@@ -1,6 +1,7 @@
 """Job I/O definitions."""
 
 from pathlib import Path
+import copy
 import typing as ty
 import attrs
 import functools
@@ -153,6 +154,12 @@ class Result(ty.Generic[OutputsType]):
 
     def __getstate__(self):
         state = attrs_values(self)
+        task = state["task"]
+        if task is not None and task._carried is not None:
+            # the digests carried to a worker end with its run
+            task = copy.copy(task)
+            task._carried = None
+            state["task"] = task
         for attr in self.CLOUD_PICKLE_ATTRS:
             if state[attr] is not None:
                 state[attr] = cp.dumps(state[attr])

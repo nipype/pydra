@@ -1,6 +1,7 @@
 """Generic object hashing dispatch"""
 
 import builtins
+import dataclasses
 import sys
 import os
 import ast
@@ -286,6 +287,10 @@ class Cache:
     # the `code_digest`s of the functions hashed with a declared version, by their
     # ``module.qualname==version``
     declared: ty.Dict[str, ty.Set[str]] = attrs.field(factory=dict)
+    # the `class_digest` of each user class hashed with this cache, and the classes
+    # being walked now (a class whose method reads an instance of the class)
+    classes: ty.Dict[type, str] = attrs.field(factory=dict)
+    _classes_open: ty.Set[type] = attrs.field(factory=set)
     # objects made while hashing that the cache, keyed by their ``id``, must not outlive
     keepalive: ty.List[ty.Any] = attrs.field(factory=list, repr=False)
 
@@ -421,6 +426,9 @@ def bytes_repr(obj: object, cache: Cache) -> Iterator[bytes]:
     """
     cls = obj.__class__
     yield f"{cls.__module__}.{cls.__name__}:{{".encode()
+    if is_user_class(cls):
+        yield _class_digest(cls, cache).encode()
+        yield b","
     dct: Dict[str, ty.Any]
     if attrs.has(type(obj)):
         # Drop any attributes that aren't used in comparisons by default
@@ -558,31 +566,82 @@ def bytes_repr_module(obj: types.ModuleType, cache: Cache) -> Iterator[bytes]:
     yield b")"
 
 
+def _type_location(tp: ty.Any) -> bytes:
+    """The module and qualified name of a type, leaving out the private parts of the
+    module path (``pathlib._local`` is ``pathlib``), as an ASCII byte string"""
+    name = (
+        getattr(tp, "__qualname__", None)
+        or getattr(tp, "__name__", None)
+        or getattr(tp, "_name", None)
+    )
+    if not isinstance(name, str):
+        raise TypeError(f"{type(tp).__name__} object has no stable type@1 form")
+    module = getattr(tp, "__module__", None) or ""
+    mod_path = ".".join(p for p in module.split(".") if not p.startswith("_"))
+    return f"{mod_path}.{name}".encode()
+
+
+def _type_token(tp: ty.Any, cache: Cache) -> bytes:
+    """The digest of a type within another, as hex"""
+    return sha256(b"".join(bytes_repr_type(tp, cache))).hexdigest().encode()
+
+
+def _union_members(args: tuple) -> Iterator[ty.Any]:
+    for arg in args:
+        if ty.get_origin(arg) in _UNION_ORIGINS:
+            yield from _union_members(ty.get_args(arg))
+        else:
+            yield arg
+
+
+def _literal_token(value: ty.Any) -> bytes:
+    """The digest form (RFC 0004 section 6.2) of a ``Literal`` value, as JCS bytes"""
+    from pydra.utils.digest import digest, digest_form, jcs
+
+    try:
+        return jcs(digest_form(value))
+    except Exception:
+        return jcs(digest(value))
+
+
+_UNION_ORIGINS = (ty.Union, types.UnionType)
+
+
 @register_serializer(ty._GenericAlias)
+@register_serializer(ty._SpecialGenericAlias)
+@register_serializer(types.GenericAlias)
 @register_serializer(ty._SpecialForm)
+@register_serializer(ty.TypeVar)
+@register_serializer(ty.ParamSpec)
+@register_serializer(ty.TypeVarTuple)
+@register_serializer(ty.ForwardRef)
 @register_serializer(type)
-def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
-    from pydra.utils.general import get_fields
+def bytes_repr_type(klass: ty.Any, cache: Cache) -> Iterator[bytes]:
+    """The bytes of a type (``type@1``, RFC 0004 section 5.1), which are the same on
+    every Python minor: unions and ``Literal`` are order-free and ``Optional[X]`` is
+    ``X | None``; a user class is its name and `class_digest`"""
+    from pydra.utils.digest import digest
 
-    def type_location(tp: type) -> bytes:
-        """Return the module and name of the type in a ASCII byte string"""
-        try:
-            type_name = tp.__name__
-        except AttributeError:
-            type_name = tp._name
-        mod_path = ".".join(
-            p for p in klass.__module__.split(".") if not p.startswith("_")
-        )
-        return f"{mod_path}.{type_name}".encode()
-
-    # The metadata of annotated types isn't included in the hash as it doesn't change
-    # how values of the type are handled
-    while ty.get_origin(klass) is ty.Annotated:
-        klass = ty.get_args(klass)[0]
     yield b"type:("
+    if klass is None:
+        klass = type(None)
     origin = ty.get_origin(klass)
     args = ty.get_args(klass)
-    if origin and args:
+    if origin is ty.Annotated:
+        yield b"annotated:("
+        yield from bytes_repr_type(args[0], cache)
+        yield b"),metadata:("
+        yield b",".join(digest(m).encode() for m in klass.__metadata__)
+        yield b")"
+    elif origin in _UNION_ORIGINS:
+        yield b"union:("
+        yield b",".join(sorted({_type_token(m, cache) for m in _union_members(args)}))
+        yield b")"
+    elif origin is ty.Literal:
+        yield b"literal:("
+        yield b",".join(sorted(_literal_token(a) for a in args))
+        yield b")"
+    elif origin is not None and args:
         yield b"origin:("
         yield from bytes_repr_type(origin, cache)
         yield b"),args:("
@@ -596,49 +655,56 @@ def bytes_repr_type(klass: type, cache: Cache) -> Iterator[bytes]:
             else:
                 yield from bytes_repr_type(arg, cache)
         yield b")"
-    else:
-        if klass is Ellipsis:
-            yield b"..."
-        elif inspect.isclass(klass) and issubclass(klass, FileSet):
-            try:
-                yield b"mime-like:(" + klass.mime_like.encode() + b")"
-            except fileformats.core.exceptions.FormatDefinitionError:
-                yield type_location(klass)
-        elif get_fields(klass):
-            yield b"fields:("
-            yield from bytes_repr_sequence_contents(_versioned_fields(klass), cache)
+    elif isinstance(klass, (ty.TypeVar, ty.ParamSpec, ty.TypeVarTuple)):
+        yield b"typevar:(" + klass.__name__.encode()
+        bound = getattr(klass, "__bound__", None)
+        if bound is type(None):  # a ParamSpec's, on some minors
+            bound = None
+        yield b",bound:(" + (b"" if bound is None else _type_token(bound, cache)) + b")"
+        yield b",constraints:(" + b",".join(
+            _type_token(c, cache) for c in getattr(klass, "__constraints__", ())
+        ) + b")"
+        yield b",variance:(%d,%d)" % (
+            bool(getattr(klass, "__covariant__", False)),
+            bool(getattr(klass, "__contravariant__", False)),
+        )
+    elif klass is dataclasses.KW_ONLY:
+        yield b"sentinel:(dataclasses.KW_ONLY)"
+    elif isinstance(klass, dataclasses.InitVar):
+        yield b"initvar:(" + _type_token(klass.type, cache) + b")"
+    elif isinstance(klass, str):
+        yield b"annotation:(" + klass.encode() + b")"
+    elif isinstance(klass, ty.ForwardRef):
+        yield b"annotation:(" + klass.__forward_arg__.encode() + b")"
+    elif klass is Ellipsis:
+        yield b"..."
+    elif inspect.isclass(klass) and issubclass(klass, FileSet):
+        try:
+            yield b"mime-like:(" + klass.mime_like.encode() + b")"
+        except fileformats.core.exceptions.FormatDefinitionError:
+            yield _type_location(klass)
+    elif inspect.isclass(klass) and get_fields(klass):
+        # not its name: tasks defined in different ways have one checksum
+        yield b"fields:("
+        yield from bytes_repr_sequence_contents(_versioned_fields(klass), cache)
+        yield b")"
+        if hasattr(klass, "Outputs"):
+            yield b",outputs:("
+            yield from bytes_repr_type(klass.Outputs, cache)
             yield b")"
-            if hasattr(klass, "Outputs"):
-                yield b",outputs:("
-                yield from bytes_repr_type(klass.Outputs, cache)
-                yield b")"
-        elif in_stdlib(klass):
-            yield type_location(klass)
-        else:
-            try:
-                dct = {
-                    n: v for n, v in klass.__dict__.items() if not n.startswith("__")
-                }
-            except AttributeError:
-                yield type_location(klass)
-            else:
-                yield b"__dict__:("
-                yield from bytes_repr_mapping_contents(dct, cache)
-                yield b")"
-                # Include annotations
-                try:
-                    annotations = klass.__annotations__
-                except AttributeError:
-                    pass
-                else:
-                    yield b",annotations:("
-                    yield from bytes_repr_mapping_contents(annotations, cache)
-                    yield b")"
-                yield b",mro:("
-                yield from (
-                    b for t in klass.mro()[1:-1] for b in bytes_repr_type(t, cache)
-                )
-                yield b")"
+    elif not inspect.isclass(klass) or in_stdlib(klass):
+        yield _type_location(klass)
+    elif is_library(klass):
+        module = klass.__module__
+        owner = library_owner(module)
+        cache.modules.add(module)
+        ref = f"lib:{owner}".encode() + _type_location(klass)
+        if owner:
+            cache.refs.add(ref.decode())
+        yield ref
+    else:
+        yield _type_location(klass)
+        yield b",class:(" + _class_digest(klass, cache).encode() + b")"
     yield b")"
 
 
@@ -880,6 +946,18 @@ def encode_ast(root: ast.AST) -> str:
     return "".join(parts)
 
 
+def _name_definitions(node: ast.AST, prefix: str) -> None:
+    """Set ``qualname`` on each function and class node under ``node``: the
+    ``__qualname__`` its definition gives"""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, _DOCUMENTED_DEFS):
+            child.qualname = prefix + child.name
+            inner = ".<locals>." if not isinstance(child, ast.ClassDef) else "."
+            _name_definitions(child, child.qualname + inner)
+        else:
+            _name_definitions(child, prefix)
+
+
 def _definition_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.AST]]:
     """The function, lambda and class nodes of a source, by the first line of their
     definition"""
@@ -894,6 +972,7 @@ def _definition_nodes(source_file: str, lines: list[str]) -> dict[int, list[ast.
     except (SyntaxError, ValueError):
         pass
     else:
+        _name_definitions(tree, "")
         for node in ast.walk(tree):
             if isinstance(node, _DOCUMENTED_DEFS):
                 first = node.decorator_list[0] if node.decorator_list else node
@@ -1267,6 +1346,20 @@ def _member_functions(member: object) -> list[types.FunctionType]:
     return [member] if isinstance(member, types.FunctionType) else []
 
 
+# Attributes the compiler adds to a class body: they hold the class namespace or line
+# numbers, so they would move the digest with the class's position and the Python minor
+_COMPILER_GENERATED = frozenset(
+    {
+        "__annotate__",
+        "__annotate_func__",
+        "__annotations_cache__",
+        "__classdictcell__",
+        "__firstlineno__",
+        "__static_attributes__",
+    }
+)
+
+
 def _class_members(klass: type) -> list[tuple[str, types.FunctionType]]:
     """The functions defined in the body of `klass`, by attribute name, leaving out
     those generated by decorators such as `attrs.define` or `dataclasses.dataclass`"""
@@ -1277,6 +1370,7 @@ def _class_members(klass: type) -> list[tuple[str, types.FunctionType]]:
     return [
         (name, func)
         for name, member in sorted(vars(klass).items())
+        if name not in _COMPILER_GENERATED
         for func in _member_functions(member)
         if (
             func.__code__.co_filename == source_file
@@ -1307,23 +1401,11 @@ def _class_code(klass: type, cache: Cache) -> bytes:
             mtime_ns = os.stat(source_file).st_mtime_ns
         except OSError:
             mtime_ns = None
-        cache_key = (
-            source_file,
-            mtime_ns,
-            klass.__qualname__,
-            getattr(klass, "__firstlineno__", None),
-        )
+        cache_key = (source_file, mtime_ns, klass.__qualname__)
         cached = _function_bytes_cache.get(cache_key)
         if cached is not None:
             return cached
-        first = getattr(klass, "__firstlineno__", None)
-        encodings = {
-            encode_ast(node)
-            for line, nodes in _definition_nodes(source_file, lines).items()
-            if first is None or line == first
-            for node in nodes
-            if isinstance(node, ast.ClassDef) and node.name == klass.__name__
-        }
+        encodings = {encode_ast(n) for n in _class_nodes(klass, source_file, lines)}
         if len(encodings) == 1:
             result = f"class:{AST_ENCODING}:{encodings.pop()}".encode()
             if mtime_ns is not None:
@@ -1337,6 +1419,37 @@ def _class_code(klass: type, cache: Cache) -> bytes:
         )
         + b")"
     )
+
+
+def _class_nodes(klass: type, source_file: str, lines: list[str]) -> list[ast.ClassDef]:
+    """Every definition of `klass`'s qualified name in a source"""
+    return [
+        node
+        for nodes in _definition_nodes(source_file, lines).values()
+        for node in nodes
+        if isinstance(node, ast.ClassDef) and node.qualname == klass.__qualname__
+    ]
+
+
+def _attribute_values(klass: type) -> list[tuple[str, ty.Any]]:
+    """The values of `klass` that its code does not carry, by name, sorted: each plain
+    attribute in its namespace (not ``__dunder__`` or ``_sunder_``, which the language and
+    `enum` reserve, and not a descriptor: a function, a property or a slot, whose code is
+    hashed or which holds no value), and the default of each field of an ``attrs`` class
+    """
+    values = [
+        (name, value)
+        for name, value in sorted(vars(klass).items())
+        if not (name.startswith("_") and name.endswith("_"))
+        and not hasattr(type(value), "__get__")
+    ]
+    if attrs.has(klass):
+        values += [
+            (f"field:{f.name}", f.default)
+            for f in attrs.fields(klass)
+            if f.default is not attrs.NOTHING
+        ]
+    return values
 
 
 class _Empty:
@@ -1460,6 +1573,18 @@ class _CodeWalk:
             yield f"base:{i}", base
         for name, func in _class_members(klass):
             yield from self.function_references(func, prefix=f"{name}.")
+        try:
+            annotations = inspect.get_annotations(klass)
+        except Exception:  # an annotation that cannot be evaluated is in the source
+            annotations = {}
+        for name, annotation in sorted(annotations.items()):
+            try:
+                yield f"annotation:{name}", type_digest(annotation, self.cache)
+            except TypeError as e:
+                add_exc_note(
+                    e, f"in the annotation of {name!r} of class {klass.__qualname__!r}"
+                )
+                raise
 
     def reference(self, name: str, value: ty.Any, reader: ty.Any) -> bytes:
         try:
@@ -1844,6 +1969,53 @@ def code_digest(obj: ty.Any, code_hash: str | None = None) -> str | None:
     for _ in _bytes_repr_code(obj, cache, defaults=False):
         pass
     return cache.digests.get(id(obj))
+
+
+def is_user_class(klass: type) -> bool:
+    """Whether `klass` is user code, which is identified by its code (see
+    `class_digest`): neither standard library nor library code (see `is_library`)"""
+    return not in_stdlib(klass) and not is_library(klass)
+
+
+def _class_digest(klass: type, cache: Cache) -> str:
+    """`class_digest` with the memo of `cache`"""
+    done = cache.classes.get(klass)
+    if done is not None:
+        return done
+    if klass in cache._classes_open:
+        # a method of the class reads an instance of it: the class is being walked
+        return f"class@1:recursive:{_qualified_name(klass)}"
+    cache._classes_open.add(klass)
+    try:
+        h = sha256()
+        for chunk in _CodeWalk(klass, cache, defaults=True):
+            h.update(chunk)
+        for name, value in _attribute_values(klass):
+            h.update(b"attr:" + name.encode() + b"=")
+            h.update(hash_single(value, cache))
+    finally:
+        cache._classes_open.discard(klass)
+    digest = cache.classes[klass] = f"class@1:{h.hexdigest()}"
+    return digest
+
+
+def class_digest(klass: type, code_hash: str | None = None) -> str:
+    """``class@1:<sha256>``, the digest of a user class (RFC 0004 section 4.2): its
+    code, which is the ``ast@1`` encoding of its whole definition, every method
+    included (see `_class_code`), followed by the references the walk yields for it:
+    its bases, walked as classes in turn, and the closures, globals and defaults of its
+    methods, walked as functions, so a base class's method or a module-level helper a
+    method calls is in it, and the values of its plain attributes whose assignment is
+    not a literal (`_computed_attributes`). `code_hash` is the tier of the walk
+    (`code_hash_default` when None)."""
+    return _class_digest(klass, Cache(code_hash=code_hash))
+
+
+def type_digest(tp: ty.Any, cache: Cache | None = None) -> str:
+    """``type@1:<sha256>``, the digest of a type (RFC 0004 section 5.1). It is the same
+    on every Python minor pydra supports: a union is the sorted, de-duplicated digests
+    of its flattened members, whatever its spelling, and ``Literal`` is order-free."""
+    return "type@1:" + _type_token(tp, cache or Cache()).decode()
 
 
 def library_modules(func: types.FunctionType) -> frozenset[str]:
