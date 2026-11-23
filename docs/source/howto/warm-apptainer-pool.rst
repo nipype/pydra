@@ -106,10 +106,11 @@ What a worker does with a warm environment
   next warm start there, never one of another user or another process that is still alive.
 * A failed start is a load fault and fails no job: the ticket goes back on the queue uncharged,
   and the next claim of it starts the instance again. Repeated failures
-  (``FaultBudgets.infrastructure_replacements`` in one coordinator epoch) hold the ticket's
-  residency, as for a model that does not load. The environment is not yet part of a ticket's
-  residency, so that hold covers every ticket of the class without resident state, until
-  ``pydracli pool release-hold`` lifts it.
+  (``FaultBudgets.infrastructure_replacements`` in one coordinator epoch) hold that environment,
+  under a label naming the environment and its resolved reference: tickets with a job of it are
+  reported held, and every other ticket of the class keeps running. The held jobs' outcomes and
+  ``pydracli pool status`` name the label; ``pydracli pool release-hold <root> --queue <queue>
+  --residency <label>`` lifts the hold, and a ``retry`` of the held jobs runs them again.
 * The start runs before the job's call, so no call deadline bounds it: a slow image pull or SIF
   build holds the ticket until it ends or the worker's own time limit stops it.
 
