@@ -45,19 +45,21 @@ uv run --no-sync pytest pydra/environments/tests/test_env_resolution_hpc.py \
 gate new.log 3
 
 # test_singularity_1 and test_singularity_st_1 need --fakeroot; a node whose user has
-# no subuid mapping cannot give it, so probe a SIF the tests above cached
-sif=$(find "$PYDRA_IMAGE_CACHE" -name '*.sif' -type f 2>/dev/null | head -1)
+# no subuid mapping cannot give it, so probe a SIF the tests above cached, else
+# docker://alpine, which the apptainer cache holds from the tests above
+sif=$( (find "$PYDRA_IMAGE_CACHE" -name '*.sif' -type f 2>/dev/null || true) | head -1)
+probe=${sif:-docker://alpine}
 deselect=()
 expected=43
-if [ -n "$sif" ] && singularity exec --fakeroot "$sif" true >/dev/null 2>&1; then
-    echo "O3 mode: fakeroot (all $expected regression cases)"
+if singularity exec --fakeroot "$probe" true >/dev/null 2>&1; then
+    echo "O3 mode: fakeroot, probed $probe (all $expected regression cases)"
 else
     deselect=(
         --deselect pydra/environments/tests/test_environments.py::test_singularity_1
         --deselect pydra/environments/tests/test_singularity.py::test_singularity_st_1
     )
     expected=38
-    echo "O3 mode: no fakeroot (${sif:-no cached SIF}); the two fakeroot tests deselected," \
+    echo "O3 mode: no fakeroot, probed $probe; the two fakeroot tests deselected," \
         "$expected regression cases"
 fi
 
