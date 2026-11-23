@@ -1,3 +1,4 @@
+import re
 import typing as ty
 import types
 from pathlib import Path
@@ -78,6 +79,8 @@ def build_task_class(
 
     if name is None and klass is not None:
         name = klass.__name__
+    if name is not None:
+        name = class_name(name)
     if reserved_names := [n for n in inputs if n in spec_type.RESERVED_FIELD_NAMES]:
         raise ValueError(
             f"{reserved_names} are reserved and cannot be used for {spec_type} field names"
@@ -150,6 +153,13 @@ def build_task_class(
     )
 
     return attrs_klass
+
+
+def class_name(name: str) -> str:
+    """``name`` as a Python identifier, which attrs needs for the classes it makes: what
+    an identifier cannot hold is dropped (``<lambda>`` becomes ``lambda``)."""
+    ident = re.sub(r"\W", "", name)
+    return ident if ident.isidentifier() else f"_{ident}"
 
 
 def build_outputs_class(

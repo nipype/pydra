@@ -31,6 +31,15 @@ def test_interface_wrap_function(tmp_path):
         SampleDef(a=1.5)
 
 
+def test_interface_wrap_lambda(tmp_path):
+    LambdaDef = python.define(lambda a: a * 2, inputs={"a": int}, outputs={"out": int})
+
+    assert LambdaDef.__name__.isidentifier()
+    assert LambdaDef.Outputs.__name__.isidentifier()
+    outputs = LambdaDef(a=2)(cache_root=tmp_path)
+    assert outputs.out == 4
+
+
 def test_function_arg_fail():
 
     with pytest.raises(ValueError, match="The argument 'function' is reserved"):
