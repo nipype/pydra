@@ -150,6 +150,8 @@ See the full reference documentation for Pydra
 
    howto/create-task-package
    howto/port-from-nipype
+   howto/gpu-model-on-slurm
+   howto/process-owning-provider
 
 .. toctree::
    :maxdepth: 2
@@ -171,6 +173,7 @@ See the full reference documentation for Pydra
    :hidden:
 
    reference/api
+   reference/worker-protocol
    reference/identity-v2
    genindex
    modindex
