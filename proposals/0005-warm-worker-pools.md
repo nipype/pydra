@@ -1362,6 +1362,21 @@ for writing a process-owning provider, and the worker protocol as a reference pa
 
 ## 13. Changes in revisions
 
+### Amendment to revision 4 (implementation of W10)
+
+| Item | Change |
+|---|---|
+| Identity | §4.4, §8: `batched` and `units` are class attributes of the task (`PythonTask._batched`, `_units`), never fields, so neither enters the checksum: a task declared with them has the checksum of the same function declared without (`test_batched_and_units_do_not_change_the_checksum`). The batch size and the job's place in it are recorded in the pool facts (`batch: {"size", "index"}`) and the sample (`batch_size`), never keyed. |
+| `units` | §3.3, §4.4: `units` is called with the job's inputs its signature names (all of them when it takes `**kwargs`) and returns a number or None. It is computed in the submitting process (`fit_request`, `placement.job_units`), carried as `TicketJob.units` and as `FitRequest.units` to `Fit.batch`. A `units` that raises fails its job at submission, as any placement error does. |
+| Where the batch comes from | §3.3, §4.4: a ticket's `batch` is the least `Placement.batch` of its jobs, written only for a task declared `batched`. `DeclaredFit.batch` is 1 and `MeasuredFit.batch` is 1 until a per-unit memory is measured, so with no calibration nothing is batched; a client that knows its batch passes its own `Fit`. A ticket of batch 1 runs the function, one job per call. |
+| Grouping | §4.4: calls are made within one ticket only; one-job tickets gathered by a warm worker are not batched together. A call holds jobs of one task class and one residency digest, ordered by units (unknown last). The quantum counts a ticket's jobs as before; `max_jobs` and the warm-session cap concern shell jobs, which are never batched. |
+| How a batched call runs | §4.3 step 4, §4.4: on the call thread the task's `batched` runs once, on the jobs' declared input values (not `Job.inputs`, which fixes each job's work directory) with each provided field bound once; then each job's `Job.run` runs with its element (`Job.batched_element`) in place of the function, so each job's lookup, work directory, audit, pool facts, proof before publish and commit are those of a lone job. A `LeaseLost` from one job ends the call: no later job publishes. |
+| Whole-call raises | §4.4, §6: a raise of the whole call typed `content`, and a return of the wrong length, become every job's element, so each job fails with its own errored result (the RFC's "fails the jobs of that call"). A crash or a resource fault goes to the engine with its record attached (so the OOM baseline is read once) and is bisected; any other kind fails each job with that fault through the engine (an infrastructure fault requeues them). |
+| Deadline and record | §5.3: the call record lists every job of the call; the deadline is the sum of the jobs' `time`, `call_timeout` for one that declares none, and there is no deadline when a job has neither. An expired batched call is typed per job by the taker (W7's path: a store lookup, then a ladder move for each), not bisected on the ladder. |
+| Takeover split | §5.5 "a multi-job ticket split into halves": a taker splits the open jobs of the lost holder's in-flight call apart from the ticket's other open jobs, in halves, and the rest as a third ticket; with no in-flight call it splits in halves as before. An item that kills its worker is therefore alone after at most ⌈log₂ b⌉+1 calls that hold it, `b` its call's size, whatever the ticket's size (`test_crashing_item_isolated_in_log2_calls`, `test_a_lost_batched_call_is_split_apart_from_the_rest`). |
+| Samples | §4.3 "What a worker records": one sample per job, each with the call's wall, `batch_size` the call's jobs and `units` the call's padded units (the longest job's times the call's size), so `per_job_s = wall_s / batch_size` as `TimeRecord` already reads it. |
+| Benchmark | §11 W10: `benchmarks/bench_pool_batched.py` reports per-item wall at batch 1 against N on a fake model with a fixed per-call cost; it is a fake-model figure, not a device one. |
+
 ### Amendment to revision 4 (implementation of W5b)
 
 | Item | Change |
