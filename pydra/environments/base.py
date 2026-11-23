@@ -20,7 +20,9 @@ if ty.TYPE_CHECKING:
 
 
 class ImageResolutionError(RuntimeError):
-    """An image reference could not be resolved and ``resolve_images="require"``"""
+    """An environment reference (a container image, Lmod modules) could not be resolved
+    and ``resolve_images="require"``, or a worker cannot run the reference it was given
+    """
 
 
 @attrs.frozen
@@ -30,18 +32,24 @@ class ResolvedRef:
     Attributes
     ----------
     key : str
-        What identity records: ``docker@1:sha256:<digest>``, ``docker-local@1:<Id>``, or
-        for a reference that could not be resolved ``unresolved:<kind>:<image>:<tag>``
-        (never in the form of a resolved key)
+        What identity records: ``docker@1:sha256:<digest>``, ``docker-local@1:<Id>``,
+        ``sif@1:sha256:<hex>``, ``lmod@1:<full module names>``, or for a reference that
+        could not be resolved ``unresolved:<kind>:<reference>`` (never in the form of a
+        resolved key)
     run : str
         The reference the worker executes
     carried : dict
         What travels with the job but is not keyed, e.g. the repository to pull from
+    recorded : dict
+        Facts about what was resolved that the context records but neither keys nor
+        compares (RFC 0004 section 3.2): a local image id, the per-platform manifest
+        digest, the Lmod tree, ``MODULEPATH``, dependency modules
     """
 
     key: str
     run: str
     carried: dict = attrs.field(factory=dict, eq=False)
+    recorded: dict = attrs.field(factory=dict, eq=False)
 
     @property
     def unresolved(self) -> bool:
@@ -56,6 +64,10 @@ class Environment:
     are available and are not removed at the end
     TODO: add setup and teardown methods
     """
+
+    resolves: ty.ClassVar[bool] = False
+    """Whether a shell job resolves the environment's reference once, carries it and
+    runs it (`resolve`), rather than keying the environment's checksum"""
 
     def setup(self):
         pass
@@ -164,8 +176,8 @@ class Container(Environment):
     xargs : Union[str, List[str]]
         Extra arguments to be passed to the container
     identity : str, optional
-        User-supplied identity of the image (e.g. its digest), used by ``checksum()``
-        instead of contacting a registry or hashing the image
+        User-supplied identity of the image (e.g. its digest), keyed as written instead
+        of contacting a registry or hashing the image
     """
 
     image: str
@@ -173,25 +185,15 @@ class Container(Environment):
     root: str = "/mnt/pydra"
     xargs: list[str] = attrs.field(factory=list, converter=split_if_str)
     identity: str | None = None
-    _digests: dict[int, str] = attrs.field(
-        factory=dict, init=False, repr=False, eq=False
-    )
+
+    resolves: ty.ClassVar[bool] = True
 
     def _identity(self) -> ty.Any:
+        # what was declared: resolving reaches a container runtime, the network or the
+        # image file, and the job keys the resolved reference (`resolve`) instead
         if self.identity is not None:
             return {"identity": self.identity}
-        # Resolved at most once per process, and never cached while unresolved
-        pid = os.getpid()
-        if pid not in self._digests:
-            digest = self._resolve_digest()
-            if digest is None:
-                return {"digest": None, "image": self.image, "tag": self.tag}
-            self._digests[pid] = digest
-        return {"digest": self._digests[pid], "image": self.image, "tag": self.tag}
-
-    def _resolve_digest(self) -> str | None:
-        """Digest of the image if it can be resolved cheaply, otherwise ``None``."""
-        return None
+        return {"image": self.image, "tag": self.tag}
 
     def bind(self, loc, mode="ro"):
         loc_abs = Path(loc).absolute()

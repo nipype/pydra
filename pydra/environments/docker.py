@@ -12,13 +12,6 @@ if ty.TYPE_CHECKING:
 class Docker(base.Container):
     """Docker environment."""
 
-    def _identity(self) -> ty.Any:
-        # what was declared: resolving reaches Docker and the network, and the job
-        # keys the resolved reference (`resolve`) instead
-        if self.identity is not None:
-            return {"identity": self.identity}
-        return {"image": self.image, "tag": self.tag}
-
     def _ref_key(self) -> ty.Hashable:
         repository, digest = images.split_reference(self.image)
         return ("docker", images.normal(repository), digest, self.tag, self.identity)
@@ -51,16 +44,25 @@ class Docker(base.Container):
                 for d in repo_digests
                 if images.normal(d.partition("@")[0]) == images.normal(repository)
             ]
+            recorded = {"image_id": image_id}
             if len(mine) == 1:
                 found = mine[0].partition("@")[2]
                 return base.ResolvedRef(
-                    f"docker@1:{found}", f"{repository}@{found}", carried
+                    f"docker@1:{found}", f"{repository}@{found}", carried, recorded
                 )
-            return base.ResolvedRef(f"docker-local@1:{image_id}", image_id, carried)
-        found = images.registry_digest(repository, self.tag)
-        if found is None:
+            return base.ResolvedRef(
+                f"docker-local@1:{image_id}", image_id, carried, recorded
+            )
+        answer = images.registry_manifest(repository, self.tag)
+        if answer is None:
             return base.ResolvedRef(f"unresolved:docker:{tagged}", tagged, carried)
-        return base.ResolvedRef(f"docker@1:{found}", f"{repository}@{found}", carried)
+        found, platform_digest = answer
+        recorded = (
+            {} if platform_digest is None else {"platform_digest": platform_digest}
+        )
+        return base.ResolvedRef(
+            f"docker@1:{found}", f"{repository}@{found}", carried, recorded
+        )
 
     def _inspect(self, tagged: str) -> tuple[str, list[str]] | None:
         """``(Id, RepoDigests)`` of the image in the local store, ``None`` if Docker or

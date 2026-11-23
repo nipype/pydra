@@ -456,6 +456,14 @@ REPOSITORY_FIELD = "environment_repository"
 """The context field naming the repository an image came from. It is not compared
 between contexts and not part of a slot's name."""
 
+FACTS_FIELD = "environment_facts"
+"""The context field holding what an environment's resolution found besides its key
+(`ResolvedRef.recorded`): a local image id, the per-platform manifest digest, the Lmod
+tree, ``MODULEPATH`` and dependency modules. Recorded like `REPOSITORY_FIELD`."""
+
+RECORDED_FIELDS = frozenset({REPOSITORY_FIELD, FACTS_FIELD})
+"""The context fields that are recorded only: not compared, not part of a slot's name"""
+
 
 def job_context(
     task: "Task", environment: "Environment", resolved: "ResolvedRef | None" = None
@@ -469,6 +477,8 @@ def job_context(
       checksum when none is given;
     * ``environment_repository``: where a container image is pulled from, when its
       reference carries one; recorded only (`REPOSITORY_FIELD`), so mirrors share slots;
+    * ``environment_facts``: what the resolution found besides its key, when it found
+      anything (`FACTS_FIELD`); recorded only;
     * ``packages``: the identities of the distributions that installed the library
       modules the task reaches (see `reached_modules`), and of those they require,
       None if the modules cannot be determined;
@@ -494,6 +504,8 @@ def job_context(
     }
     if resolved is not None and "repository" in resolved.carried:
         context[REPOSITORY_FIELD] = resolved.carried["repository"]
+    if resolved is not None and resolved.recorded:
+        context[FACTS_FIELD] = dict(resolved.recorded)
     if task._declared_code:
         context["code"] = dict(task._declared_code)
     if packages is None or None in packages.values():

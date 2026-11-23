@@ -217,9 +217,10 @@ class Submitter:
         ``pre_run_task``/``post_run_task`` hooks see the caller's directory, and audit
         messages without an explicit ``message_dir`` go to ``<cache_dir>/messages``
     resolve_images : str, optional
-        What to do with a container image that cannot be resolved to a digest or a
-        local image id: "best-effort" (default) runs the tag and the result is used by
-        this process only, "require" raises ``ImageResolutionError``
+        What to do with a container image that cannot be resolved to a digest, a local
+        image id or a ``.sif`` content digest, or Lmod modules that cannot be resolved to
+        full names: "best-effort" (default) runs the reference as written and the result
+        is used by this process only, "require" raises ``ImageResolutionError``
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
