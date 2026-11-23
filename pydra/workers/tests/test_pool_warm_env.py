@@ -776,8 +776,9 @@ def test_coordinator_follows_the_outcomes_hold_label(
 ):
     """A `WarmPool` whose worker holds a broken image: the coordinator reads the held outcome's
     ``hold`` label, so a later job of that image is reported held at submission while a plain job and
-    a job of another image are put and run. After ``release-hold`` the coordinator forgets the hold
-    at its next poll, and the image's next job runs."""
+    a job of another image are put and run. After ``release-hold`` the running coordinator keeps the
+    hold for its epoch (the image's next job is reported held, visibly); a new coordinator, a new
+    epoch, runs it."""
     from pydra.environments import native
     from pydra.engine.runner import NotRun
     from pydra.workers.pool.pool import WarmPool, release_hold
@@ -799,15 +800,20 @@ def test_coordinator_follows_the_outcomes_hold_label(
 
     monkeypatch.setattr(fake, "_start", flaky)
     store = _store(tmp_path)
-    pool = WarmPool(
-        tmp_path / "pool",
-        [_class()],
-        ExternalSubstrate(),
-        store=store,
-        settings=_settings(),
-    )
     reported: dict[str, ty.Any] = {}
-    pool.bind(lambda job, outcome: reported.__setitem__(job.name, outcome))
+
+    def coordinator():
+        made = WarmPool(
+            tmp_path / "pool",
+            [_class()],
+            ExternalSubstrate(),
+            store=store,
+            settings=_settings(),
+        )
+        made.bind(lambda job, outcome: reported.__setitem__(job.name, outcome))
+        return made
+
+    pool = coordinator()
     sub = Submitter(store=store, worker="debug", telemetry=False)
     n = [0]
 
@@ -855,14 +861,16 @@ def test_coordinator_follows_the_outcomes_hold_label(
 
         starts_fail[0] = False
         assert release_hold(pool.pool.path, "cpu", _env_label(first[0])) == 1
-        deadline = time.monotonic() + 30
-        while pool._held:  # forgotten at the coordinator's next poll
-            assert time.monotonic() < deadline, "the coordinator kept a lifted hold"
-            time.sleep(0.05)
         (again,) = jobs("broken")
         pool.submit([again])
-        work_until([again.name])
-        assert not held(again.name)
+        assert held(again.name)  # the running coordinator keeps the hold for its epoch
+
+        pool.close()
+        pool = coordinator()  # a new epoch
+        (fresh,) = jobs("broken")
+        pool.submit([fresh])
+        work_until([fresh.name])
+        assert not held(fresh.name)
     finally:
         pool.close()
         sub.close()
