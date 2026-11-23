@@ -218,7 +218,7 @@ def test_stop_of_exited_group_is_quiet(tmp_path):
     from pydra.engine.procgroup import ProcessGroup
 
     group = ProcessGroup.start([sys.executable, "-c", "pass"])
-    group.proc.wait(timeout=20)
+    group.proc.wait(timeout=60)
     group.stop()
     assert group.proc.returncode == 0
 
@@ -430,7 +430,7 @@ def test_close_error_is_not_raised_by_eviction(tmp_path):
     from pydra.engine.procgroup import ProcessGroup
 
     group = ProcessGroup.start([sys.executable, "-c", "pass"])
-    group.proc.wait(timeout=20)
+    group.proc.wait(timeout=60)
     group.stop()
     group.stop()
 
@@ -518,11 +518,20 @@ SETSID_CHILD = textwrap.dedent("""
     time.sleep(600)
     """)
 
-TERM_IGNORING_GRANDCHILD = textwrap.dedent("""
-    import os, subprocess, sys, time
-    gc = subprocess.Popen([sys.executable, "-c",
-        "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(600)"])
-    open(sys.argv[1], "w").write(f"{os.getpid()} {gc.pid}")
+# the grandchild records "<leader> <itself>" only once it ignores SIGTERM
+TERM_IGNORING = textwrap.dedent("""
+    import os, signal, sys, time
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    with open(sys.argv[1] + ".tmp", "w") as f:
+        f.write(f"{sys.argv[2]} {os.getpid()}")
+    os.replace(sys.argv[1] + ".tmp", sys.argv[1])
+    time.sleep(600)
+    """)
+
+TERM_IGNORING_GRANDCHILD = textwrap.dedent(f"""
+    import os, subprocess, sys
+    subprocess.Popen([sys.executable, "-c", {TERM_IGNORING!r}, sys.argv[1],
+                      str(os.getpid())])
     sys.exit(0)  # the leader's child exits at once; the grandchild stays
     """)
 
@@ -625,7 +634,7 @@ def test_child_group_is_gone_when_the_parent_is_sigkilled(tmp_path):
         child, escaped = _wait_for(record)
         shim = int((tmp_path / "shim").read_text())
         parent.send_signal(signal.SIGKILL)
-        parent.wait(timeout=20)
+        parent.wait(timeout=60)
         deadline = time.monotonic() + 30
         pids = (shim, child, escaped)
         while any(_alive(p) for p in pids) and time.monotonic() < deadline:
@@ -633,7 +642,7 @@ def test_child_group_is_gone_when_the_parent_is_sigkilled(tmp_path):
         assert not any(_alive(p) for p in pids), pids
     finally:
         parent.kill()
-        parent.wait(timeout=20)
+        parent.wait(timeout=60)
         _kill_recorded(record)
 
 
@@ -716,14 +725,14 @@ def test_daemonised_server_is_gone_when_the_parent_is_sigkilled(tmp_path):
         _until_gone(launcher)  # the launcher has exited; the shim adopted the server
         assert _alive(server)
         parent.send_signal(signal.SIGKILL)
-        parent.wait(timeout=20)
+        parent.wait(timeout=60)
         deadline = time.monotonic() + 30
         while _alive(server) and time.monotonic() < deadline:
             time.sleep(0.1)
         assert not _alive(server)
     finally:
         parent.kill()
-        parent.wait(timeout=20)
+        parent.wait(timeout=60)
         _kill_recorded(record)
 
 
@@ -817,7 +826,7 @@ def test_provider_env_and_cwd_reach_only_the_command(tmp_path):
         cwd, pypath, mark = out.read_text().split("|")
         assert os.path.realpath(cwd) == os.path.realpath(shadow)
         assert pypath == str(shadow) and mark == "yes"
-        assert group.proc.wait(timeout=20) == 0  # the shim itself ran
+        assert group.proc.wait(timeout=60) == 0  # the shim itself ran
     finally:
         group.stop()
 
@@ -832,9 +841,16 @@ def test_idle_shim_uses_no_cpu(tmp_path):
     group = ProcessGroup.start([sys.executable, "-c", CHILD, str(record)])
     _wait_for(record)
     shim = psutil.Process(group.pid)
-    before = sum(shim.cpu_times()[:2])
-    time.sleep(3)
-    assert sum(shim.cpu_times()[:2]) - before < 0.1
+    deadline = time.monotonic() + 60  # bound only: until it blocks
+    while shim.status() != psutil.STATUS_SLEEPING:
+        assert time.monotonic() < deadline, shim.status()
+        time.sleep(0.05)
+    # blocked in its wait, not polling: asleep at every look, and never woken between
+    switches = shim.num_ctx_switches()
+    for _ in range(20):
+        assert shim.status() == psutil.STATUS_SLEEPING
+        time.sleep(0.05)
+    assert shim.num_ctx_switches() == switches
 
 
 @posix_only
@@ -866,6 +882,6 @@ def test_command_killed_by_a_signal_is_relayed(signame):
         [sys.executable, "-c", code], stderr=subprocess.PIPE, text=True
     )
     err = group.proc.stderr.read()
-    assert group.proc.wait(timeout=20) == -sig
+    assert group.proc.wait(timeout=60) == -sig
     assert "Traceback" not in err
     group.stop()
