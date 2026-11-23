@@ -2195,6 +2195,7 @@ def test_by_value_function_hashed_first_keeps_its_hash_in_another_process(
 
 
 _CLASS_BY_VALUE_SOURCE = """\
+import dataclasses
 import functools
 
 import attrs
@@ -2236,6 +2237,25 @@ class Slotted:
 
     def m(self):
         return self.a + HELP
+
+
+@dataclasses.dataclass
+class Params:
+    a: int = 1
+
+    def m(self):
+        return self.a + HELP
+
+
+@dataclasses.dataclass
+class Fields:
+    a: int = 1
+    b: str = "x"
+
+
+@attrs.define
+class AttrsFields:
+    b: str = "x"
 
 
 def make_obj(n):
@@ -2393,15 +2413,21 @@ def test_by_value_class_keeps_its_digest_when_its_members_are_replaced(
 def test_by_value_class_hashed_first_keeps_its_digest_in_another_process(
     tmp_path, monkeypatch
 ):
-    """A class hashed before it is pickled by value, a local class, a function and a
-    task that read it keep their digests where the module cannot be imported: the
-    class's encoding travels with it"""
+    """A class hashed before it is pickled by value, a local class, dataclass and
+    attrs classes, a function and a task that read it keep their digests where the
+    module cannot be imported: the class's encoding travels with it"""
     module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
-    cfg = module.make_cfg(True)
-    objects = [module.Obj, cfg, module.make_obj, module.MakeObj(n=3)]
+    classes = [
+        module.Obj,
+        module.make_cfg(True),
+        module.Slotted,
+        module.Params,
+        module.Fields,
+        module.AttrsFields,
+    ]
+    objects = [*classes, module.make_obj, module.MakeObj(n=3)]
     expected = [
-        hash_module.class_digest(module.Obj),
-        hash_module.class_digest(cfg),
+        *(hash_module.class_digest(k) for k in classes),
         hash_function(module.make_obj),
         module.MakeObj(n=3)._checksum,
     ]

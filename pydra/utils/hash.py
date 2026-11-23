@@ -1640,6 +1640,12 @@ def _in_body_of(func: types.FunctionType, qualname: str) -> bool:
     return func.__code__.co_qualname.rpartition(".")[0] == qualname
 
 
+def _in_class_body(func: types.FunctionType, qualname: str) -> bool:
+    """Whether `func`, or a function it wraps (`functools.wraps`), was compiled in the
+    body of a class with the qualified name `qualname`"""
+    return any(_in_body_of(f, qualname) for f in (func, *_wrapped_chain(func)))
+
+
 def _class_qualname(klass: type) -> str:
     """The qualified name of `klass`, or, for a local class unpickled by value, whose
     qualified name cloudpickle reduces to its name, the qualified name its functions
@@ -1719,9 +1725,10 @@ def _class_members(klass: type) -> list[tuple[str, types.FunctionType]]:
     They are the functions compiled from the class's source file (see
     `_class_source_file`) and, of the functions unpickled by value
     (``"<dynamic-code>"``), those whose code is the code compiled from that file at
-    their qualified name and first line, or, if the class has no source file, those
-    compiled in a class body of the class's qualified name or wrapping
-    (`functools.wraps`) one that was."""
+    their qualified name and first line. If the class has no source file, they are
+    the functions compiled from a file or a notebook cell, or unpickled by value, in a
+    class body of the class's qualified name, or wrapping (`functools.wraps`) one that
+    was."""
     source_file = _class_source_file(klass)
     qualname = _class_qualname(klass)
     lines = None
@@ -1734,13 +1741,11 @@ def _class_members(klass: type) -> list[tuple[str, types.FunctionType]]:
                     lines = _source_lines(klass, source_file)
                 member = _compiled_from(func, source_file, lines)
             else:
-                member = any(
-                    _in_body_of(f, qualname) for f in (func, *_wrapped_chain(func))
-                )
+                member = _in_class_body(func, qualname)
         elif source_file:
             member = filename == source_file
         else:
-            member = _cell_or_file(filename)
+            member = _cell_or_file(filename) and _in_class_body(func, qualname)
         if member:
             members.append((name, func))
     return members
