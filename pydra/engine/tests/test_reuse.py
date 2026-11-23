@@ -117,6 +117,7 @@ def test_context_recorded(tmp_path):
         "environment": Tagged(tag="a").checksum(),
         "packages": packages,
         "installed": _installed_digest(frozenset(packages)),
+        "tools": [],
     }
     assert ("unknown" in job.context) == (None in packages.values())
     assert job.context["python"] == platform.python_version()

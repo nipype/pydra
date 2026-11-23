@@ -12,7 +12,10 @@ import logging
 import os
 import platform
 import re
+import shutil
+import subprocess
 import sys
+import time
 import types
 import typing as ty
 import uuid
@@ -39,7 +42,7 @@ if ty.TYPE_CHECKING:
 
 logger = logging.getLogger("pydra")
 
-RECORD = 3
+RECORD = 4
 """The version of the record's layout, stored under ``"record"``. Records of other
 versions are never reused under ``"consistent"`` or ``"exact"``."""
 
@@ -465,6 +468,149 @@ RECORDED_FIELDS = frozenset({REPOSITORY_FIELD, FACTS_FIELD})
 """The context fields that are recorded only: not compared, not part of a slot's name"""
 
 
+OWNER_TIMEOUT = 2.0
+"""Seconds each package-manager query for a tool's owner may take: a local database
+query answers well within it, so only a hung or networked one is cut (the owner is then
+unknown, never wrong)"""
+
+_StatKey = tuple[str, int, int, int, int]
+_SHA_MEMO: dict[_StatKey, str] = {}
+_OWNER_MEMO: dict[_StatKey, dict[str, str] | None] = {}
+_CONDA_PREFIX = re.compile(r"^(?P<prefix>.+?)[/\\](?:bin|Scripts|Library[/\\]bin)[/\\]")
+
+
+def _stat_key(path: str) -> _StatKey | None:
+    """What identifies the file at `path` as it stands: ctime and inode cannot be kept
+    by a rewrite in place or a rename, as mtime can"""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (path, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _tool_digest(path: str, key: _StatKey | None) -> str | None:
+    """The sha256 of the file at `path`, once per process for a file as it stands"""
+    if key is None:
+        return None
+    if key not in _SHA_MEMO:
+        try:
+            sha = hashlib.sha256()
+            with open(path, "rb") as f:
+                for block in iter(lambda: f.read(1 << 20), b""):
+                    sha.update(block)
+        except OSError:
+            return None
+        _SHA_MEMO[key] = sha.hexdigest()
+    return _SHA_MEMO[key]
+
+
+def _query(command: list[str]) -> str | None:
+    """The first line of the stdout of `command` if it succeeds within
+    `OWNER_TIMEOUT`, else None"""
+    if shutil.which(command[0]) is None:
+        return None
+    try:
+        completed = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            timeout=OWNER_TIMEOUT,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = completed.stdout.splitlines()
+    return lines[0] if completed.returncode == 0 and lines else None
+
+
+def _tool_owner(path: str, key: _StatKey | None) -> dict[str, str] | None:
+    """The owner of the file at `path`, looked up once per process for a file as it
+    stands, a failed or timed-out lookup (None) included (see `_lookup_owner`)"""
+    if key is None:
+        return None
+    if key not in _OWNER_MEMO:
+        _OWNER_MEMO[key] = _lookup_owner(path)
+    return _OWNER_MEMO[key]
+
+
+def _lookup_owner(path: str) -> dict[str, str] | None:
+    """The package that provides the file at `path`, read from the path (Homebrew
+    ``Cellar/<name>/<version>``), from a conda ``conda-meta`` record, or from ``dpkg -S``
+    / ``rpm -qf``; the conda scan and each query take at most `OWNER_TIMEOUT`;
+    None if it cannot be read"""
+    match = re.search(r"[/\\]Cellar[/\\]([^/\\]+)[/\\]([^/\\]+)[/\\]", path)
+    if match:
+        return {"manager": "homebrew", "name": match[1], "version": match[2]}
+    match = _CONDA_PREFIX.match(path)
+    if match:
+        meta = Path(match["prefix"]) / "conda-meta"
+        relative = Path(path).relative_to(match["prefix"]).as_posix()
+        try:
+            records = sorted(meta.glob("*.json"))
+        except OSError:
+            records = []
+        deadline = time.monotonic() + OWNER_TIMEOUT
+        for record in records:
+            if time.monotonic() >= deadline:
+                break
+            try:
+                data = json.loads(record.read_text())
+            except (OSError, ValueError):
+                continue
+            if relative in data.get("files", ()):
+                return {
+                    "manager": "conda",
+                    "name": data.get("name"),
+                    "version": data.get("version"),
+                }
+    line = _query(["dpkg", "-S", path])
+    if line and ": " in line:
+        return {"manager": "dpkg", "name": line.split(": ")[0].split(":")[0]}
+    line = _query(["rpm", "-qf", path])
+    if line and "not owned" not in line:
+        return {"manager": "rpm", "name": line}
+    return None
+
+
+def _tool_record(executable: str) -> dict[str, ty.Any]:
+    """What the submitting host resolves `executable` to, recorded and not keyed
+    (RFC 0004 section 5.2): ``found: false`` alone when it resolves to nothing, which is
+    the same on every lookup"""
+    found = shutil.which(executable)
+    if found is None:
+        return {"executable": executable, "found": False}
+    path = os.path.realpath(found)
+    key = _stat_key(path)
+    return {
+        "executable": executable,
+        "found": True,
+        "path": path,
+        "sha256": _tool_digest(path, key),
+        "owner": _tool_owner(path, key),
+    }
+
+
+def job_tools(task: "Task", environment: "Environment") -> list[dict[str, ty.Any]]:
+    """The ``tools`` of a job's context: a record (`_tool_record`) for the program of
+    a shell task's executable and for that of its ``version_command``, run natively;
+    empty for other tasks, and for a container or module environment, whose host does
+    not run the tool"""
+    from pydra.environments.native import Native
+
+    if task._task_type() != "shell" or not (
+        environment is None or isinstance(environment, Native)
+    ):
+        return []
+    executable = task.executable
+    names = [executable if isinstance(executable, str) else executable[0]]
+    command = task._version_command
+    if command:
+        names.append(command[0])
+    return [_tool_record(name) for name in sorted(set(names))]
+
+
 def job_context(
     task: "Task", environment: "Environment", resolved: "ResolvedRef | None" = None
 ) -> dict[str, ty.Any]:
@@ -488,6 +634,8 @@ def job_context(
       (the task's own, those of a workflow's nodes, those of tasks passed as inputs),
       the `code_digest` of each by ``module.qualname==version``, which the version
       stands for (see `pydra.engine.store.check_declared_code`);
+    * ``tools``: where the submitting host resolves the tools a native shell task runs,
+      with the file's digest and owning package (`job_tools`); recorded, not keyed;
     * ``unknown``: present when any of ``packages`` is unknown, or the job's tool version
       is unresolved (`pydra.engine.job.Job.context`), set to a value unique to this
       process, so the result is reused by no other process.
@@ -501,6 +649,7 @@ def job_context(
         "environment": environment.checksum() if resolved is None else resolved.key,
         "packages": packages,
         "installed": _installed_digest(frozenset(packages or ())),
+        "tools": job_tools(task, environment),
     }
     if resolved is not None and "repository" in resolved.carried:
         context[REPOSITORY_FIELD] = resolved.carried["repository"]
@@ -527,4 +676,6 @@ def clear_caches() -> None:
     ):
         cached.cache_clear()
     forget_owners()
+    _SHA_MEMO.clear()
+    _OWNER_MEMO.clear()
     _warned.clear()
