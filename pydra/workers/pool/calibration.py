@@ -371,9 +371,11 @@ def residency_key(residency: ty.Sequence[ty.Any]) -> str | None:
 
 def code_of(job: "Job", providers: ty.Sequence[ty.Any] = ()) -> Code | None:
     """The code a load of ``job``'s residency runs under: the ``version()`` of the provider of each
-    provided field (``providers`` first, as a pool's workers add them, then the job's own); None
+    provided field (``providers`` first, as a pool's workers add them, then the job's own), and for a
+    shell job whose environment is declared ``warm=True`` the resolved reference it carries; None
     when a provider cannot be found or its version read here."""
     from pydra.engine import resident
+    from pydra.compose.shell.task import Task as ShellTask
 
     try:
         fields = resident.provided_fields(job.task)
@@ -389,7 +391,20 @@ def code_of(job: "Job", providers: ty.Sequence[ty.Any] = ()) -> Code | None:
         except Exception as err:
             logger.debug("no version for provider %r: %s", name, err)
             return None
-    return Code(tuple(versions))
+    environment = None
+    if (
+        isinstance(job.task, ShellTask)
+        and job.environment.warm_requested
+        and job.resolves_reference
+    ):
+        try:
+            environment = job.resolved.key
+        except Exception as err:
+            logger.debug(
+                "no reference for the warm environment %r: %s", job.environment, err
+            )
+            return None
+    return Code(tuple(versions), environment)
 
 
 def _median(values: ty.Sequence[float]) -> float:
