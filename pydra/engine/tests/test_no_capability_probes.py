@@ -92,11 +92,6 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ("engine/store.py", "store", "reuse"): "in the base branch, unchanged here",
     (
         "engine/submitter.py",
-        "self.store",
-        "read_succeeded",
-    ): "in the base branch, unchanged here",
-    (
-        "engine/submitter.py",
         "store",
         "cache_root",
     ): "in the base branch, unchanged here",

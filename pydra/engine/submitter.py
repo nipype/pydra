@@ -2,29 +2,30 @@
 
 import asyncio
 import typing as ty
-import re
 import warnings
 import os
-import sys
 from pathlib import Path
-from traceback import format_exc
 from tempfile import mkdtemp
 from copy import deepcopy
 from datetime import datetime
 from collections import defaultdict
-import attrs
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from pydra.engine.graph import DiGraph
+from pydra.engine.graph import DiGraph  # noqa: F401
 from pydra.utils.general import (
     get_fields,
-    attrs_values,
     is_workflow,
 )
 from pydra.utils.hash import PersistentCache
-from pydra.engine.lazy import LazyField, LazyOutField
 from pydra.engine.audit import Audit
 from pydra.engine.job import Job
+from pydra.engine.runner import (  # noqa: F401
+    Failed,
+    GraphRunner,
+    JobErrorEntry,
+    NodeExecution,
+    OnError,
+)
 from pydra.engine.store import (
     PickleStore,
     ResultStore,
@@ -41,10 +42,8 @@ from pydra.compose.base import Task, Outputs
 logger = logging.getLogger("pydra.submitter")
 
 if ty.TYPE_CHECKING:
-    from pydra.engine.node import Node
     from pydra.engine.result import Result
     from pydra.engine.hooks import TaskHooks
-    from pydra.engine.workflow import Workflow
     from pydra.environments.base import Environment
 
 
@@ -53,37 +52,6 @@ OutputType = ty.TypeVar("OutputType", bound="Outputs")
 
 
 WORKER_KWARG_FAIL_NOTE = "Attempting to instantiate worker submitter"
-
-OnError = ty.Literal["raise_at_end", "fail_fast"]
-
-
-@attrs.frozen
-class JobErrorEntry:
-    """The error of one job of a workflow, as plain picklable values
-
-    Attributes
-    ----------
-    job_name : str
-        The name of the job
-    state_index : int | None
-        The index of the job's element within its split, None if it has none
-    exception_type : str
-        The qualified name of the exception's class, ``module.Class``
-    message : str
-        ``str()`` of the exception
-    traceback : str
-        The formatted traceback
-    phase : str
-        ``"run"`` if the job ran and errored, ``"resolution"`` if its inputs could
-        not be resolved from its upstream results, so it never ran
-    """
-
-    job_name: str
-    state_index: int | None
-    exception_type: str
-    message: str
-    traceback: str
-    phase: str = "run"
 
 
 class WorkflowError(RuntimeError):
@@ -545,6 +513,31 @@ class Submitter:
         for worker in self.workers.values():
             worker.loop = self.loop
 
+    def _limit(self, in_flight: int = 0) -> int | None:
+        """The most jobs to hand out in one round given those already running, None if
+        unlimited"""
+        if self.max_concurrent == float("inf"):
+            return None
+        return max(0, int(self.max_concurrent) - in_flight)
+
+    def _runner(
+        self, wf_job: "Job[workflow.Task]", rerun: bool, is_async: bool
+    ) -> GraphRunner:
+        runner = GraphRunner(
+            wf_job.task,
+            self.store,
+            on_error=self._loop_on_error(is_async=is_async),
+            rerun=rerun,
+            propagate_rerun=self.propagate_rerun,
+            submitter=self,
+            job=wf_job,
+        )
+        wf_job.return_values = {
+            "workflow": runner.workflow,
+            "exec_graph": runner.exec_graph,
+        }
+        return runner
+
     def expand_workflow(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
         """Expands and executes a workflow job synchronously. Typically only used during
         debugging and testing, as the asynchronous version is more efficient.
@@ -555,40 +548,31 @@ class Submitter:
             Workflow Job object
 
         """
-        # Construct the workflow
-        wf = wf_job.task.construct()
-        # Generate the execution graph
-        exec_graph = wf.execution_graph(submitter=self)
-        wf_job.return_values = {"workflow": wf, "exec_graph": exec_graph}
-        tasks = self.get_runnable_tasks(exec_graph)
-        on_error = self._loop_on_error(is_async=False)
-        entries: list[JobErrorEntry] = []
-        errors = self.pop_resolution_errors(exec_graph, entries)
-        while (tasks or any(not n.done for n in exec_graph.nodes)) and not (
-            errors and on_error == "fail_fast"
-        ):
-            if not (rerun and self.propagate_rerun):
-                tasks = self.read_succeeded(tasks)
-            for job in tasks:
+        runner = self._runner(wf_job, rerun, is_async=False)
+        fail_fast = runner.on_error == "fail_fast"
+        limit = self._limit()
+        dispatch = runner.ready(limit).dispatch
+        while (dispatch or not runner.done) and not (runner.errors and fail_fast):
+            for job in dispatch:
                 try:
                     if is_workflow(job.task):  # expanded here, not placed by the router
-                        job.run(rerun=rerun and self.propagate_rerun)
+                        outcome = job.run(rerun=job.rerun)
                     else:
-                        self.submit(job, rerun=rerun and self.propagate_rerun)
-                except Exception:
-                    if on_error == "fail_fast":
+                        outcome = self.submit(job, rerun=job.rerun)
+                except Exception as exc:
+                    if fail_fast:
                         raise
                     # The job may have failed before it could save a result
-                    job._errored = True
-                    record_job_error(job, errors, entries)
+                    runner.complete(job, Failed(exc))
+                else:
+                    runner.complete(job, outcome)
                 finally:
                     job._awaiting_run = False
-            tasks = self.get_runnable_tasks(exec_graph)
-            errors.extend(self.pop_resolution_errors(exec_graph, entries))
-            if errors and on_error == "fail_fast":
+            dispatch = runner.ready(limit).dispatch
+            if runner.errors and fail_fast:
                 break
-        if errors:
-            raise workflow_error(wf_job, errors, entries)
+        if runner.errors:
+            raise workflow_error(wf_job, runner.errors, runner.entries)
 
     async def expand_workflow_async(
         self, workflow_task: "Job[workflow.Task]", rerun: bool
@@ -601,10 +585,8 @@ class Submitter:
         job : :obj:`~pydra.engine.job.Job[workflow.Task]`
             Workflow Job object
         """
-        wf = workflow_task.task.construct()
-        # Generate the execution graph
-        exec_graph = wf.execution_graph(submitter=self)
-        workflow_task.return_values = {"workflow": wf, "exec_graph": exec_graph}
+        runner = self._runner(workflow_task, rerun, is_async=True)
+        fail_fast = runner.on_error == "fail_fast"
         # keep track of pending futures
         task_futures = set()
         futured: dict[str, Job[TaskType]] = {}
@@ -614,92 +596,22 @@ class Submitter:
         finished: set[str] = set()
         # the checksums of the jobs whose runs raised
         failed: set[str] = set()
-        tasks = self.get_runnable_tasks(exec_graph)
-        on_error = self._loop_on_error(is_async=True)
-        entries: list[JobErrorEntry] = []
-        errors = self.pop_resolution_errors(exec_graph, entries)
+        tasks = runner.ready(self._limit()).dispatch
         try:
-            while tasks or task_futures or any(not n.done for n in exec_graph.nodes):
+            while tasks or task_futures or not runner.done:
                 if not tasks and not task_futures:
                     # it's possible that task_futures is empty, but not able to get any
-                    # tasks from graph_copy (using get_runnable_tasks)
+                    # tasks from the graph (using runner.ready)
                     # this might be related to some delays saving the files
-                    # so try to get_runnable_tasks for another minute
+                    # so try to get runnable tasks for another minute
                     ii = 0
-                    while not tasks and any(not n.done for n in exec_graph.nodes):
-                        tasks = self.get_runnable_tasks(exec_graph)
+                    while not tasks and not runner.done:
+                        tasks = runner.ready(self._limit(len(task_futures))).dispatch
                         ii += 1
                         # don't block the event loop!
                         await asyncio.sleep(1)
                         if ii > 10:
-                            not_done = "\n".join(
-                                (
-                                    f"{n.name}: started={bool(n.started)}, "
-                                    f"blocked={list(n.blocked)}, queued={list(n.queued)}"
-                                )
-                                for n in exec_graph.nodes
-                                if not n.done
-                            )
-                            msg = (
-                                "Something has gone wrong when retrieving the predecessor "
-                                f"results. Not able to get any more tasks but he following "
-                                f"nodes of the {wf.name!r} workflow are not done:"
-                                f"\n{not_done}\n\n"
-                            )
-                            not_done = [n for n in exec_graph.nodes if not n.done]
-                            msg += "\n" + ", ".join(
-                                f"{t.name}: {t.done}"
-                                for t in not_done[0].queued.values()
-                            )
-                            # Get blocked tasks and the predecessors they are blocked on
-                            outstanding: dict[Job[TaskType], list[Job[TaskType]]] = {
-                                t: [
-                                    p
-                                    for p in exec_graph.predecessors[t.name]
-                                    if not p.done
-                                ]
-                                for t in exec_graph.sorted_nodes
-                            }
-
-                            hashes_have_changed = False
-                            for job, blocked_on in outstanding.items():
-                                if not blocked_on:
-                                    continue
-                                msg += f"- '{job.name}' node blocked due to\n"
-                                for pred in blocked_on:
-                                    if (
-                                        pred.checksum
-                                        != wf.inputs._graph_checksums[pred.name]
-                                    ):
-                                        msg += (
-                                            f"    - hash changes in '{pred.name}' node "
-                                            f"inputs. Current values and hashes: "
-                                            f"{pred.inputs}, {pred.inputs._hashes}\n"
-                                        )
-                                        hashes_have_changed = True
-                                    elif pred not in outstanding:
-                                        msg += (
-                                            f"    - undiagnosed issues in '{pred.name}' "
-                                            "node, potentially related to file-system "
-                                            "access issues "
-                                        )
-                                msg += "\n"
-                            if hashes_have_changed:
-                                msg += (
-                                    "Set loglevel to 'debug' in order to track hash "
-                                    "changes throughout the execution of the workflow."
-                                    "\n\n These issues may have been caused by "
-                                    "`bytes_repr()` methods that don't return stable "
-                                    "hash values for specific object types across "
-                                    "multiple processes (see bytes_repr() "
-                                    '"singledispatch "function in pydra/utils/hash.py).'
-                                    "You may need to write specific `bytes_repr()` "
-                                    "implementations (see `pydra.utils.hash.register_serializer`) "
-                                    "or `__bytes_repr__()` dunder methods to handle one "
-                                    "or more types in your interface inputs."
-                                )
-                            raise RuntimeError(msg)
-                job_rerun = rerun and self.propagate_rerun
+                            raise RuntimeError(runner.stuck())
                 fresh = []
                 for job in tasks:
                     if job.checksum in finished:
@@ -711,19 +623,17 @@ class Submitter:
                             sharing[job.checksum].add(job)
                     else:
                         fresh.append(job)
-                if fresh and not job_rerun:
-                    fresh = self.read_succeeded(fresh)
                 for job in fresh:
                     if job.checksum in futured:  # an earlier job of this round
                         sharing[job.checksum].add(job)
                     else:
                         if is_workflow(job.task):
                             # expanded in this loop, not placed by the router
-                            coroutine = job.run_async(rerun=job_rerun)
+                            coroutine = job.run_async(rerun=job.rerun)
                         elif (worker := self.worker_for(job)).is_async:
-                            coroutine = worker.run(job, rerun=job_rerun)
+                            coroutine = worker.run(job, rerun=job.rerun)
                         else:  # a synchronous worker, run in this loop
-                            coroutine = self._run_blocking(worker, job, job_rerun)
+                            coroutine = self._run_blocking(worker, job, job.rerun)
                         asyncio_task = asyncio.Task(coroutine, name=job.checksum)
                         task_futures.add(asyncio_task)
                         futured[job.checksum] = job
@@ -734,19 +644,19 @@ class Submitter:
                     for ran in [job, *sharing.pop(job.checksum, ())]:
                         ran._awaiting_run = False
                     try:
-                        task_future.result()
-                    except Exception:
+                        outcome = task_future.result()
+                    except Exception as exc:
                         # The job may have failed before it could save a result (e.g. if
                         # the worker was unable to run it), in which case it would
                         # otherwise remain queued indefinitely
                         failed.add(job.checksum)
-                        job._errored = True
-                        record_job_error(job, errors, entries)
-                if errors and on_error == "fail_fast":
+                        runner.complete(job, Failed(exc))
+                    else:
+                        runner.complete(job, outcome)
+                if runner.errors and fail_fast:
                     break
-                tasks = self.get_runnable_tasks(exec_graph)
-                errors.extend(self.pop_resolution_errors(exec_graph, entries))
-                if errors and on_error == "fail_fast":
+                tasks = runner.ready(self._limit(len(task_futures))).dispatch
+                if runner.errors and fail_fast:
                     break
         finally:
             # Cancel any outstanding jobs if exiting early (e.g. due to an exception)
@@ -754,44 +664,41 @@ class Submitter:
             # shared with other code (e.g. in Jupyter notebooks)
             for task_future in task_futures:
                 task_future.cancel()
-            errors.extend(self.pop_resolution_errors(exec_graph, entries))
-            if errors:
-                raise workflow_error(workflow_task, errors, entries)
+            if runner.errors:
+                raise workflow_error(workflow_task, runner.errors, runner.entries)
+
+    def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
+        """Deprecated: the jobs of the released nodes of an execution graph. Use
+        :meth:`GraphRunner.ready`"""
+        warnings.warn(
+            "Submitter.get_runnable_tasks is deprecated, use GraphRunner.ready",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return GraphRunner._runnable_jobs(graph)
 
     def read_succeeded(self, jobs: list["Job[TaskType]"]) -> list["Job[TaskType]"]:
-        """Read, without their leases, the results of the jobs whose slots carry a
-        success record, and return the other jobs, which are to be dispatched.
-
-        Each job costs one existence check of its own record
-        (`PickleStore.read_succeeded`). A job read this way is complete: its result
-        is cached on it and it is not dispatched, so it takes no lease. A job without
-        a record (its slot has errored, is running, is in a read-only cache or was
-        written before records existed), or whose result the store's ``lookup`` does
-        not return, returns errored or returns from another context, is dispatched
-        and runs under its lease as before. A store without records dispatches every
-        job.
-        """
-        read = getattr(self.store, "read_succeeded", None)
-        if read is None:
-            return jobs
-        dispatch = []
-        for job in jobs:
-            result = read(job.checksum, job.context, job.task)
-            if result is None:
-                dispatch.append(job)
-                continue
-            job.hooks.pre_run(job)
-            job._cached_result = result
-            job._awaiting_run = False
-        return dispatch
+        """Deprecated: complete the jobs with a success record and return the others.
+        Use :meth:`GraphRunner.ready`"""
+        warnings.warn(
+            "Submitter.read_succeeded is deprecated, use GraphRunner.ready",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return GraphRunner._read_succeeded_jobs(self.store, jobs)
 
     @staticmethod
     def pop_resolution_errors(
         exec_graph: DiGraph["NodeExecution"],
         entries: "list[JobErrorEntry] | None" = None,
     ) -> list[str]:
-        """The errors of elements whose inputs could not be resolved, which have not
-        been collected before. Their records are added to ``entries`` if given"""
+        """Deprecated: the errors of elements whose inputs could not be resolved, not
+        collected before. Use :attr:`GraphRunner.errors`"""
+        warnings.warn(
+            "Submitter.pop_resolution_errors is deprecated, use GraphRunner.errors",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return [e for n in exec_graph.nodes for e in n.pop_resolution_errors(entries)]
 
     async def fetch_finished(
@@ -869,45 +776,6 @@ class Submitter:
             self._sync_pool, lambda: worker.run(job, rerun=rerun)
         )
 
-    def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
-        """Parse a graph and return all runnable tasks.
-
-        Parameters
-        ----------
-        graph : :obj:`~pydra.engine.graph.DiGraph`
-            Graph object
-
-        Returns
-        -------
-        tasks : list of :obj:`~pydra.engine.job.Job`
-            List of runnable tasks
-        following_err : dict[NodeToExecute, list[str]]
-            Dictionary of tasks that are blocked by errored tasks
-        """
-        tasks = []
-        not_started = set()
-        node: NodeExecution
-        for node in graph.sorted_nodes:
-            if node.done:
-                continue
-            # since the list is sorted (breadth-first) we can stop
-            # when we find a job that depends on any job that is already in tasks
-            preds = set(graph.predecessors[node.name])
-            if preds.intersection(not_started):
-                break
-            # Record if the node has not been started
-            if not node.started:
-                not_started.add(node)
-            tasks.extend(node.get_runnable_tasks(graph))
-        if len(tasks) > self.max_concurrent:
-            logger.info(
-                "Reducing number of tasks to run concurrently from %d to %d",
-                len(tasks),
-                self.max_concurrent,
-            )
-            tasks = tasks[: self.max_concurrent]
-        return tasks
-
     @property
     def cache_root(self):
         """Get the location of the cache directory."""
@@ -921,431 +789,6 @@ class Submitter:
         else:
             self._cache_root = mkdtemp()
             self._cache_root = Path(self._cache_root).resolve()
-
-
-class NodeExecution(ty.Generic[TaskType]):
-    """A wrapper around a workflow node containing the execution state of the tasks that
-    are generated from it"""
-
-    name: str
-    node: "Node"
-    submitter: Submitter
-
-    # List of tasks that were completed successfully
-    successful: dict[int, list["Job[TaskType]"]]
-    # List of tasks that failed
-    # (an element whose inputs could not be resolved is mapped to the exception)
-    errored: dict[int, "Job[TaskType] | Exception"]
-    # Elements that couldn't be run due to upstream errors, mapped to the upstream
-    # nodes whose errored or unrunnable elements they read (keyed by None if the whole
-    # node couldn't be started)
-    unrunnable: dict[int | None, list["NodeExecution"]]
-    # List of tasks that are queued
-    queued: dict[int, "Job[TaskType]"]
-    # List of tasks that are queued
-    running: dict[int, tuple["Job[TaskType]", datetime]]
-    # Elements that are waiting on upstream elements, mapped to the upstream nodes and
-    # the indices of their elements that they read
-    # (a range of all of an upstream node's indices stands for reading all of its elements)
-    blocked: (
-        dict[int | None, list[tuple["NodeExecution", range | list[int | None]]]] | None
-    )
-
-    # Jobs of the elements, created when they are released or first read
-    _tasks: dict[int | None, "Job[TaskType] | None"] | None
-
-    workflow: "Workflow"
-
-    graph: DiGraph["NodeExecution"] | None
-
-    # Descriptions of input-resolution errors not yet collected by ``Submitter``
-    _resolution_errors: list[str]
-    _resolution_entries: "list[JobErrorEntry]"
-    # The progress of the predecessors when the blocked elements were last checked
-    _progress: tuple | None
-
-    def __init__(
-        self,
-        node: "Node",
-        submitter: Submitter,
-        workflow: "Workflow",
-    ):
-        self.name = node.name
-        self.node = node
-        self.submitter = submitter
-        # Initialize the state dictionaries
-        self._tasks = None
-        self.blocked = None
-        self.successful = {}
-        self.errored = {}
-        self.queued = {}
-        self.running = {}  # Not used in logic, but may be useful for progress tracking
-        self.unrunnable = defaultdict(list)
-        self.workflow = workflow
-        self.graph = None
-        self._resolution_errors = []
-        self._resolution_entries = []
-        self._progress = None
-
-    @property
-    def state(self):
-        return self.node.state
-
-    def __repr__(self):
-        return (
-            f"NodeExecution(name={self.name!r}, blocked={list(self.blocked)}, "
-            f"queued={list(self.queued)}, running={list(self.running)}, "
-            f"successful={list(self.successful)}, errored={list(self.errored)}, "
-            f"unrunnable={list(self.unrunnable)})"
-        )
-
-    @property
-    def inputs(self) -> "Node.Inputs":
-        return self.node.inputs
-
-    @property
-    def _task(self) -> "Node":
-        return self.node._task
-
-    @property
-    def tasks(self) -> list["Job[TaskType]"]:
-        """The jobs of all elements, in state order, creating any that do not exist
-        yet (all upstream elements they read must have succeeded)"""
-        if self._tasks is None:
-            raise RuntimeError("Tasks have not been generated")
-        return [self.job(index) for index in self._tasks]
-
-    def job(self, index: int | None) -> "Job[TaskType]":
-        """The job of one element of the node, created on first use. The upstream
-        elements that its lazy inputs read must have completed by then.
-
-        Parameters
-        ----------
-        index : int or None
-            The state index of the element, None if the node has no state
-        """
-        if (job := self._tasks[index]) is None:
-            job = self._tasks[index] = Job(
-                task=self._split_task(index),
-                submitter=self.submitter,
-                environment=self.node._environment,
-                name=self.node.name,
-                hooks=self.node._hooks,
-                resources=self.node._resources,
-                state_index=index,
-            )
-        return job
-
-    def start(self) -> None:
-        """Prepare the state of the node and record, for each of its elements, the
-        upstream elements it reads"""
-        if self.state:
-            values = {}
-            for name, value in self.node.state_values.items():
-                if name in self.node.state.current_splitter_rpn:
-                    if name in ("*", "."):
-                        continue
-                    if isinstance(value, LazyField):
-                        values[name] = value._get_value(
-                            workflow=self.workflow, graph=self.graph
-                        )
-                    else:
-                        values[name] = value
-            self.state.prepare_states(values)
-            self.state.prepare_inputs()
-            indices = range(len(self.state.states_ind))
-        else:
-            indices = [None]
-        self._tasks = dict.fromkeys(indices)
-        self.blocked = {}
-        for index in indices:
-            upstream = self._upstream(index)
-            for node, inds in upstream:
-                if isinstance(inds, range):
-                    missing = [] if len(inds) == len(node._tasks) else list(inds)
-                else:
-                    missing = [i for i in inds if i not in node._tasks]
-                if missing:
-                    raise RuntimeError(
-                        f"Element {index} of node {self.name!r} reads elements {missing} "
-                        f"of node {node.name!r}, which has elements {list(node._tasks)}"
-                    )
-            self.blocked[index] = upstream
-
-    @property
-    def started(self) -> bool:
-        return (
-            self.successful
-            or self.errored
-            or self.unrunnable
-            or self.queued
-            or self.blocked is not None
-        )
-
-    @property
-    def done(self) -> bool:
-        self.update_status()
-        if not self.started:
-            return False
-        # Check to see if any previously queued tasks have completed
-        return not (self.queued or self.blocked or self.running)
-
-    @property
-    def has_errored(self) -> bool:
-        self.update_status()
-        return bool(self.errored)
-
-    def update_status(self) -> None:
-        """Updates the status of the tasks in the node."""
-        if not self.started:
-            return
-        # Check to see if any previously queued tasks have completed
-        for index, job in list(self.queued.items()):
-            try:
-                is_done = job.done
-            except ValueError:
-                errored = True
-                is_done = False
-            else:
-                errored = False
-            if is_done:
-                self.successful[job.state_index] = self.queued.pop(index)
-            elif job.errored or errored:
-                self.errored[job.state_index] = self.queued.pop(index)
-            elif not job._awaiting_run and job.run_start_time:
-                self.running[job.state_index] = (
-                    self.queued.pop(index),
-                    job.run_start_time,
-                )
-        # Check to see if any previously running tasks have completed
-        for index, (job, _) in list(self.running.items()):
-            try:
-                is_done = job.done
-            except ValueError:  # raised by Job.done if the job has errored
-                errored = True
-                is_done = False
-            else:
-                errored = False
-            if is_done:
-                self.successful[job.state_index] = self.running.pop(index)[0]
-            elif job.errored or errored:
-                self.errored[job.state_index] = self.running.pop(index)[0]
-
-    @property
-    def all_failed(self) -> bool:
-        return (self.unrunnable or self.errored) and not (
-            self.successful or self.blocked or self.queued
-        )
-
-    def _lazy_reads(
-        self, index: int | None
-    ) -> ty.Iterator[tuple[str, LazyField, int | None]]:
-        """The lazy inputs of one element that are read from upstream (i.e. are not
-        state values), with the state index each is read at
-
-        Parameters
-        ----------
-        index : int or None
-            The state index of the element, None if the node has no state
-        """
-        vals = self.state.states_val[index] if index is not None else {}
-        inputs_ind = self.state.inputs_ind[index] if index is not None else {}
-        for name, value in attrs_values(self.node._task).items():
-            state_key = f"{self.name}.{name}"
-            if isinstance(value, LazyField) and state_key not in vals:
-                yield name, value, inputs_ind.get(state_key)
-
-    def _split_task(self, index: int | None) -> "Task[OutputType]":
-        """Resolve the task of one element of the node from its state values and the
-        upstream values its lazy inputs read
-
-        Parameters
-        ----------
-        index : int or None
-            The state index of the element, None if the node has no state
-        """
-        resolved = {}
-        if index is not None:
-            vals = self.state.states_val[index]
-            for name in self.node.input_names:
-                if (state_key := f"{self.name}.{name}") in vals:
-                    resolved[name] = vals[state_key]
-        for name, value, state_index in self._lazy_reads(index):
-            resolved[name] = value._get_value(
-                workflow=self.workflow, graph=self.graph, state_index=state_index
-            )
-        return attrs.evolve(self.node._task, **resolved)
-
-    def _upstream(
-        self, index: int | None
-    ) -> list[tuple["NodeExecution", list[int | None]]]:
-        """The upstream nodes, and the indices of their elements, that ``_split_task``
-        reads to resolve one element
-
-        Parameters
-        ----------
-        index : int or None
-            The state index of the element, None if the node has no state
-        """
-        upstream = []
-        for _, value, state_index in self._lazy_reads(index):
-            if isinstance(value, LazyOutField):
-                node = self.graph.node(value._node.name)
-                upstream.append((node, node._read_indices(state_index)))
-        return upstream
-
-    def _read_indices(self, state_index: int | None) -> range | list[int | None]:
-        """The indices of the elements of this node that a downstream lazy field reads
-        at the given state index (see ``LazyOutField._get_value``)
-
-        Parameters
-        ----------
-        state_index : int or None
-            The state index the lazy field is read at, None to read all elements, which
-            are returned as a range so that readers need not store every index
-        """
-        if not self.state:
-            return [None]
-        if state_index is None or (self.state.combiner and not self.state.ind_l_final):
-            return range(len(self.state.states_ind))
-        return list(self.state.final_combined_ind_mapping[state_index])
-
-    @property
-    def _splits_upstream_output(self) -> bool:
-        """Whether the node's own splitter splits over an upstream output, in which case
-        its state can only be prepared once the upstream nodes are done"""
-        return bool(self.state) and any(
-            isinstance(value, LazyOutField)
-            for name, value in self.node.state_values.items()
-            if name in self.state.current_splitter_rpn
-        )
-
-    def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
-        """For a given node, release the elements whose upstream elements have
-        completed successfully, and mark unrunnable the elements that read an errored
-        or unrunnable upstream element.
-
-        Parameters
-        ----------
-        graph : :obj:`~pydra.engine.graph.DiGraph`
-            Graph object
-
-        Returns
-        -------
-        runnable : list[Job]
-            List of jobs that are ready to run
-        """
-        predecessors: list[NodeExecution] = graph.predecessors[self.node.name]
-        # ``done`` refreshes a predecessor's status, so it is read for every predecessor
-        # before any ``errored``/``unrunnable`` check: one that has just failed is then
-        # seen as errored rather than as done-and-successful
-        preds_done = [p.done for p in predecessors]
-        if not self.started:
-            resplit = self._splits_upstream_output
-            if unrunnable := [
-                p
-                for p in predecessors
-                if (p._tasks is None and p.unrunnable)
-                or (resplit and (p.errored or p.unrunnable))
-            ]:
-                self.unrunnable = {None: unrunnable}
-                self.blocked = {}
-            elif all(
-                d if resplit else p.started for p, d in zip(predecessors, preds_done)
-            ):
-                self.start()
-        progress = tuple(
-            (len(p.successful), len(p.errored), len(p.unrunnable)) for p in predecessors
-        )
-        if self.blocked and progress != self._progress:
-            self._progress = progress
-            for index, upstream in list(self.blocked.items()):
-                if unrunnable := list(
-                    dict.fromkeys(p for p, inds in upstream if _has_failed(p, inds))
-                ):
-                    del self.blocked[index]
-                    self.unrunnable[index] = unrunnable
-                elif all(_has_succeeded(p, inds) for p, inds in upstream):
-                    del self.blocked[index]
-                    self._release(index)
-        return list(self.queued.values())
-
-    def _release(self, index: int | None) -> None:
-        """Queue the job of an element whose upstream elements have all succeeded, or
-        record the element as errored if its inputs cannot be resolved from them"""
-        try:
-            job = self.queued[index] = self.job(index)
-            job._awaiting_run = True
-        except Exception as exc:
-            name = self.name if index is None else f"{self.name}({index})"
-            self.errored[index] = exc
-            self._resolution_errors.append(
-                f"Job {name!r}, inputs could not be resolved, errored:\n{format_exc()}"
-            )
-            self._resolution_entries.append(
-                error_entry(self.name, index, exc, phase="resolution")
-            )
-
-    def pop_resolution_errors(
-        self, entries: "list[JobErrorEntry] | None" = None
-    ) -> list[str]:
-        """The input-resolution errors recorded since the last call, and their records
-        added to ``entries`` if given"""
-        errors, self._resolution_errors = self._resolution_errors, []
-        records, self._resolution_entries = self._resolution_entries, []
-        if entries is not None:
-            entries.extend(records)
-        return errors
-
-
-def _has_failed(node: NodeExecution, indices: range | list[int | None]) -> bool:
-    """Whether any of the elements of a node at the given indices has errored or is
-    unrunnable"""
-    if len(indices) == len(node._tasks):
-        return bool(node.errored or node.unrunnable)
-    return any(i in node.errored or i in node.unrunnable for i in indices)
-
-
-def _has_succeeded(node: NodeExecution, indices: range | list[int | None]) -> bool:
-    """Whether the elements of a node at the given indices have all succeeded"""
-    if len(indices) == len(node._tasks):
-        return len(node.successful) == len(node._tasks)
-    return all(i in node.successful for i in indices)
-
-
-def job_error(job: "Job") -> str:
-    """Describe the error of a job, called while its exception is being handled"""
-    error_msg = format_exc()
-    if match := re.match(r'.*"""(.*)""".*', error_msg, flags=re.DOTALL | re.MULTILINE):
-        error_msg = match.group(1)
-    task_name = job.name
-    if job.state_index is not None:
-        task_name += f"({job.state_index})"
-    return f"Job {task_name!r}, {job.task!r}, errored:{error_msg}"
-
-
-def record_job_error(
-    job: "Job", errors: list[str], entries: list[JobErrorEntry]
-) -> None:
-    """Add the description and the record of a job's error to ``errors`` and
-    ``entries``, called while its exception is being handled"""
-    errors.append(job_error(job))
-    entries.append(error_entry(job.name, job.state_index, sys.exc_info()[1]))
-
-
-def error_entry(
-    job_name: str, state_index: int | None, exc: BaseException, phase: str = "run"
-) -> JobErrorEntry:
-    """The record of an exception, called while it is being handled"""
-    exc_class = type(exc)
-    return JobErrorEntry(
-        job_name=job_name,
-        state_index=state_index,
-        exception_type=f"{exc_class.__module__}.{exc_class.__qualname__}",
-        message=str(exc),
-        traceback=format_exc(),
-        phase=phase,
-    )
 
 
 def workflow_error(
