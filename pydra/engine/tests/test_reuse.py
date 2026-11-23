@@ -425,18 +425,21 @@ def GoldenWf(a: int) -> int:
 
 
 def test_tasks_without_hook_keep_checksums(monkeypatch):
-    """Checksums of tasks without the hook, as computed at 277bee99 (the versioned
-    task's since its code part was tagged ``version:``)"""
+    """Checksums of tasks without the hook under ``pydra-identity@2`` (RFC 0004 I1):
+    the sha256 of the identity record"""
+    # the record carries the walk classification, which these environment variables set
+    monkeypatch.delenv("PYDRA_USER_PACKAGES", raising=False)
+    monkeypatch.delenv("PYDRA_CODE_HASH", raising=False)
     # the module name depends on pytest's import mode, and is part of a declared version
     monkeypatch.setattr(inc_one, "__module__", "pydra.engine.tests.test_reuse")
     for task, checksum in [
         (
             python.define(inc_one, version="1")(a=1),
-            "python-6ca65772cc28b9f1e7fd898de2855234",
+            "python-91edb5e2d2191124f45fe74aad4ea709696c2da38cfb8f2a4868e1667b792168",
         ),
         (
             shell.define("echo <text:str>")(text="hi"),
-            "shell-e04edfe0da3d1efc0d8eb9466535b1fe",
+            "shell-4ff5573110d302212f87b85b0bc0f31b05c102712ae2f557d493e32e86501599",
         ),
     ]:
         assert not hasattr(task, "__checksum__")
@@ -444,8 +447,11 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
 
 
 def test_code_hashed_tasks_keep_checksums(monkeypatch):
-    """Checksums of tasks whose function's code is hashed, the same on every Python
-    version (measured on 3.11 to 3.15)"""
+    """Checksums of tasks whose function's code is hashed under ``pydra-identity@2``,
+    the same on every Python version (the record's digests are the ``ast@1`` hashes)"""
+    # the record carries the walk classification, which these environment variables set
+    monkeypatch.delenv("PYDRA_USER_PACKAGES", raising=False)
+    monkeypatch.delenv("PYDRA_CODE_HASH", raising=False)
     # the workflow references AddOne, library code, by its function's qualified name,
     # which depends on pytest's import mode
     function = get_fields(AddOne).function.default
@@ -454,8 +460,8 @@ def test_code_hashed_tasks_keep_checksums(monkeypatch):
     module.AddOne = AddOne
     monkeypatch.setitem(sys.modules, module.__name__, module)
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == (
-        "python-463063b196ab62ce6c8c1a59e2bdd535",
-        "workflow-a815524df9154efcde7afe5ecfb6d0a6",
+        "python-c8931026c836d9acea3ac1888dbed7457ec2b0020996b215cec9fc25a97b583e",
+        "workflow-a79cb7670bf8dcdd4a041adf5cbce58e8b011192bdabbe32b9f8e0fa2329cef9",
     )
 
 

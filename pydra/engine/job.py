@@ -13,6 +13,7 @@ from traceback import format_exception
 import attr
 import cloudpickle as cp
 from pydra.compose.base import Task
+from pydra.utils.identity import job_record, record_checksum
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
@@ -174,6 +175,7 @@ class Job(ty.Generic[TaskType]):
 
         self.allow_cache_override = True
         self._checksum = None
+        self._record = None
         self._unsuffixed_checksum = None
         # The (field, element index, cause) of every Absent an input field accepted or
         # dropped, set by the graph runner when it forms the job
@@ -279,6 +281,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
+        self.__dict__.setdefault("_record", None)
         self.__dict__.setdefault("chdir", True)
         self.__dict__.setdefault("_stored_contexts", None)
         self.__dict__.setdefault("attempt", None)
@@ -319,10 +322,10 @@ class Job(ty.Generic[TaskType]):
 
     @property
     def unsuffixed_checksum(self) -> str:
-        """The checksum of the task, without the absence suffix of
+        """The digest of the job's record (`record`), without the absence suffix of
         :attr:`checksum` (RFC 0002 section 2.3(a))"""
         if self._unsuffixed_checksum is None:
-            self._unsuffixed_checksum = self.task._checksum
+            self._unsuffixed_checksum = record_checksum(self.record)
         return self._unsuffixed_checksum
 
     @property
@@ -332,6 +335,16 @@ class Job(ty.Generic[TaskType]):
         :func:`~pydra.engine.absent.absence_triples`); their suffix is appended to
         :attr:`checksum`"""
         return absence_triples(self)
+
+    @property
+    def record(self) -> dict[str, ty.Any]:
+        """The identity record the job's checksum is the digest of (see
+        `pydra.utils.identity.job_record`), built once in the submitting process and
+        carried with the job to the worker. ``Job.record``, ``Job.checksum`` and
+        ``PydraIdentityV2.key`` use the carried record and never rebuild it."""
+        if self._record is None:
+            self._record = job_record(self)
+        return self._record
 
     @property
     def context(self) -> dict[str, ty.Any]:
@@ -643,6 +656,7 @@ class Job(ty.Generic[TaskType]):
             cache_dir=self.cache_dir,
             task=self.task,
             context=self.context,
+            record=self.record,
         )
         self.hooks.pre_run_task(self)
         self.audit.start_audit(
@@ -671,6 +685,7 @@ class Job(ty.Generic[TaskType]):
                 cache_dir=self.cache_dir,
                 task=self.task,
                 context=self.context,
+                record=self.record,
             )
         if error is None:
             try:
@@ -743,6 +758,7 @@ class Job(ty.Generic[TaskType]):
                     cache_dir=self.cache_dir,
                     task=self.task,
                     context=self.context,
+                    record=self.record,
                 )
                 self.hooks.pre_run_task(self)
                 self.audit.start_audit(
@@ -826,6 +842,7 @@ class Job(ty.Generic[TaskType]):
                     cache_dir=self.cache_dir,
                     task=self.task,
                     context=self.context,
+                    record=self.record,
                 )
                 self.hooks.pre_run_task(self)
                 self.audit.start_audit(
@@ -1009,19 +1026,13 @@ class Job(ty.Generic[TaskType]):
             return
         hash_changes = self.task._hash_changes()
         details = ""
+        fields = attr.fields_dict(type(self.task))
         for changed in hash_changes:
-            val = getattr(self.task, changed)
-            field = getattr(attr.fields(type(self.task)), changed, None)
-            if field is None:
-                # Not an input field, e.g. the "Outputs" class, which is included in
-                # the hash in case the names/types of the outputs change
-                details += (
-                    f"- {changed}: the hash of {val!r} appears to be unstable. This "
-                    "could be due to a stochastic/non-thread-safe attribute(s) of it, "
-                    "or a function/lambda referenced by it (e.g. an output callable) "
-                    "that can't be consistently hashed\n"
-                )
+            if changed not in fields:  # the digest of the Outputs class
+                details += f"- {changed}: the digest changed\n"
                 continue
+            field = fields[changed]
+            val = getattr(self.task, changed)
             field_type = type(val)
             if inspect.isclass(field.type) and issubclass(field.type, FileSet):
                 details += (

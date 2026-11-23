@@ -130,6 +130,9 @@ class Result(ty.Generic[OutputsType]):
     context: dict[str, ty.Any] = attrs.field(factory=dict)
     """The execution context that produced the result, recorded beside it (see
     `pydra.engine.context.job_context`)."""
+    record: dict[str, ty.Any] | None = None
+    """The identity record the job's checksum is the digest of (see
+    `pydra.utils.identity.job_record`)."""
     cross_context: bool = False
     """Whether the result was reused from an entry recorded in another context."""
     reused_in: dict[str, ty.Any] | None = None

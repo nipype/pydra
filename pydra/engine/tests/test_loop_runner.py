@@ -551,7 +551,7 @@ def test_rerun_without_loop_slot_replays_rounds(tmp_path):
 
 def _replay_without_loop_slot(submitter, cache_root):
     loop_outputs(submitter, Outer(stop=4))
-    checksum = CountLoop(n=0, stop=4)._checksum
+    checksum = Job(CountLoop(n=0, stop=4), submitter=submitter, name="count").checksum
     shutil.rmtree(cache_root / checksum)
     for record in (cache_root / SUCCESS_DIR).glob(f"{checksum}-*"):
         record.unlink()
@@ -737,7 +737,9 @@ def test_replayed_loop_yields_to_its_driver(tmp_path, cap):
     cache_root = tmp_path / "pickled"
     with Submitter(worker="debug", store=PickleStore(cache_root)) as submitter:
         loop_outputs(submitter, Outer(stop=150))
-        checksum = CountLoop(n=0, stop=150)._checksum
+        checksum = Job(
+            CountLoop(n=0, stop=150), submitter=submitter, name="count"
+        ).checksum
         shutil.rmtree(cache_root / checksum)
         for record in (cache_root / SUCCESS_DIR).glob(f"{checksum}-*"):
             record.unlink()
