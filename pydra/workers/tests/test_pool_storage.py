@@ -510,7 +510,9 @@ def test_settle_count_race(tmp_path, monkeypatch):
     monkeypatch.setattr(pool_storage, "_count_outcomes", count)
     assert claim.outcome(two, attempts[1], "done")
     marks = _files(pool.path / "queues" / queue_label("cpu") / "settled")
-    assert marks == [f"{digest}-1", f"{digest}-2"]
+    assert marks == [
+        f"{digest}-2"
+    ]  # the writer of a mark removes the ticket's previous one
     assert pool.settled("cpu") == {digest: 2}
     # both compute 3: the second finds the first's mark, which covers its own outcome
     pool.outcome("cpu", digest, three, attempts[2], {"outcome": "done"}, settle=False)
@@ -1059,6 +1061,63 @@ def test_claim_stats_flat_on_a_large_live_segment(tmp_path, monkeypatch):
         PoolRoot, "_target", lambda self, *a: walked.append(a) or real_target(self, *a)
     )
     assert pool.claim("cpu", epoch=1) is None and walked == []
+
+
+def test_half_done_move_repaired_after_collect(tmp_path, monkeypatch):
+    """A move dies after step 3, the job finishes in its new ticket, and ``collect`` removes the
+    generation that named the old ticket; the next claimant of the old ticket still withdraws the job
+    there under the ticket's own attempt, so the old ticket resolves and is never claimable
+    again."""
+    pool = _pool(tmp_path)
+    old = pool.put("cpu", _ticket("a"))
+    claim = pool.claim("cpu", beat="external")
+    (job,) = claim.ticket.jobs
+
+    def die(self, at):
+        if at == 3:
+            raise KeyboardInterrupt
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Claim, "_checkpoint", die)
+        with pytest.raises(KeyboardInterrupt):
+            claim.move([[job]], "gpu", cause="replaced")
+    _finish(_pool(tmp_path).claim("gpu"))
+    assert _pool(tmp_path).collect(payload_age=0) >= 1
+    _age(_claim_dir(pool, "cpu", old))
+    assert _pool(tmp_path).claim("cpu") is None  # repaired and resolved, not handed out
+    (withdrawn,) = pool.outcomes("cpu", old).values()
+    assert (withdrawn["outcome"], withdrawn["reason"]) == ("withdrawn", "replaced")
+    assert withdrawn["attempt"] == job.attempt
+    assert _pool(tmp_path).claim("cpu") is None
+
+
+def test_settled_listing_bounded_and_collected(tmp_path):
+    """A queue's ``settled/`` holds one mark per ticket, the highest, however many outcomes it had, so
+    the listing the follower reads each poll is bounded by the tickets within a run;
+    ``collect_settled`` removes resolved tickets with their marks, outcomes and slotted entries, so
+    across runs it holds only live tickets."""
+    pool = _pool(tmp_path)
+    digests = [pool.put("cpu", _ticket(f"t{i}", jobs=3)) for i in range(4)]
+    while (claim := pool.claim("cpu")) is not None:
+        _finish(claim)
+    q = pool.path / "queues" / queue_label("cpu")
+    # one mark per ticket, the highest, however many outcomes it had
+    assert sorted(p.name for p in (q / "settled").iterdir()) == sorted(
+        f"{d}-3" for d in digests
+    )
+    assert pool.settled("cpu") == {d: 3 for d in digests}
+    live = pool.put("cpu", _ticket("live", jobs=2))
+    assert pool.collect_settled(age=0) == 4
+    assert list((q / "settled").iterdir()) == []
+    assert [p.name for p in (q / "tickets").iterdir()] == [f"{live}.json"]
+    assert list((q / "outcome").iterdir()) == []
+    assert [p.name for p in (q / "slotted").iterdir()] == [live]
+    claim = _pool(tmp_path).claim("cpu")
+    assert (
+        claim is not None and claim.digest == live
+    )  # the index still serves live tickets
+    claim.release()
+    assert pool.collect_settled(age=3600) == 0
 
 
 def test_a_claim_lease_refused_for_good_on_windows_raises(tmp_path, monkeypatch):

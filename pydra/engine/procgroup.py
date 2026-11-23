@@ -39,6 +39,12 @@ __all__ = [
 logger = logging.getLogger("pydra.resident")
 
 _POLL = 0.02
+TERM_TIMEOUT = 10.0
+"""Default seconds a stopped process group is given after SIGTERM before SIGKILL: a server
+flushes and exits on SIGTERM within seconds."""
+KILL_TIMEOUT = 10.0
+"""Default seconds a process group is waited for after SIGKILL. With `TERM_TIMEOUT` it keeps a
+stop (`shutdown_bound`) under Slurm's default KillWait of 30 s."""
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 _LOGGED_NO_ACCOUNTING = False
 _SHIM = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_procshim.py")
@@ -215,7 +221,9 @@ class ProcessGroup:
                 return False
             time.sleep(_POLL)
 
-    def stop(self, term_timeout: float = 10.0, kill_timeout: float = 10.0) -> None:
+    def stop(
+        self, term_timeout: float = TERM_TIMEOUT, kill_timeout: float = KILL_TIMEOUT
+    ) -> None:
         """SIGTERM the group and every descendant, wait up to ``term_timeout``, then
         SIGKILL, and reap the leader last. Returns when every member is gone (or, after
         ``kill_timeout`` past the kill, logs that one is unkillable). A second call does
@@ -429,8 +437,8 @@ class ProcessProvider:
 
     def __init__(
         self,
-        term_timeout: float = 10.0,
-        kill_timeout: float = 10.0,
+        term_timeout: float = TERM_TIMEOUT,
+        kill_timeout: float = KILL_TIMEOUT,
         gpu_settle_timeout: float = 30.0,
     ):
         self.term_timeout = term_timeout
