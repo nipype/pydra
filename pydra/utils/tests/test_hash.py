@@ -13,6 +13,7 @@ import time
 import types
 import uuid
 import weakref
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import blake2b
 from pathlib import Path, PurePosixPath
@@ -789,20 +790,13 @@ _HASH_IN_SUBPROCESS = (
 )
 
 
-@pytest.mark.xfail(
-    condition=tuple(map(int, cloudpickle.__version__.split(".")[:3])) >= (3, 1, 3),
-    reason=(
-        "cloudpickle 3.1.3 sets co_filename to '<dynamic-code>' on a function it pickles "
-        "by value, so a process without the source hashes its bytecode (pydra issue "
-        "#936). A worker does not hash it: it takes the digests carried from the "
-        "submitting process, and rehashes only files and values with __bytes_repr__ "
-        "(test_identity_classes.py::test_worker_without_source_uses_the_carried_digests)"
-    ),
-)
 def test_hash_function_pickled_by_value():
-    """A function pickled by value, as the cf worker sends it, keeps its hash in
-    another process"""
+    """A function hashed, then pickled by value, keeps its hash in another process
+    that cannot load its module. cloudpickle 3.1.3 sets co_filename to
+    '<dynamic-code>' on the code, so the hash comes from the
+    encoding carried on the function"""
     func = _adder(3)
+    expected = hash_function(func)
     module = sys.modules[func.__module__]
     cloudpickle.register_pickle_by_value(module)
     try:
@@ -816,7 +810,7 @@ def test_hash_function_pickled_by_value():
         check=True,
         env={**os.environ, "PYTHONHASHSEED": "random"},
     )
-    assert result.stdout.decode().strip() == hash_function(func)
+    assert result.stdout.decode().strip() == expected
 
 
 def _define(tmp_path: Path, source: str, name: str = "f"):
@@ -1599,9 +1593,6 @@ def test_walk_memo_drop_survives_module_globals_cleared_at_teardown(monkeypatch)
     assert seen == [], f"drop raised at teardown: {seen!r}"
 
 
-@pytest.mark.xfail(
-    strict=False, reason="by-value function hashing ported in RFC 0004 T1; see #936"
-)
 def test_hash_function_stable_after_pickling_by_value(tmp_path: Path, monkeypatch):
     """Functions decorated by ``python.define`` are shadowed by the task class at the
     module level, so cloudpickle pickles them by value, which replaces their
@@ -1631,9 +1622,6 @@ def test_hash_function_stable_after_pickling_by_value(tmp_path: Path, monkeypatc
         sys.modules.pop(module_name, None)
 
 
-@pytest.mark.xfail(
-    strict=False, reason="by-value function hashing ported in RFC 0004 T1; see #936"
-)
 def test_hash_lambda_and_nested_function_stable_after_pickling_by_value(
     tmp_path: Path, monkeypatch
 ):
@@ -1663,9 +1651,6 @@ def test_hash_lambda_and_nested_function_stable_after_pickling_by_value(
         sys.modules.pop(module_name, None)
 
 
-@pytest.mark.xfail(
-    strict=False, reason="by-value function hashing ported in RFC 0004 T1; see #936"
-)
 def test_hash_function_stable_after_pickling_when_module_not_loaded(
     tmp_path: Path, monkeypatch
 ):
@@ -1691,3 +1676,519 @@ def test_hash_function_stable_after_pickling_when_module_not_loaded(
         sys.modules.pop(module_name, None)
     for pkl, hsh in zip(pickled, hashes):
         assert hash_function(cloudpickle.loads(pkl)) == hsh
+
+
+_BY_VALUE_SOURCE = """\
+import functools
+
+
+def make_nested():
+    def nested(a, b=1):
+        return a + b
+
+    return nested
+
+
+def make_closure(n):
+    def closure(a):
+        return a * n
+
+    return closure
+
+
+def make_lambda():
+    return lambda a: a - 1
+
+
+def make_scale():
+    return lambda a: a * 1.5
+
+
+pair = (lambda a: a + 1, lambda a: a * 2)
+
+
+def target(a):
+    return a + 1
+
+
+def wrap(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def make_member():
+    def member(x):
+        return x in {"alpha", "beta", "gamma", "delta", "epsilon", "zeta"}
+
+    return member
+
+
+def make_annotated():
+    def annotated(a):
+        y: int = a + 1
+        return y
+
+    return annotated
+"""
+
+
+def _by_value_module(tmp_path: Path, monkeypatch, source: str = _BY_VALUE_SOURCE):
+    """Import `source` as a new module from a file under `tmp_path`, registered in
+    ``sys.modules`` until the test ends"""
+    name = f"pydra_t1_{uuid.uuid4().hex[:12]}"
+    (tmp_path / f"{name}.py").write_text(source)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    module = importlib.import_module(name)
+    monkeypatch.setitem(sys.modules, name, module)
+    return module
+
+
+def _by_value_functions(module) -> dict[str, types.FunctionType]:
+    return {
+        "nested": module.make_nested(),
+        "closure": module.make_closure(2),
+        "lambda": module.make_lambda(),
+    }
+
+
+def _dynamic_code(code: types.CodeType) -> types.CodeType:
+    return code.replace(
+        co_filename="<dynamic-code>",
+        co_consts=tuple(
+            _dynamic_code(c) if isinstance(c, types.CodeType) else c
+            for c in code.co_consts
+        ),
+    )
+
+
+def _loads_by_value(payload: bytes) -> types.FunctionType:
+    """Unpickle a function pickled by value, with ``co_filename`` set to
+    ``"<dynamic-code>"`` as cloudpickle >= 3.1.3 sets it, also under older versions"""
+    func = cloudpickle.loads(payload)
+    for f in (func, vars(func).get("__wrapped__")):
+        if isinstance(f, types.FunctionType):
+            f.__code__ = _dynamic_code(f.__code__)
+    return func
+
+
+@pytest.mark.parametrize("kind", ["nested", "closure", "lambda"])
+def test_by_value_function_hashed_first_keeps_its_hash(tmp_path, monkeypatch, kind):
+    """A function hashed before it is pickled by value keeps its `ast@1` encoding where
+    its module is not loaded: the encoding travels with it"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    func = _by_value_functions(module)[kind]
+    expected = hash_function(func)
+    code = hash_module._function_code(func, Cache())
+    payload = cloudpickle.dumps(func)
+    monkeypatch.delitem(sys.modules, module.__name__)
+    unpickled = _loads_by_value(payload)
+    assert unpickled.__code__.co_filename != func.__code__.co_filename
+    assert code.startswith(b"ast@1:")
+    assert hash_module._function_code(unpickled, Cache()) == code
+    assert hash_function(unpickled) == expected
+
+
+@pytest.mark.parametrize("kind", ["nested", "closure", "lambda"])
+def test_by_value_function_recovered_from_its_module(tmp_path, monkeypatch, kind):
+    """A function pickled by value before it was hashed is matched, by name and
+    instruction positions, in the file of its loaded module"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    func = _by_value_functions(module)[kind]
+    unpickled = _loads_by_value(cloudpickle.dumps(func))
+    assert unpickled.__code__.co_filename != func.__code__.co_filename
+    assert "__pydra_hash_bytes__" not in vars(unpickled)
+    assert hash_function(unpickled) == hash_function(func)
+
+
+def test_by_value_closures_differ_by_captured_value(tmp_path, monkeypatch):
+    module = _by_value_module(tmp_path, monkeypatch)
+    one, two = module.make_closure(1), module.make_closure(2)
+    hashes = [hash_function(one), hash_function(two)]
+    assert hashes[0] != hashes[1]
+    payloads = [cloudpickle.dumps(one), cloudpickle.dumps(two)]
+    monkeypatch.delitem(sys.modules, module.__name__)
+    assert [hash_function(_loads_by_value(p)) for p in payloads] == hashes
+
+
+@pytest.mark.parametrize("hashed_first", [True, False])
+def test_by_value_lambdas_on_one_line_hash_differently(
+    tmp_path, monkeypatch, hashed_first
+):
+    """Two lambdas defined on one line keep distinct hashes by value, carried or
+    recovered from the module file"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        if hashed_first:
+            hashes = [hash_function(f) for f in module.pair]
+            payloads = [cloudpickle.dumps(f) for f in module.pair]
+            monkeypatch.delitem(sys.modules, module.__name__)
+        else:
+            payloads = [cloudpickle.dumps(f) for f in module.pair]
+            hashes = [hash_function(f) for f in module.pair]
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    unpickled = [_loads_by_value(p) for p in payloads]
+    assert hashes[0] != hashes[1]
+    assert [hash_function(f) for f in unpickled] == hashes
+
+
+def test_by_value_wraps_wrapper_does_not_inherit_the_target_encoding(
+    tmp_path, monkeypatch
+):
+    """`functools.wraps` copies the target's ``__dict__``, and with it the encoding
+    carried on the target; the code stamp keeps the wrapper from taking it as its own"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    target_code = hash_module._function_code(module.target, Cache())
+    hash_function(module.target)
+    wrapper = module.wrap(module.target)
+    assert "__pydra_hash_bytes__" in vars(wrapper)  # copied by functools.wraps
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        payload = cloudpickle.dumps(wrapper)
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    monkeypatch.delitem(sys.modules, module.__name__)
+    unpickled = _loads_by_value(payload)
+    assert unpickled.__code__.co_filename == "<dynamic-code>"
+    code = hash_module._function_code(unpickled, Cache())
+    assert code != target_code
+    assert code.startswith(b"bytecode@")
+    # the target, pickled with the wrapper, still finds its own encoding
+    assert hash_module._function_code(unpickled.__wrapped__, Cache()) == target_code
+
+
+def test_by_value_wraps_wrapper_hashed_carries_its_own_encoding(tmp_path, monkeypatch):
+    module = _by_value_module(tmp_path, monkeypatch)
+    hash_function(module.target)
+    wrapper = module.wrap(module.target)
+    wrapper_code = hash_module._function_code(wrapper, Cache())
+    expected = hash_function(wrapper)
+    assert wrapper_code != hash_module._function_code(module.target, Cache())
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        payload = cloudpickle.dumps(wrapper)
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    monkeypatch.delitem(sys.modules, module.__name__)
+    unpickled = _loads_by_value(payload)
+    assert hash_module._function_code(unpickled, Cache()) == wrapper_code
+    assert hash_function(unpickled) == expected
+
+
+def test_by_value_replaced_code_is_not_trusted(tmp_path, monkeypatch):
+    """A function whose ``__code__`` was replaced after it was hashed does not take
+    the encoding carried for its old code, while an unchanged copy does"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    func = module.make_nested()
+    old = hash_module._function_code(func, Cache())
+    control = cloudpickle.dumps(func)
+    func.__code__ = (lambda a, b=1: a * b).__code__
+    payload = cloudpickle.dumps(func)
+    monkeypatch.delitem(sys.modules, module.__name__)
+    assert hash_module._function_code(_loads_by_value(control), Cache()) == old
+    code = hash_module._function_code(_loads_by_value(payload), Cache())
+    assert code != old
+    assert code.startswith(b"bytecode@")
+
+
+def test_by_value_code_differing_in_a_constant_is_not_trusted(tmp_path, monkeypatch):
+    """The code stamp covers the constants: code that differs from the hashed code
+    only in a constant does not take its carried encoding. A float is loaded from
+    ``co_consts`` on every minor (small ints are instruction arguments since 3.14)"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    func = module.make_scale()
+    old = hash_module._function_code(func, Cache())
+    control = cloudpickle.dumps(func)
+    func.__code__ = func.__code__.replace(
+        co_consts=tuple(2.5 if c == 1.5 else c for c in func.__code__.co_consts)
+    )
+    assert func(2) == 5.0
+    payload = cloudpickle.dumps(func)
+    monkeypatch.delitem(sys.modules, module.__name__)
+    assert hash_module._function_code(_loads_by_value(control), Cache()) == old
+    code = hash_module._function_code(_loads_by_value(payload), Cache())
+    assert code.startswith(b"bytecode@")
+
+
+def test_code_stamp_tells_small_int_constants_apart():
+    """Code differing only in a small int, an instruction argument since 3.14 rather
+    than a member of ``co_consts``, has another code stamp"""
+    one, two = (lambda: 1).__code__, (lambda: 2).__code__
+    assert hash_module._code_stamp(one) != hash_module._code_stamp(two)
+
+
+def test_by_value_pickled_before_hashing_without_source_is_bytecode(
+    tmp_path, monkeypatch
+):
+    """A function pickled by value before it was hashed, where its module is not
+    loaded, has no source to recover: it hashes as its bytecode, without failing"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    payload = cloudpickle.dumps(module.make_nested())
+    monkeypatch.delitem(sys.modules, module.__name__)
+    unpickled = _loads_by_value(payload)
+    assert hash_module._function_code(unpickled, Cache()).startswith(b"bytecode@")
+    assert hash_function(unpickled)
+
+
+def test_by_value_code_naming_a_missing_file_is_recovered(tmp_path, monkeypatch):
+    """Code pickled by value whose ``co_filename`` names a file that is not there (a
+    path on another host) is recovered from the file of its loaded module"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    func = module.make_nested()
+    payload = cloudpickle.dumps(func)
+    expected = hash_module._function_code(func, Cache())
+    assert expected.startswith(b"ast@1:")
+    for relabel in (None, "json"):  # found by its globals, not its __module__
+        unpickled = cloudpickle.loads(payload)
+        unpickled.__code__ = unpickled.__code__.replace(
+            co_filename=str(tmp_path / "elsewhere" / "gone.py")
+        )
+        if relabel:
+            unpickled.__module__ = relabel
+        assert hash_module._function_code(unpickled, Cache()) == expected
+
+
+def test_by_value_code_naming_a_missing_file_is_checked(tmp_path, monkeypatch):
+    """Code naming a file that is not there is not matched, unchecked, in the source
+    its module's loader gives: a definition of the same name and line that compiles
+    to other code is refused"""
+    source = "def run(a):\n    return a + 1\n"
+    other_source = "def run(a):\n    return a - 1000 * a\n"
+    module = _by_value_module(tmp_path, monkeypatch, source)
+    other = _by_value_module(tmp_path, monkeypatch, other_source)
+    unpickled = types.FunctionType(
+        module.run.__code__.replace(co_filename=str(tmp_path / "gone.py")),
+        {"__name__": other.__name__},
+    )
+    unpickled.__module__ = other.__name__
+    code = hash_module._function_code(unpickled, Cache())
+    assert code != hash_module._function_code(other.run, Cache())
+    assert code.startswith(b"bytecode@")
+
+
+def _edit_module(module, old: str, new: str) -> None:
+    """Replace `old` by `new` in the file of `module`, with a newer mtime, and reload
+    it"""
+    path = Path(module.__file__)
+    text = path.read_text()
+    assert old in text
+    path.write_text(text.replace(old, new))
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**10))
+    importlib.reload(module)
+
+
+def test_by_value_recovery_from_an_edited_file_is_refused(tmp_path, monkeypatch):
+    """A function pickled by value before it was hashed is not matched to a
+    definition that was edited on disk since: the code compiled from the file must
+    have its code stamp"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    payload = cloudpickle.dumps(module.make_nested())
+    _edit_module(module, "return a + b", "return a * b")
+    unpickled = _loads_by_value(payload)
+    assert unpickled(2, 3) == 5
+    code = hash_module._function_code(unpickled, Cache())
+    assert code != hash_module._function_code(module.make_nested(), Cache())
+    assert code.startswith(b"bytecode@")
+
+
+def test_by_value_recovery_from_another_main_is_refused(tmp_path, monkeypatch):
+    """A function pickled by value is not matched to a definition of the same name and
+    line in another file loaded under its module name, as the batch script an SGE
+    worker runs is another ``__main__``"""
+    source = "def run(a):\n    return a + 1\n"
+    other_source = "def run(a):\n    return a - 1000 * a\n"
+    module = _by_value_module(tmp_path, monkeypatch, source)
+    other = _by_value_module(tmp_path, monkeypatch, other_source)
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        payload = cloudpickle.dumps(module.run)
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    monkeypatch.setitem(sys.modules, module.__name__, other)
+    unpickled = _loads_by_value(payload)
+    code = hash_module._function_code(unpickled, Cache())
+    assert code != hash_module._function_code(other.run, Cache())
+    assert code.startswith(b"bytecode@")
+
+
+def test_by_value_carried_encoding_wins_over_an_edited_file(tmp_path, monkeypatch):
+    """A function hashed, pickled by value, and loaded after its file was edited
+    hashes as the code it runs, whether the unpickled code names the edited file
+    (cloudpickle < 3.1.3) or ``"<dynamic-code>"``"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    func = module.make_nested()
+    expected = hash_module._function_code(func, Cache())
+    payload = cloudpickle.dumps(func)
+    _edit_module(module, "return a + b", "return a * b")
+    edited = hash_module._function_code(module.make_nested(), Cache())
+    assert edited != expected
+    for unpickled in (cloudpickle.loads(payload), _loads_by_value(payload)):
+        assert hash_module._function_code(unpickled, Cache()) == expected
+
+
+def test_by_value_carried_encoding_wins_over_module_recovery(tmp_path, monkeypatch):
+    """The carried encoding is taken before the module file, which may have been
+    edited without changing the code (a local annotation)"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    func = module.make_annotated()
+    expected = hash_module._function_code(func, Cache())
+    payload = cloudpickle.dumps(func)
+    _edit_module(module, "y: int = a + 1", "y: str = a + 1")
+    edited = hash_module._function_code(module.make_annotated(), Cache())
+    assert edited != expected
+    assert hash_module._function_code(_loads_by_value(payload), Cache()) == expected
+
+
+def test_by_value_set_constant_keeps_its_hash_under_other_seeds(tmp_path, monkeypatch):
+    """The code stamp of a function holding a frozenset constant (``x in {...}``) is
+    the same under every string-hash seed, so its carried encoding is trusted"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    func = module.make_member()
+    assert any(isinstance(c, frozenset) for c in func.__code__.co_consts)
+    expected = hash_function(func)
+    payload = cloudpickle.dumps(func)
+    # the carried encoding is then the only source, under every cloudpickle version
+    Path(module.__file__).unlink()
+    for seed in ("1", "2", "3"):
+        result = subprocess.run(
+            [sys.executable, "-c", _HASH_IN_SUBPROCESS],
+            input=payload,
+            capture_output=True,
+            check=True,
+            cwd=str(tmp_path.parent),
+            env={**os.environ, "PYTHONHASHSEED": seed},
+        )
+        assert result.stdout.decode().strip() == expected
+
+
+_ZIP_SOURCE = """\
+def helper(x):
+    return x + 1
+
+
+def make():
+    def inner(a):
+        return a * 2
+
+    return inner
+"""
+
+
+def test_zip_imported_code_keeps_its_encoding(tmp_path, monkeypatch):
+    """Code imported from a zip archive (zipapp, egg, PEX) names a path inside the
+    archive, which ``os.stat`` cannot read; its source comes through the module's
+    loader and it keeps its `ast@1` encoding"""
+    plain = _by_value_module(tmp_path, monkeypatch, _ZIP_SOURCE)
+    name = f"pydra_t1_zip_{uuid.uuid4().hex[:12]}"
+    archive = tmp_path / "lib.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr(f"{name}.py", _ZIP_SOURCE)
+    monkeypatch.syspath_prepend(str(archive))
+    zipped = importlib.import_module(name)
+    monkeypatch.setitem(sys.modules, name, zipped)
+    assert not os.path.exists(zipped.helper.__code__.co_filename)
+    for zip_func, plain_func in (
+        (zipped.helper, plain.helper),
+        (zipped.make(), plain.make()),
+    ):
+        code = hash_module._function_code(zip_func, Cache())
+        assert code.startswith(b"ast@1:")
+        assert code == hash_module._function_code(plain_func, Cache())
+
+
+def test_generated_code_is_not_recovered_from_the_module(tmp_path, monkeypatch):
+    """Code generated into a pseudo-file other than cloudpickle's is never matched in
+    the file of the module it names, even where a definition there lines up"""
+    source = "def f(a):\n    return a + 1\n"
+    module = _by_value_module(tmp_path, monkeypatch, source)
+    namespace = {"__name__": module.__name__}
+    exec(compile(source, "<string>", "exec"), namespace)
+    generated = namespace["f"]
+    assert generated.__module__ == module.__name__
+    assert hash_module._function_code(generated, Cache()).startswith(b"bytecode@")
+    by_value = types.FunctionType(
+        generated.__code__.replace(co_filename="<dynamic-code>"), namespace
+    )
+    assert hash_module._function_code(by_value, Cache()) == (
+        hash_module._function_code(module.f, Cache())
+    )
+
+
+_TASK_BY_VALUE_SOURCE = """\
+from pydra.compose import python, shell
+
+
+def make():
+    @python.define(outputs=["out"])
+    def Scale(x: int, factor: int = 3) -> int:
+        return x * factor
+
+    return Scale
+
+
+Scale = make()
+
+
+@shell.define
+class Count(shell.Task["Count.Outputs"]):
+    executable = "wc"
+    in_file: str = shell.arg(argstr="")
+
+    class Outputs(shell.Outputs):
+        size: int = shell.out(callable=lambda stdout: len(stdout))
+"""
+
+_CHECKSUM_IN_SUBPROCESS = (
+    "import sys, cloudpickle; "
+    "task = cloudpickle.loads(sys.stdin.buffer.read()); "
+    "print(task._checksum)"
+)
+
+
+@pytest.mark.parametrize("kind", ["python", "shell"])
+def test_task_definition_shipped_by_value_keeps_its_checksum(
+    tmp_path, monkeypatch, kind
+):
+    """A task definition hashed, then pickled by value to a process that cannot load
+    its module and submits it, has the checksum it had where it was defined"""
+    module = _by_value_module(tmp_path, monkeypatch, _TASK_BY_VALUE_SOURCE)
+    task = module.Scale(x=2) if kind == "python" else module.Count(in_file="a")
+    expected = task._checksum
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        payload = cloudpickle.dumps(task)
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    result = subprocess.run(
+        [sys.executable, "-c", _CHECKSUM_IN_SUBPROCESS],
+        input=payload,
+        capture_output=True,
+        check=True,
+        cwd=str(tmp_path.parent),
+        env={**os.environ, "PYTHONHASHSEED": "random"},
+    )
+    assert result.stdout.decode().strip() == expected
+
+
+def test_by_value_function_hashed_first_keeps_its_hash_in_another_process(
+    tmp_path, monkeypatch
+):
+    """The carried encoding is checked against a code stamp that is the same in a
+    process with another string-hash seed"""
+    module = _by_value_module(tmp_path, monkeypatch)
+    for func in [*_by_value_functions(module).values(), *module.pair]:
+        expected = hash_function(func)
+        result = subprocess.run(
+            [sys.executable, "-c", _HASH_IN_SUBPROCESS],
+            input=cloudpickle.dumps(func),
+            capture_output=True,
+            check=True,
+            cwd=str(tmp_path.parent),
+            env={**os.environ, "PYTHONHASHSEED": "random"},
+        )
+        assert result.stdout.decode().strip() == expected
