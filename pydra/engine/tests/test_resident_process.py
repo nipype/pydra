@@ -123,11 +123,12 @@ def _record_stop(monkeypatch):
 
 
 # SIGTERM, ignored for term_timeout (0.5 s), then SIGKILL, after which every member is
-# gone before kill_timeout (10 s) runs out
+# gone before kill_timeout (10 s) runs out (POSIX only: Windows has no SIGKILL, and
+# the tests that use this skip there)
 ESCALATED = [
     ("signal", signal.SIGTERM),
     ("wait", 0.5, False),
-    ("signal", signal.SIGKILL),
+    ("signal", getattr(signal, "SIGKILL", None)),
     ("wait", 10, True),
 ]
 
