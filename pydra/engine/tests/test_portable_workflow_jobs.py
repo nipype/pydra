@@ -518,10 +518,12 @@ def test_absent_and_gated_jobs_take_no_lease_and_write_no_error_json(
     """Under a de-duplicating `PortableStore`, whose leases exclude other takers, an
     element completed absent and one gated off take no lease, publish nothing and write
     no ``_error.json``, though ``Job._may_record_error`` would allow one in a work
-    directory"""
+    directory; nor are they looked up before dispatch and marked ``looked_up``"""
     store = make(tmp_path, dedupe=True)
     acquired = spy(monkeypatch, store, "acquire")
     published = spy(monkeypatch, store, "publish")
+    found = spy(monkeypatch, store, "find")
+    present = spy(monkeypatch, store, "present")
     with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
         runner = runner_for(store, sub, AbsentAndGated(x=-1))
         rounds = drive_with_run(runner)
@@ -537,5 +539,8 @@ def test_absent_and_gated_jobs_take_no_lease_and_write_no_error_json(
     for job in (b, d):
         assert job.checksum not in leased and job.checksum not in keys
         assert job.attempt is None  # no attempt, so no work directory to write into
+        # never looked up before dispatch, so never marked ``looked_up``
+        assert job.looked_up is False
+        assert all(args[0] is not job for args, _ in found + present)
     assert not list(tmp_path.rglob("_error.json"))
     assert runner.entries == [] and runner.errors == []

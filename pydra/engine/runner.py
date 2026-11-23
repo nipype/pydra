@@ -1156,16 +1156,21 @@ STORE_READERS = 4
 of reads on shared storage without flooding it; an unmeasured default."""
 
 
-def find_before_dispatch(store: "ResultStore", job: Job, complete: bool) -> ty.Any:
-    """What ``store.find`` answers for ``job`` before it is leased: ``find(job)`` when
-    ``complete``, else ``find(job, probe=True)``, one existence check of the job's own
-    address before a read; None when the store cannot be read (the job is then looked up
-    under its lease)"""
+def find_before_dispatch(
+    store: "ResultStore", job: Job, lookup: bool
+) -> tuple[ty.Any, bool]:
+    """What ``store.find`` answers for ``job`` before it is leased, and whether that is the
+    complete answer of ``find(job)``: with ``lookup`` it is; otherwise the store is asked
+    ``find(job)`` only if the job's own address may hold an entry (`present`).
+    ``(None, False)`` when there is nothing at the address or the store cannot be read
+    (the job is then looked up under its lease)."""
     try:
-        return store.find(job) if complete else store.find(job, probe=True)
+        if lookup or store.present(job):
+            return store.find(job), True
+        return None, False
     except Exception as exc:
         logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
-        return None
+        return None, False
 
 
 def _check_splittable(node: str, state_key: str, value: ty.Any) -> None:
@@ -1682,9 +1687,10 @@ class GraphRunner:
         if not job.rerun and self.store.finds:
             # RFC 0002 section 3.1: the store check by ``find(job)``, before the lease;
             # an unreadable store is checked again under the lease
-            found = find_before_dispatch(self.store, job, complete=True)
+            found, _ = find_before_dispatch(self.store, job, lookup=True)
             if found is not None:
                 checked = True
+                # a workflow job's skip is ``frame.checked``, set below
                 result = job.accept_found(found)
                 if result is not None:
                     self._settle_stored(job, result, "workflow-stored")
@@ -2233,17 +2239,17 @@ class GraphRunner:
                     rest.append(job)
                     continue
                 future = self._read_pool.submit(
-                    find_before_dispatch, self.store, job, self.lookup_before_dispatch
+                    find_before_dispatch, self.store, job, True
                 )
                 self._reading[job] = future
                 if self._read_notify is not None:
                     future.add_done_callback(self._notify_read)
                 continue
             if self.store.finds:
-                found = find_before_dispatch(
+                found, complete = find_before_dispatch(
                     self.store, job, self.lookup_before_dispatch
                 )
-                result = job.accept_found(found)
+                result = job.accept_found(found, complete=complete)
             else:
                 result = self.store.read_succeeded(job.checksum, job.context, job.task)
                 if result is None and self.lookup_before_dispatch:
@@ -2282,7 +2288,8 @@ class GraphRunner:
             if not future.done():
                 continue
             del self._reading[job]
-            result = job.accept_found(future.result())
+            found, complete = future.result()
+            result = job.accept_found(found, complete=complete)
             if result is None:
                 self._checked.add(job)  # not read again if a cap holds it back
                 rest.append(job)
@@ -2474,6 +2481,7 @@ class GraphRunner:
             )
         del self._not_run[job]
         self._handed.discard(job)
+        job.looked_up = False  # its lookup before dispatch is stale: look again
         self._quiescent = False
         frame = self._frame_of.get(job)
         if (

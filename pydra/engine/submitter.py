@@ -587,10 +587,12 @@ class Submitter:
         """Whether the store serves the outer job of a call before it is leased, as
         ``ready()`` serves a job (RFC 0002 section 3.1): one existence check of its own
         address, and the entry read through the reuse hook only if there is one. A
-        `Verify` marks the job, which then runs."""
+        `Verify` marks the job, which then runs; a job given the answer of ``find(job)``
+        is marked ``looked_up`` (see `Job.looked_up`)."""
         if not self.store.finds:
             return False
-        result = job.accept_found(find_before_dispatch(self.store, job, False))
+        found, complete = find_before_dispatch(self.store, job, lookup=False)
+        result = job.accept_found(found, complete=complete)
         if result is None:
             return False
         GraphRunner._serve_stored(job, result)
