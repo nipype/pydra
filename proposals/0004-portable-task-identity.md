@@ -132,7 +132,13 @@ A shell job's record adds what it runs in, and a workflow's record what its node
   "supplied": "<checksum>"}`, and the checksum is the supplied string, as today (`task.py:482-508`).
 - **The record is RFC 0003's key record.** This proposal adds a `StoreIdentity` (0003 §4) named
   `pydra-identity@2`. Its `key(job)` returns the record carried with the job, which is computed
-  once, in the submitting process, with the checksum; a worker never recomputes it (#936). Its `check_key(checksum, key)` is true when
+  once, in the submitting process, with the checksum; a worker never recomputes it (#936). Upstream
+  #961 instead makes the function hash itself stable under by-value pickling, and both mechanisms
+  are kept. The carried record means a worker never walks code. The carried, code-stamped encoding
+  (§4.2, "pickled by value") covers the processes that do hash a function they received by value,
+  such as one that submits a task definition shipped to it. `main`'s `(module, qualname, mtime)`
+  cache key is not adopted: it gives same-line lambdas, reassigned qualnames and `functools.wraps`
+  wrappers the hash of another function. The cache stays keyed by the code object. Its `check_key(checksum, key)` is true when
   `key["scheme"]` is `pydra-identity@2` and the checksum equals the record's base checksum, followed
   by the absence suffix when the record has one. The base checksum is `key["supplied"]` for a
   supplied record and the record's digest as above otherwise. Its context and fingerprint are
@@ -322,6 +328,7 @@ This part exists. The proposal keeps it and fixes two gaps.
 | module constants, mutable globals | hashed by their value at submission (`hash.py:1459-1464`) | pass them as inputs |
 | notebooks | cells registered in `linecache` (IPython does) are walked under `ast@1` (`hash.py:1186-1191`) | — |
 | no source (REPL, `exec` without `linecache`) | bytecode tagged with the Python minor (`hash.py:1147-1150`): correct, but a miss across minors | define it in a file; or `version=` |
+| pickled by value (cloudpickle >= 3.1.3 writes `co_filename="<dynamic-code>"`; #936) | a worker never hashes it (§3.1). Elsewhere, for example a process that receives a task definition by value and submits it, the encoding is taken from one of two places. The first is the encoding carried on the function as `(code stamp, ast@1 bytes)`, set whenever it is hashed, which travels in its `__dict__` (upstream #961's idea). The stamp covers the bytecode, names, first line and constants but not the file, so a `functools.wraps` copy or a replaced `__code__` is never trusted. The second is the file of the loaded module it names, matched by name, first line and instruction positions as above. Otherwise it is bytecode tagged with the minor, when it was pickled before it was hashed and no source is reachable. Readable-source encodings do not change | hash it before pickling (`Job` pickling always does) |
 | `code_hash="function"` or `"module"` | the walk stops early, by the user's choice (`hash.py:1300-1303`) | — |
 
 Dynamic dispatch cannot be traced statically, and tracing it at run time costs too much for every
