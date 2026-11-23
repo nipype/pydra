@@ -881,7 +881,9 @@ def test_async_driver_waits_on_a_held_workflow_lease(tmp_path, monkeypatch):
 
     monkeypatch.setattr(DirectoryLease, "try_take", try_take)
     with Submitter(worker="cf", store=store) as sub:
-        holder = spawn_holder(Job(task, submitter=sub, name="main"), store, ready, gate=gate)
+        holder = spawn_holder(
+            Job(task, submitter=sub, name="main"), store, ready, gate=gate
+        )
         try:
             wait_for(ready, holder)
             result = sub(task)
