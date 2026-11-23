@@ -107,8 +107,14 @@ class PydraIdentityV1:
 class PydraIdentityV2(PydraIdentityV1):
     """``pydra-identity@2`` (RFC 0004 section 3.1): the checksum is the digest of the job's
     identity record, which is the key. The context and the fingerprint are
-    `PydraIdentityV1`'s."""
+    `PydraIdentityV1`'s. ``recorded_only`` defaults to ``pool``, the section a pool worker
+    adds to the execute context (RFC 0005 section 8)."""
 
+    recorded_only: frozenset[str] = attrs.field(
+        factory=lambda: frozenset({"pool"}),
+        converter=_fields,
+        validator=PydraIdentityV1._strings,
+    )
     name: ty.ClassVar[str] = IDENTITY_SCHEME
 
     def key(self, job: "Job") -> KeyRecord:
