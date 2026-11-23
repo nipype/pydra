@@ -40,11 +40,10 @@ def Hold(x: int, logdir: str, partners: int = 0, total: int = 0) -> int:
             if running >= partners or started == total:
                 break
             time.sleep(0.02)
-    time.sleep(0.6)
+    if partners:  # before its end is read, so a job that saw it running overlaps it
+        open(os.path.join(sync, f"end-{x}"), "w").close()
     with open(os.path.join(logdir, f"{x}.txt"), "w") as f:
         f.write(f"{t0} {time.time()}")
-    if partners:
-        open(os.path.join(sync, f"end-{x}"), "w").close()
     return x
 
 
@@ -165,9 +164,10 @@ def test_max_concurrent_caps_running_jobs(any_worker, tmp_path):
     logdir.mkdir()
     # on cf each job waits for a second one to run beside it, so the cap is reached
     # whatever the machine's speed; a serial worker has no second one to wait for
-    partners = 2 if any_worker == "cf" else 0
+    # (the cf pool is larger than the cap whatever the host)
+    partners, pool = (2, {"n_procs": 4}) if any_worker == "cf" else (0, {})
     with Submitter(
-        worker=any_worker, cache_root=tmp_path / "cache", max_concurrent=2
+        worker=any_worker, cache_root=tmp_path / "cache", max_concurrent=2, **pool
     ) as sub:
         result = sub(
             HoldMany(xs=list(range(8)), logdir=str(logdir), partners=partners, total=8)
