@@ -136,8 +136,15 @@ The coordinator
    are written as tickets settle.
 4. **Scale.** Each poll the coordinator lists its substrate's workers and starts the ones each
    class's waiting jobs want, while the substrate allows. A worker that leaves without a ready mark
-   is a failed start; the class backs off, and after ``start_failures`` failed starts in a row it is
-   broken and its jobs are held.
+   is a failed start; the class backs off. It is broken, and its jobs are held with the latest
+   start error, after ``start_failures`` failed starts in a row, or at a failed start once the
+   streak has ``start_deadline_failures`` failures and ``start_deadline_s`` has passed since its
+   first, with no worker of the class live. A streak ends when the class has no waiting jobs. A
+   ticket write that fails puts its jobs back to wait for the next write, and a queue's writes
+   failing by the same rule break its class too; a job its codec cannot encode is ``Failed`` on its
+   own. ``WarmPool.release_hold``, or a ``retry`` of a held job, lifts the break with a fresh
+   streak. Each failed start, listing, write or encoding, and each broken or released class, is a
+   pool event: a ``pydra.pool`` log record whose ``event`` attribute names it.
 5. **Settle.** Each poll it lists ``settled/`` of each queue and reads a ticket's outcomes only
    when its count moved, reporting each job's newest outcome: a ``done`` job's result is read back
    from the store.

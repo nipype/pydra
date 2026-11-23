@@ -96,8 +96,12 @@ For Slurm, a ``cuda`` class becomes ``sbatch --gres=gpu:<gpu_type>:<gpus>``, plu
 that requires one names it there). A class that sets an option the substrate sets itself (``gres``, ``cpus-per-task``, ``mem``, ``time``, ``job-name``,
 ``output`` and the others listed in its docstring) cannot start. Slurm gives each worker its GPUs
 and sets ``CUDA_VISIBLE_DEVICES``; a worker that finds hardware other than its class names (an
-``a100`` class granted an H100) refuses to start, and after ``FaultBudgets.start_failures`` failed
-starts the class is broken and its jobs are reported not run, never failed.
+``a100`` class granted an H100) refuses to start. A class is broken, and its jobs are reported not
+run (held, never failed) with the latest start error, after ``FaultBudgets.start_failures`` failed
+starts, or at a failed start once ``PoolSettings.start_deadline_failures`` starts have failed in a
+row over ``PoolSettings.start_deadline_s`` with no worker of the class ready or starting, whichever
+comes first. ``WarmPool.release_hold``, or a ``retry`` of a held job, gives the class a fresh
+attempt.
 
 Classes may also be read from a TOML, JSON or YAML file with
 :meth:`~pydra.workers.pool.classes.WorkerClass.load`.
@@ -107,8 +111,9 @@ Run the workflow
 ----------------
 
 The pool directory, the store and the module that defines the tasks and the provider must be on
-storage that every node sees. Start the run from a node that can call ``sbatch`` (a compute node of
-an allocation, not a login node):
+storage that every node sees; ``SlurmSubstrate`` refuses a pool under ``/tmp``, ``/var/tmp``,
+``/dev/shm`` or ``$TMPDIR``, or on a memory filesystem, when the pool is opened. Start the run from
+a node that can call ``sbatch`` (a compute node of an allocation, not a login node):
 
 .. code-block:: python
 
