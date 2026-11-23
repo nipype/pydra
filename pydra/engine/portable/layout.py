@@ -31,6 +31,7 @@ __all__ = [
     "LayoutHeader",
     "open_layout",
     "read_header",
+    "check_layout_names",
     "cdir_for",
     "shard_for",
 ]
@@ -47,6 +48,11 @@ _CDIR_RAW = re.compile(r"[a-z0-9][a-z0-9_-]{0,199}")
 _FORMAT_RE = re.compile(r"pydra-store@(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 _HEX2 = re.compile(r"[0-9a-f]{2}")
 _TEMP_RE = re.compile(r"\.pydra-store\.[0-9a-f]{32}\.tmp")
+DEFAULT_DIRS: ty.Mapping[str, ty.Any] = {
+    "staging": "staging",
+    "quarantine": "quarantine",
+    "sidecars": {},
+}
 
 
 class StoreLayoutUnknown(StoreUnavailable):
@@ -134,11 +140,7 @@ class LayoutHeader:
                 "recorded_only": sorted(identity.recorded_only),
             },
             shard=shard,
-            dirs=dict(
-                dirs
-                if dirs is not None
-                else {"staging": "staging", "quarantine": "quarantine", "sidecars": {}}
-            ),
+            dirs=dict(dirs if dirs is not None else {**DEFAULT_DIRS, "sidecars": {}}),
             modes={
                 "file": _mode(policy.file_mode),
                 "entry": _mode(policy.entry_mode),
@@ -426,6 +428,69 @@ def open_layout(
         if made:
             return expected
     raise StoreUnavailable(f"could not settle the header of {root.path}")
+
+
+SHARD_RULES = ("sha256-2", "prefix2")
+RESERVED_NAMES = frozenset({"leases", "work", "audit", HEADER_NAME})
+"""Names under the root that the store owns whatever the header says"""
+
+
+def _component(name: ty.Any) -> bool:
+    return (
+        isinstance(name, str)
+        and name not in ("", ".", "..")
+        and "/" not in name
+        and "\\" not in name
+        and "\0" not in name
+    )
+
+
+def check_layout_names(dirs: ty.Any, entries: str, shard: ty.Any) -> None:
+    """Refuse a ``dirs`` or ``shard`` under which ``collect`` or a writer could reach what is
+    not theirs: ``staging``, ``quarantine`` and the first component of each sidecar
+    directory must be single path components (a sidecar a relative path of them), staging
+    and quarantine must differ and no sidecar may start at either, and none may be
+    ``entries``, ``leases``, ``work``, ``audit``, the header or a header temporary; ``shard``
+    must be a known rule. A header can be written by anyone who can write the root
+    (RFC 0003 section 6.4), so these are checked wherever a store takes them from one.
+
+    Raises
+    ------
+    StoreLayoutMismatch
+        ``key`` is ``"dirs"`` or ``"shard"``.
+    """
+    if shard not in SHARD_RULES:
+        raise StoreLayoutMismatch(
+            "shard", f"the shard rule {shard!r} is not one of {SHARD_RULES}"
+        )
+
+    def refuse(why: str) -> ty.NoReturn:
+        raise StoreLayoutMismatch("dirs", f"the layout's dirs {dirs!r}: {why}")
+
+    if not isinstance(dirs, ty.Mapping):
+        refuse("not a mapping")
+    staging, quarantine = dirs.get("staging"), dirs.get("quarantine")
+    for key, name in (("staging", staging), ("quarantine", quarantine)):
+        if not _component(name):
+            refuse(f"{key} {name!r} is not a single path component")
+    if staging == quarantine:
+        refuse("staging and quarantine are one directory")
+    sidecars = dirs.get("sidecars") or {}
+    if not isinstance(sidecars, ty.Mapping):
+        refuse("sidecars is not a mapping")
+    tops = {staging, quarantine}
+    for name, relative in sidecars.items():
+        parts = (
+            [p for p in relative.split("/") if p] if isinstance(relative, str) else []
+        )
+        if not parts or not all(_component(p) for p in parts):
+            refuse(f"the sidecar {name!r} at {relative!r} is not a path below the root")
+        if parts[0] in (staging, quarantine):
+            refuse(f"the sidecar {name!r} is inside {parts[0]!r}")
+        tops.add(parts[0])
+    for top in tops:
+        if top == entries or top in RESERVED_NAMES or _TEMP_RE.fullmatch(top):
+            refuse(f"{top!r} is a name the store owns")
 
 
 def cdir_for(checksum: str) -> str:

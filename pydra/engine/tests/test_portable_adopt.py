@@ -385,3 +385,280 @@ def test_cli_store_adopt(tmp_path):
     assert (tmp_path / HEADER_NAME).exists()
     assert "1 checked" in result.output
     assert isinstance(open_store(tmp_path).find(job_of(entry)), Hit)
+
+
+# -- fix round 1 -------------------------------------------------------------------------
+
+
+def dirs_with(**kw):
+    return {**DIRS, **kw}
+
+
+@pytest.mark.parametrize(
+    "dirs",
+    [
+        dirs_with(quarantine=NEW),  # the entries directory
+        dirs_with(staging=NEW),
+        dirs_with(staging=tree.QUARANTINE),  # staging and quarantine one directory
+        dirs_with(quarantine="leases"),
+        dirs_with(staging="work"),
+        dirs_with(quarantine="audit"),
+        dirs_with(staging=HEADER_NAME),
+        dirs_with(quarantine=".pydra-store." + "0" * 32 + ".tmp"),
+        dirs_with(sidecars={"provenance": f"{tree.QUARANTINE}/x@1"}),
+        dirs_with(sidecars={"provenance": f"{NEW}/x@1"}),
+        dirs_with(sidecars={"provenance": "../outside"}),
+        dirs_with(staging="a/b"),
+    ],
+)
+def test_adopt_refuses_unsafe_dirs(tmp_path, dirs):
+    tree.build_tree(tmp_path, n=1)
+    unsafe = attrs.evolve(header(), dirs=dirs)
+    with pytest.raises(AdoptRefused):
+        do_adopt(tmp_path, header=unsafe)
+    assert (tmp_path / tree.VERSION).is_dir()
+    assert not (tmp_path / HEADER_NAME).exists()
+
+
+def test_adopt_refuses_unknown_shard(tmp_path):
+    tree.build_tree(tmp_path, n=1)
+    with pytest.raises(AdoptRefused, match="shard"):
+        do_adopt(tmp_path, header=attrs.evolve(header(), shard="sha1-3"))
+
+
+def _edit_header(root, **changes):
+    path = root / HEADER_NAME
+    doc = json.loads(path.read_bytes())
+    doc.update(changes)
+    os.chmod(path, 0o644)
+    path.write_text(json.dumps(doc))
+
+
+def test_hand_edited_header_dirs_refused(tmp_path):
+    """Probe 2: a default root whose header names the entries as its quarantine."""
+    from pydra.engine.portable.layout import StoreLayoutMismatch
+
+    PortableStore(tmp_path, trust="trusted")
+    _edit_header(
+        tmp_path,
+        dirs={"staging": "staging", "quarantine": "results@1", "sidecars": {}},
+    )
+    with pytest.raises(StoreLayoutMismatch) as err:
+        PortableStore(tmp_path, trust="trusted")
+    assert err.value.key == "dirs"
+    assert (tmp_path / "results@1").is_dir()
+
+
+def test_adopted_quarantine_as_entries_cannot_collect_store(tmp_path):
+    """Probe 1: the store never opens such a header, so collect cannot sweep the entries."""
+    from pydra.engine.portable.layout import StoreLayoutMismatch
+
+    entries = tree.build_tree(tmp_path)
+    do_adopt(tmp_path)
+    _edit_header(tmp_path, dirs=dirs_with(quarantine=NEW))
+    policy = attrs.evolve(POLICY, ages=StoreAges(quarantine=0.01))
+    with pytest.raises(StoreLayoutMismatch):
+        open_store(tmp_path, policy=policy)
+    assert all(os.path.isdir(e.path(tmp_path, NEW)) for e in entries)
+
+
+def test_hand_edited_header_shard_refused(tmp_path):
+    from pydra.engine.portable.layout import StoreLayoutMismatch
+
+    PortableStore(tmp_path, trust="trusted")
+    _edit_header(tmp_path, shard="sha1-3")
+    with pytest.raises(StoreLayoutMismatch) as err:
+        PortableStore(tmp_path, trust="trusted")
+    assert err.value.key == "shard"
+
+
+@pytest.mark.parametrize("old", [tree.STAGING, tree.QUARANTINE, f"{tree.VERSION}/aa"])
+def test_adopt_refuses_old_entries_that_is_a_side_dir_or_path(tmp_path, old):
+    tree.build_tree(tmp_path, n=1)
+    with pytest.raises(AdoptRefused):
+        adopt(
+            tmp_path,
+            old_entries=old,
+            header=header(),
+            identity=ToyIdentity(),
+            entry_format=ToyFormat(),
+            check="all",
+        )
+    assert not (tmp_path / HEADER_NAME).exists()
+    assert not (tmp_path / NEW).exists()
+
+
+def test_adopt_refuses_a_tree_with_no_entry(tmp_path):
+    tree.prepare_root(tmp_path)
+    for name in ("not-a-store", "aa"):
+        os.makedirs(tmp_path / "stuff@1" / name, exist_ok=True)
+    os.chmod(tmp_path / "stuff@1", tree.CONTAINER_MODE)
+    kw = dict(header=header(), identity=ToyIdentity(), entry_format=ToyFormat())
+    with pytest.raises(AdoptRefused, match="no entry"):
+        adopt(tmp_path, old_entries="stuff@1", **kw)
+    assert (tmp_path / "stuff@1").is_dir()
+    report = adopt(tmp_path, old_entries="stuff@1", allow_empty=True, **kw)
+    assert report.checked == 0
+    assert (tmp_path / HEADER_NAME).exists()
+
+
+def test_side_mode_mismatch_refused(tmp_path):
+    tree.build_tree(tmp_path, n=1)
+    os.chmod(tmp_path / tree.QUARANTINE, 0o2750)
+    with pytest.raises(AdoptRefused, match="side"):
+        do_adopt(tmp_path)
+    assert (tmp_path / tree.VERSION).is_dir()
+
+
+def test_file_mode_mismatch_refused(tmp_path):
+    entry = tree.build_tree(tmp_path, n=1)[0]
+    path = entry.path(tmp_path)
+    os.chmod(path, 0o2750)
+    os.chmod(os.path.join(path, "context.json"), 0o400)
+    os.chmod(path, tree.SEALED_MODE)
+    with pytest.raises(AdoptRefused, match="'file'"):
+        do_adopt(tmp_path)
+    assert (tmp_path / tree.VERSION).is_dir()
+
+
+def test_symlink_member_refused(tmp_path):
+    entry = tree.build_tree(tmp_path, n=1)[0]
+    path = entry.path(tmp_path)
+    os.chmod(path, 0o2750)
+    os.symlink("context.json", os.path.join(path, "extra"))
+    os.chmod(path, tree.SEALED_MODE)
+    with pytest.raises(AdoptRefused, match="symlink"):
+        do_adopt(tmp_path)
+
+
+def test_existing_entries_refused(tmp_path):
+    tree.build_tree(tmp_path, n=1)
+    os.mkdir(tmp_path / NEW)
+    with pytest.raises(AdoptRefused, match=NEW):
+        do_adopt(tmp_path)
+    assert (tmp_path / tree.VERSION).is_dir()
+    assert not (tmp_path / HEADER_NAME).exists()
+
+
+def test_interrupted_adopt_says_how_to_recover(tmp_path):
+    tree.build_tree(tmp_path, n=1)
+    os.rename(tmp_path / tree.VERSION, tmp_path / NEW)  # renamed, then killed
+    with pytest.raises(AdoptRefused, match="rename .*back"):
+        do_adopt(tmp_path)
+
+
+def test_rename_undone_when_header_write_fails(tmp_path, monkeypatch):
+    from pydra.engine.portable import adopt as adopt_mod
+
+    tree.build_tree(tmp_path, n=1)
+
+    def fail(*args, **kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(adopt_mod, "open_layout", fail)
+    with pytest.raises(OSError, match="disk full"):
+        do_adopt(tmp_path)
+    assert (tmp_path / tree.VERSION).is_dir()
+    assert not (tmp_path / NEW).exists()
+
+
+def test_rename_kept_when_header_published_before_error(tmp_path, monkeypatch):
+    from pydra.engine.portable import adopt as adopt_mod
+
+    entry = tree.build_tree(tmp_path, n=1)[0]
+    real = adopt_mod.open_layout
+
+    def publish_then_fail(*args, **kw):
+        real(*args, **kw)
+        raise OSError("the temporary could not be removed")
+
+    monkeypatch.setattr(adopt_mod, "open_layout", publish_then_fail)
+    report = do_adopt(tmp_path)
+    assert report.header_written
+    assert not (tmp_path / tree.VERSION).exists()
+    assert isinstance(open_store(tmp_path).find(job_of(entry)), Hit)
+
+
+def test_explicit_shard_or_dirs_disagreeing_with_header_refused(tmp_path):
+    from pydra.engine.portable.layout import StoreLayoutMismatch
+
+    tree.build_tree(tmp_path, n=1)
+    do_adopt(tmp_path)
+    with pytest.raises(StoreLayoutMismatch) as err:
+        open_store(tmp_path, shard="sha256-2")
+    assert err.value.key == "shard"
+    with pytest.raises(StoreLayoutMismatch) as err:
+        open_store(
+            tmp_path,
+            dirs={"staging": "staging", "quarantine": "quarantine", "sidecars": {}},
+        )
+    assert err.value.key == "dirs"
+
+
+def test_adopted_store_pickles(tmp_path):
+    import cloudpickle
+
+    entry = tree.build_tree(tmp_path, n=1)[0]
+    do_adopt(tmp_path)
+    store = cloudpickle.loads(cloudpickle.dumps(open_store(tmp_path)))
+    assert store.header.shard == "prefix2"
+    assert store.header.dirs == DIRS
+    assert isinstance(store.find(job_of(entry)), Hit)
+
+
+def test_check_none_reads_nothing(tmp_path):
+    tree.build_tree(tmp_path, n=1)
+    tree.write_entry(tmp_path, 1, bad_key=True)
+    report = do_adopt(tmp_path, check="none")
+    assert report.checked == 0
+    assert report.misfiled == []
+
+
+def test_check_sample_reads_at_most_sample(tmp_path, monkeypatch):
+    from pydra.engine.portable import adopt as adopt_mod
+
+    monkeypatch.setattr(adopt_mod, "SAMPLE", 2)
+    tree.build_tree(tmp_path, n=4)
+    assert do_adopt(tmp_path, check="sample").checked == 2
+
+
+def test_unreadable_entry_reported_misfiled(tmp_path):
+    good = tree.build_tree(tmp_path, n=1)[0]
+    path = good.path(tmp_path)
+    os.chmod(path, 0o2750)
+    with open(os.path.join(path, "stray.txt"), "wb") as f:
+        f.write(b"x")
+    os.chmod(os.path.join(path, "stray.txt"), tree.FILE_MODE)
+    os.chmod(path, tree.SEALED_MODE)
+    report = do_adopt(tmp_path, check="all")  # EntryFormatUnknown, not a traceback
+    assert report.misfiled == [
+        os.path.relpath(good.path(tmp_path, NEW), tmp_path / NEW)
+    ]
+
+
+def test_cli_store_adopt_exits_nonzero_when_misfiled(tmp_path):
+    tree.prepare_root(tmp_path)
+    tree.write_entry(tmp_path, 0, bad_key=True)
+    spec = tmp_path.parent / f"{tmp_path.name}-header.json"
+    spec.write_bytes(header().to_json())
+    result = CliRunner().invoke(
+        cli,
+        [
+            "store",
+            "adopt",
+            str(tmp_path),
+            "--from",
+            tree.VERSION,
+            "--header",
+            str(spec),
+            "--identity",
+            f"{__name__}.ToyIdentity",
+            "--entry-format",
+            f"{__name__}.ToyFormat",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "does not verify" in result.output
+    assert (
+        tmp_path / HEADER_NAME
+    ).exists()  # adopted; the entry is quarantined on read

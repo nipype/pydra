@@ -58,6 +58,8 @@ from pydra.engine.portable.layout import (
     StoreLayoutMismatch,
     StoreLayoutUnknown,
     cdir_for,
+    DEFAULT_DIRS,
+    check_layout_names,
     open_layout,
     read_header,
     shard_for,
@@ -458,6 +460,8 @@ class PortableStore:
             reuse=reuse,
             on_commit=on_commit,
             lease_settings=lease_settings,
+            shard=shard,
+            dirs=dirs,
         )
         self.path = os.path.abspath(os.fspath(root))
         self.trust = trust
@@ -480,14 +484,17 @@ class PortableStore:
                 if stored is not None:
                     shard = stored.shard if shard is None else shard
                     dirs = stored.dirs if dirs is None else dirs
-            self._args.update(shard=shard, dirs=dirs)
+            shard = "sha256-2" if shard is None else shard
+            check_layout_names(
+                DEFAULT_DIRS if dirs is None else dirs, entry_format.entries, shard
+            )
             expected = LayoutHeader.for_store(
                 identity,
                 policy,
                 pickle=pickle,
                 entries=entry_format.entries,
                 entry_format=entry_format.name,
-                shard="sha256-2" if shard is None else shard,
+                shard=shard,
                 dirs=dirs,
             )
             self.header = open_layout(handle, expected, create=True)

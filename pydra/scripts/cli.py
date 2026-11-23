@@ -291,13 +291,15 @@ def _hook(name: str):
     "--identity",
     default="pydra.engine.portable.identity.PydraIdentityV2",
     show_default=True,
-    help="The importable StoreIdentity (a class is instantiated with no arguments)",
+    help="The importable StoreIdentity; a class is instantiated with no arguments, so "
+    "one that takes parameters is given as a module-level instance",
 )
 @click.option(
     "--entry-format",
     default="pydra.engine.portable.entry.PydraEntryV1",
     show_default=True,
-    help="The importable EntryFormat (a class is instantiated with no arguments)",
+    help="The importable EntryFormat; a class is instantiated with no arguments, so "
+    "one that takes parameters is given as a module-level instance",
 )
 @click.option(
     "--check",
@@ -315,7 +317,8 @@ def _hook(name: str):
 )
 def store_adopt(root, old_entries, header_spec, identity, entry_format, check, trust):
     """Make the store at ROOT, already laid out like a portable store, a portable store
-    without rewriting an entry (RFC 0003 section 8.2). Stop its writers first."""
+    without rewriting an entry (RFC 0003 section 8.2). Stop its writers first. Exits 1
+    when entries were read back and do not verify (the root is adopted)."""
     from pydra.engine.portable.adopt import AdoptRefused, adopt
     from pydra.engine.portable.layout import LayoutHeader, StoreLayoutUnknown
 
@@ -342,6 +345,8 @@ def store_adopt(root, old_entries, header_spec, identity, entry_format, check, t
     for rel in report.misfiled:
         click.echo(f"does not verify: {rel}")
     click.echo(f"{report.checked} checked, {len(report.misfiled)} misfiled")
+    if report.misfiled:
+        sys.exit(1)  # adopted; each misfiled entry is quarantined when it is read
 
 
 @cli.group(context_settings=CONTEXT_SETTINGS)

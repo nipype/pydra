@@ -19,16 +19,25 @@ import typing as ty
 import attrs
 
 from pydra.engine.portable.entry import EntryFormat, PydraEntryV1
-from pydra.engine.portable.errors import CorruptEntry
+from pydra.engine.portable.errors import (
+    CorruptEntry,
+    EntryFormatUnknown,
+    EntryNotTrusted,
+)
 from pydra.engine.portable.identity import StoreIdentity
 from pydra.engine.portable.layout import (
     _FORMAT_RE,
     FORMAT_MAJOR,
     HEADER_NAME,
+    RESERVED_NAMES,
     LayoutHeader,
+    StoreLayoutMismatch,
+    _component,
     _differing_key,
     cdir_for,
+    check_layout_names,
     open_layout,
+    read_header,
     shard_for,
 )
 from pydra.utils.storagedir import StorageDir, StorePolicy
@@ -45,6 +54,14 @@ _CDIR = re.compile(r"[a-z0-9][a-z0-9_-]{0,199}")
 _HASHED_CDIR = re.compile(r"h-[0-9a-f]{64}")
 _FINGERPRINT = re.compile(r"[0-9a-f]{64}")
 _MODE_KEYS = ("file", "entry", "sealed", "container", "side", "staging")
+_UNREADABLE = (
+    CorruptEntry,
+    EntryFormatUnknown,
+    EntryNotTrusted,
+    KeyError,
+    ValueError,
+    IndexError,
+)  # what a read back reports as misfiled
 
 
 class AdoptRefused(ValueError):
@@ -105,8 +122,19 @@ def _check_header(
     if found is None or int(found.group(1)) != FORMAT_MAJOR:
         raise AdoptRefused(f"the header's format {header.format!r} is not known")
     policy = _policy_of(header)
-    if header.shard not in ("sha256-2", "prefix2"):
-        raise AdoptRefused(f"the header's shard rule {header.shard!r} is not known")
+    try:
+        check_layout_names(header.dirs, header.entries, header.shard)
+    except StoreLayoutMismatch as err:
+        raise AdoptRefused(str(err)) from None
+    if not _component(old_entries) or old_entries in RESERVED_NAMES:
+        raise AdoptRefused(
+            f"{old_entries!r} is not the name of a version directory under the root"
+        )
+    if old_entries in {parts[0] for parts in _side_paths(header)}:
+        raise AdoptRefused(
+            f"{old_entries!r} is one of the directories the header names in dirs, not a "
+            "version directory"
+        )
     expected = LayoutHeader.for_store(
         identity,
         policy,
@@ -128,9 +156,6 @@ def _check_header(
             "version directory to a new name, which fences the writers that predate the "
             "header (RFC 0003 section 8.2)"
         )
-    for name in ("staging", "quarantine"):
-        if not isinstance(header.dirs.get(name), str):
-            raise AdoptRefused(f"the header's dirs lack {name!r}")
     return policy
 
 
@@ -208,9 +233,10 @@ def _survey(
     entry_format: EntryFormat,
     check: str,
     trust: ty.Any,
-) -> tuple[int, list[str]]:
+) -> tuple[int, int, list[str]]:
     """Check the modes and the shard of the entries ``check`` covers (at least the first),
-    and read those it covers back. Nothing is changed."""
+    and read those it covers back: ``(entries seen, entries read, misfiled)``. Nothing is
+    changed."""
     _expect(
         os.path.join(root.path, old_entries),
         "container",
@@ -250,6 +276,10 @@ def _survey(
                     sealed,
                 )
                 for e in entry.scandir():
+                    if e.is_symlink():
+                        raise AdoptRefused(
+                            f"{e.path} is a symlink, which no entry may hold"
+                        )
                     if e.is_file():
                         _expect(
                             e.path,
@@ -259,7 +289,7 @@ def _survey(
                         )
                 try:
                     checksum = _checksum_of(entry_format, entry, cdir)
-                except CorruptEntry as err:
+                except _UNREADABLE as err:
                     if check != "none":
                         checked += 1
                         misfiled.append(rel)
@@ -290,10 +320,10 @@ def _survey(
                         raise CorruptEntry(
                             "the key record does not digest to the checksum"
                         )
-                except CorruptEntry as err:
+                except _UNREADABLE as err:
                     misfiled.append(rel)
                     logger.warning("%s does not verify: %s", rel, err)
-    return checked, misfiled
+    return seen, checked, misfiled
 
 
 def adopt(
@@ -305,6 +335,7 @@ def adopt(
     entry_format: EntryFormat,
     check: ty.Literal["none", "sample", "all"] = "sample",
     trust: ty.Literal["shared", "private", "trusted"] = "trusted",
+    allow_empty: bool = False,
 ) -> AdoptReport:
     """Make the store at ``root`` a `PortableStore` without rewriting an entry (RFC 0003
     section 8.2). Stop the writers that predate the header first.
@@ -325,7 +356,14 @@ def adopt(
     ``<root>/<old_entries>`` is then renamed to ``header.entries`` in one directory rename,
     and the header written through `open_layout`. No entry is rewritten, moved or resealed;
     an entry that failed the read back is reported in ``misfiled`` and quarantined by the
-    store when it reads it. If the header cannot be written, the rename is undone.
+    store when it reads it. If the header cannot be written, the rename is undone, unless
+    the header was published before the error. A process killed between the rename and the
+    header leaves ``header.entries`` and no header; ``adopt`` then refuses and says so, and
+    renaming ``header.entries`` back to ``old_entries`` lets it run again.
+
+    The header's ``dirs`` and ``shard`` pass `check_layout_names`, and ``old_entries`` must
+    be a single path component that is none of the directories the header names. A tree in
+    which no entry matches the layout's names is refused unless ``allow_empty``.
 
     The header's ``identity`` names ``identity``, and it alone says how the root's entries
     are keyed. A ``.pydra-identity`` marker, which only a `PickleStore` root reads and
@@ -348,13 +386,16 @@ def adopt(
     check : {"none", "sample", "all"}
     trust : {"shared", "private", "trusted"}
         What the caller asserts about who can write the root (RFC 0003 section 6.4).
+    allow_empty : bool
+        Adopt a version directory that holds no entry.
 
     Raises
     ------
     AdoptRefused
-        The root has a header, ``old_entries`` is absent, ``header.entries`` exists, or the
-        header does not match the identity, the entry format or the tree. Nothing was
-        renamed or written.
+        The root has a header, ``old_entries`` is absent or not a version directory,
+        ``header.entries`` exists, the tree holds no entry, or the header is unsafe or does
+        not match the identity, the entry format or the tree. Nothing was renamed or
+        written.
     """
     if check not in ("none", "sample", "all"):
         raise ValueError(f"check must be 'none', 'sample' or 'all', got {check!r}")
@@ -376,6 +417,16 @@ def adopt(
             if not stat.S_ISDIR(handle.lstat(old_entries).st_mode):
                 raise FileNotFoundError(old_entries)
         except FileNotFoundError:
+            try:
+                handle.lstat(header.entries)
+            except FileNotFoundError:
+                pass
+            else:
+                raise AdoptRefused(
+                    f"{handle.path} holds {header.entries!r} and no {old_entries!r} or "
+                    f"{HEADER_NAME}: an adopt was interrupted after its rename; rename "
+                    f"{header.entries!r} back to {old_entries!r} and adopt again"
+                ) from None
             raise AdoptRefused(
                 f"{handle.path} has no version directory {old_entries!r} to adopt"
             ) from None
@@ -388,7 +439,7 @@ def adopt(
                 f"{handle.path} already holds {header.entries!r}, the header's entries"
             )
         _check_sides(handle, header, policy)
-        checked, misfiled = _survey(
+        seen, checked, misfiled = _survey(
             handle,
             old_entries,
             header,
@@ -398,13 +449,25 @@ def adopt(
             check,
             trust,
         )
+        if not seen and not allow_empty:
+            raise AdoptRefused(
+                f"{old_entries!r} holds no entry named as the layout names them "
+                "(<shard>/<checksum>/<fingerprint>); pass allow_empty to adopt it anyway"
+            )
         handle.rename(old_entries, handle, header.entries)
         try:
             open_layout(handle, header, create=True, existing=True)
-        except BaseException:
-            with contextlib.suppress(OSError):
-                handle.rename(header.entries, handle, old_entries)
-            raise
+        except BaseException as err:
+            published = None
+            with contextlib.suppress(Exception):
+                published = read_header(handle)
+            if published != header:
+                with contextlib.suppress(OSError):
+                    handle.rename(header.entries, handle, old_entries)
+                raise
+            if not isinstance(err, Exception):
+                raise
+            logger.warning("the header was written; then: %r", err)
         handle.sync()
     return AdoptReport(
         renamed=(old_entries, header.entries),
