@@ -34,10 +34,12 @@ class PlanNode:
     expected_hits : int
         How many unfinished elements with a checksum have a stored result to reuse, as the
         store answers (``expected_hits`` or ``recorded``; 0 for a store with neither)
-    state : "pending" | "waiting" | "deferred" | "absent"
+    state : "pending" | "waiting" | "deferred" | "absent" | "looping"
         Released or releasable; a workflow job whose lease another process holds; not
         known yet (a workflow job not expanded, a split over an upstream output); or absent
         as a whole (RFC 0002 section 2.3(a)), with no elements
+        ``looping``: an entered loop (RFC 0002 section 2.3(d)) and its live rounds, whose
+        total is never predicted (``elements`` is None)
     gated : int
         Elements a gate switches off (RFC 0002 section 2.3(b)), counted from the
         predicate's result; they are not looked up in the store, routed or placed
@@ -52,6 +54,10 @@ class PlanNode:
     known_elements : int, optional
         How many elements are known now: ``elements`` when known; on a partial node, those
         of the blocks expanded so far; None when nothing can be read yet
+    rounds : int, optional
+        For a ``looping`` entry, the rounds of the loop that are done
+    max_rounds : int, optional
+        For a ``looping`` entry, the loop's ``max_rounds``, None if it has none
     """
 
     path: str
@@ -59,12 +65,14 @@ class PlanNode:
     resources: "ComputeResources | None"
     worker: str | None
     expected_hits: int
-    state: ty.Literal["pending", "waiting", "deferred", "absent"]
+    state: ty.Literal["pending", "waiting", "deferred", "absent", "looping"]
     gated: int = 0
     absent: int = 0
     placement: object | None = None
     provisional: bool = False
     known_elements: int | None = None
+    rounds: int | None = None
+    max_rounds: int | None = None
 
 
 @attrs.frozen
@@ -198,11 +206,31 @@ def build_plan(
         if frame.state == "leasing":
             nodes.append(_leasing(frame))
         elif frame.state == "expanding" and frame.graph is not None:
+            if frame.loop is not None:
+                nodes.append(_looping(frame))
             for node in frame.graph.sorted_nodes:
                 entry = _node(runner, frame, node, executors, listed)
                 if entry is not None:
                     nodes.append(entry)
     return Plan(tuple(nodes))
+
+
+def _looping(frame: "_Frame") -> PlanNode:
+    """The entry of an entered loop: the rounds done so far, never a predicted total;
+    no round is instantiated"""
+    from pydra.engine.loop import loop_label
+
+    loop = frame.loop
+    return PlanNode(
+        path=loop_label(frame),
+        elements=None,
+        resources=frame.job.resources if frame.job is not None else None,
+        worker=None,
+        expected_hits=0,
+        state="looping",
+        rounds=loop.rounds - (0 if loop.last.done else 1),
+        max_rounds=loop.spec.max_rounds,
+    )
 
 
 def _leasing(frame: "_Frame") -> PlanNode:

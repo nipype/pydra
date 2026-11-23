@@ -570,3 +570,40 @@ def test_plan_counts_the_jobs_a_store_reports_recorded(submitter, tmp_path):
     assert by_path(runner.plan())["A"].expected_hits == 1
     other = GraphRunner(Chain(x=3), store, on_error="raise_at_end", submitter=submitter)
     assert by_path(other.plan())["A"].expected_hits == 0
+
+
+# -- loops (RFC 0002 section 2.3(d), R11) ------------------------------------------------------------
+
+
+@python.define(outputs=["n", "done"])
+def Step(n: int, stop: int) -> tuple[int, bool]:
+    return n + 1, n + 1 >= stop
+
+
+@workflow.define(outputs=["n"])
+def LoopThen(stop: int) -> int:
+    loop = workflow.add(workflow.loop(Step, max_rounds=7)(n=0, stop=stop), name="count")
+    after = workflow.add(FunAddVar(a=loop.n, b=1), name="after")
+    return after.out
+
+
+def test_plan_loop_deferred_then_looping(submitter):
+    runner = runner_for(submitter, LoopThen(stop=3))
+    assert by_path(runner.plan())["count"].state == "deferred"
+
+    (r0,) = runner.ready().dispatch
+    plan = runner.plan()
+    assert [n.path for n in plan.nodes] == ["after", "count", "count/r0"]
+    loop = by_path(plan)["count"]
+    assert (loop.state, loop.rounds, loop.max_rounds) == ("looping", 0, 7)
+    assert (loop.elements, loop.known_elements) == (None, None)
+
+    runner.complete(r0, r0.run())
+    (frame,) = [f for f in runner._frames if f.loop is not None]
+    plan = runner.plan()  # never adds a round, and never predicts a total
+    assert [n.path for n in plan.nodes] == ["after", "count"]
+    assert by_path(plan)["count"].rounds == 1
+    assert (frame.loop.rounds, frame.loop.stopped) == (1, None)
+    assert [n.name for n in frame.graph.nodes] == ["r0"]
+    (r1,) = runner.ready().dispatch
+    assert r1.name == "r1"

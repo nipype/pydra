@@ -38,6 +38,7 @@ from pydra.engine.absent import (
     task_definition,
 )
 from pydra.engine.lease import LeaseLost
+from pydra.engine.loop import MAX_ADVANCES, LoopState, advance, loop_label
 from pydra.engine.partial import (
     ALL,
     GroupRead,
@@ -1289,6 +1290,26 @@ class AbsentNode:
     inherits: str | None
 
 
+@attrs.frozen
+class LoopClosed:
+    """A loop that ended (RFC 0002 section 2.3(d)), reported once
+
+    Attributes
+    ----------
+    loop : str
+        The path of the loop's job, its element index or key included (``"refine[3]"``)
+    rounds : int
+        The rounds instantiated, less a last round that completed absent by propagation
+    stopped : str
+        ``"until"``, ``"max-rounds"``, ``"cycle"``, ``"absent"`` or ``"error"`` (a round
+        failed, or ``until`` was not a ``bool`` or an ``Absent``)
+    """
+
+    loop: str
+    rounds: int
+    stopped: ty.Literal["until", "max-rounds", "cycle", "absent", "error"]
+
+
 def node_label(node: "NodeExecution") -> str:
     """The name of a node with the path of the nested workflows that hold it"""
     return "/".join((*node.path, node.name))
@@ -1309,6 +1330,8 @@ class Round:
         The nodes found absent as a whole since the last call, each reported once
     unrunnable : list[Unrunnable]
         The elements marked unrunnable since the last call, each reported once
+    loops : list[LoopClosed]
+        The loops that ended since the last call, each reported once
     retry_after : float | None
         Seconds until a waiting workflow lease is tried again, ``None`` if none waits
     """
@@ -1317,6 +1340,7 @@ class Round:
     settled: list[Settled] = attrs.field(factory=list)
     unrunnable: list[Unrunnable] = attrs.field(factory=list)
     absent_nodes: list[AbsentNode] = attrs.field(factory=list)
+    loops: list[LoopClosed] = attrs.field(factory=list)
     retry_after: float | None = None
 
 
@@ -1344,10 +1368,9 @@ class _Frame:
         self.retry_at: float | None = None
         self.errors: list[str] = []
         self.entries: list[JobErrorEntry] = []
-
-    @property
-    def nodes_done(self) -> bool:
-        return all(n.done for n in self.graph.nodes)
+        # the state of the loop whose rounds the runner adds to the graph, if the job
+        # is a loop (RFC 0002 section 2.3(d))
+        self.loop: "LoopState | None" = None
 
 
 class GraphRunner:
@@ -1399,6 +1422,9 @@ class GraphRunner:
     own_job : bool
         Whether the runner leases, checks and commits ``job`` (the default); False
         if the caller holds its lease and commits it, as :meth:`Job.run` does
+    max_advances : int
+        The most rounds each loop adds during one call of :meth:`ready`
+        (default `pydra.engine.loop.MAX_ADVANCES`)
     """
 
     def __init__(
@@ -1413,7 +1439,11 @@ class GraphRunner:
         submitter: "Submitter | None" = None,
         job: "Job | None" = None,
         own_job: bool = True,
+        max_advances: int = MAX_ADVANCES,
     ):
+        if max_advances < 1:
+            raise ValueError(f"max_advances must be at least 1 (got {max_advances})")
+        self.max_advances = max_advances
         self.task = task
         self.store = store
         self.on_error = on_error
@@ -1428,7 +1458,8 @@ class GraphRunner:
         self.job = job
         # the jobs handed out or completed by the runner, never considered again
         self._handed: set[Job] = TrackedSet()
-        self._done_prefix: dict[int, int] = {}
+        # per graph, the version of its node order and how many nodes lead done
+        self._done_prefix: dict[int, tuple[int, int]] = {}
         # the jobs dispatched whose outcome has not been reported
         self._in_flight: set[Job] = set()
         # the released jobs read from the store without a result to serve
@@ -1437,8 +1468,14 @@ class GraphRunner:
         # the jobs completed by the runner and the elements marked unrunnable, not yet
         # reported by ``ready``
         self._settled: list[Settled] = []
-        self._reported_unrunnable: set[tuple[int, int | None]] = set()
-        self._reported_absent_nodes: set[int] = set()
+        # keyed by node label, never by ``id(node)``: a loop releases nodes, whose ids
+        # may then be reused
+        self._reported_unrunnable: set[tuple[str, ty.Any]] = set()
+        # the loops that ended, not yet reported by ``ready``
+        self._closed_loops: list[LoopClosed] = []
+        # the loop rounds to release once ``ready`` has collected their records
+        self._to_release: list[tuple[_Frame, NodeExecution]] = []
+        self._reported_absent_nodes: set[str] = set()
         # the same-checksum table: the job handed out for each checksum until its outcome
         # is reported, the twins held behind it, and the outcome once reported
         self._first: dict[str, Job] = {}
@@ -1507,11 +1544,16 @@ class GraphRunner:
             submitter=self.submitter, path=frame.path
         )
         frame.state = "expanding"
+        spec = task._loop
+        if spec is not None:  # a loop: its graph holds r0, and grows (`advance`)
+            frame.loop = LoopState(spec, frame.graph.node("r0"))
         if frame.job is not None:
             frame.job.return_values = {
                 "workflow": frame.workflow,
                 "exec_graph": frame.graph,
             }
+            if frame.loop is not None:
+                frame.job.return_values["loop"] = frame.loop
         self._collect_resolution_errors(frame)
 
     def _enter(self, job: Job, parent: _Frame) -> None:
@@ -1640,7 +1682,7 @@ class GraphRunner:
         job = frame.job
         # an element released in this pass of ``ready`` may have failed to resolve
         self._collect_resolution_errors(frame)
-        if error is None and not frame.errors and not frame.nodes_done:
+        if error is None and not frame.errors and not self._nodes_done(frame):
             frame.state = "finished"  # interrupted: nothing is built or stored
             self._release_lease(frame)
             return
@@ -1681,8 +1723,82 @@ class GraphRunner:
     def _settle_frames(self) -> None:
         self._open = [f for f in self._open if f.state != "finished"]
         for frame in reversed(list(self._open)):
-            if frame.state == "expanding" and frame.owned and frame.nodes_done:
+            if frame.state == "expanding" and frame.loop is not None:
+                advance(self, frame)
+            if frame.state == "expanding" and frame.owned and self._nodes_done(frame):
                 self._finish(frame)
+
+    def _release_node(self, frame: _Frame, ex: NodeExecution) -> None:
+        """Drop a done node of a loop's graph that no node still to run reads: from the
+        graph and the workflow, with its jobs, their entries in the runner's tables and
+        the frame of a workflow job, so the runner holds a loop's two newest rounds
+        only. Its predecessors must have been released before it."""
+        graph = frame.graph
+        graph.remove_nodes(ex)
+        graph.remove_nodes_connections(ex)
+        frame.workflow._nodes.pop(ex.name, None)
+        self._forget_reported(ex)
+        for job in (ex._tasks or {}).values():
+            if job is not None:
+                self._release_job(job)
+        # its lazy inputs hold the node before it, and so on back to the first round
+        ex.node._task = None
+        ex._tasks = None
+
+    def _forget_reported(self, node: NodeExecution) -> None:
+        """Drop the reported records of a released node, which is never read again"""
+        label = node_label(node)
+        self._reported_absent_nodes.discard(label)
+        for index in node.unrunnable:
+            self._reported_unrunnable.discard((label, index))
+
+    def _release_job(self, job: Job) -> None:
+        """Forget a job of a released node, and the frame it has if a workflow job"""
+        self._handed.discard(job)
+        self._in_flight.discard(job)
+        self._checked.discard(job)
+        self._waiting_twins.discard(job)
+        self._not_run.pop(job, None)
+        self._frame_of.pop(job, None)
+        checksum = job.checksum
+        if checksum not in self._first and not self._twins.get(checksum):
+            self._finished.pop(checksum, None)
+        child = self._child.pop(job, None)
+        if child is not None:
+            if child.graph is not None:
+                for node in child.graph.nodes:
+                    self._forget_reported(node)
+                    for inner in (node._tasks or {}).values():
+                        if inner is not None:
+                            self._release_job(inner)
+            if child in self._frames:
+                self._frames.remove(child)
+            if child in self._open:
+                self._open.remove(child)
+            self._waiting.discard(child)
+            if child.graph is not None:
+                self._done_prefix.pop(id(child.graph), None)
+
+    def _close_loop(self, frame: _Frame, stopped: str) -> None:
+        """End a frame's loop, to be reported once in :attr:`Round.loops`"""
+        frame.loop.stopped = stopped
+        self._closed_loops.append(
+            LoopClosed(loop_label(frame), frame.loop.ran, stopped)
+        )
+
+    def _fail_loop(self, frame: _Frame, exc: BaseException) -> None:
+        """Fail a loop whose ``until`` could not be read: its job, or the run when the
+        loop is the runner's own task and the runner does not own its job"""
+        self._close_loop(frame, "error")
+        if frame.owned:
+            self._finish(frame, exc)
+            return
+        self._failed = True
+        if self._first_error is None:
+            self._first_error = exc
+        label = loop_label(frame)
+        frame.errors.append(f"Loop {label!r} errored: {exc}")
+        frame.entries.append(error_entry(label, None, exc))
 
     def _name_stopped(self, frame: _Frame) -> None:
         """Add an entry, naming the failure that stopped the workflow, for each element
@@ -1775,18 +1891,28 @@ class GraphRunner:
 
     def _progress(self) -> int:
         """The count of changes to the state a pass of :meth:`ready` reads: the jobs
-        handed out, the frames' states, the nodes' tables and modes, and a partial node's
-        blocks, groups and seal (`~pydra.engine.progress.changed`). ``ready`` repeats its
-        pass until a pass hands out a job or leaves the count unchanged."""
+        handed out, the frames' states, the loops' rounds, the nodes' tables and modes, and
+        a partial node's blocks, groups and seal (`~pydra.engine.progress.changed`).
+        ``ready`` repeats its pass until a pass hands out a job or leaves the count
+        unchanged."""
         return changes()
+
+    def _nodes_done(self, frame: _Frame) -> bool:
+        """Whether every node of ``frame`` is done and, for a loop, no round is to be added"""
+        graph = frame.graph
+        return self._done_upto(graph) == len(graph.sorted_nodes) and (
+            frame.loop is None or frame.loop.stopped is not None
+        )
 
     def _done_upto(self, graph: "DiGraph[NodeExecution]") -> int:
         """The number of leading nodes of ``graph`` (in node order) that are done"""
         nodes = graph.sorted_nodes
-        i = self._done_prefix.get(id(graph), 0)
+        version, i = self._done_prefix.get(id(graph), (None, 0))
+        if version != graph.sort_version:  # nodes were added or removed
+            i = 0
         while i < len(nodes) and nodes[i].done:
             i += 1
-        self._done_prefix[id(graph)] = i
+        self._done_prefix[id(graph)] = (graph.sort_version, i)
         return i
 
     @staticmethod
@@ -1844,8 +1970,14 @@ class GraphRunner:
         -------
         Round
             The jobs to dispatch, the jobs the runner completed itself, the elements newly
-            marked unrunnable, and the seconds until a waiting workflow lease is tried again
+            marked unrunnable, the loops that ended, and the seconds until a waiting
+            workflow lease is tried again. Each loop adds at most ``max_advances`` rounds
+            per call, so a loop replayed from the store returns to its driver between
+            them; the rounds a loop no longer needs are released at the end of the call
         """
+        for frame in self._frames:
+            if frame.loop is not None:
+                frame.loop.advanced = 0
         while True:
             before = self._progress()
             self._settle_frames()
@@ -1883,11 +2015,17 @@ class GraphRunner:
             job.attempt = uuid4().hex
         self._collect_resolution_errors()
         settled, self._settled = self._settled, []
+        loops, self._closed_loops = self._closed_loops, []
         unrunnable = self._new_unrunnable()
         absent_nodes = self._new_absent_nodes()
+        # released only now: a round's records, its child frames' included, are collected
+        # above even when the round was superseded within this call
+        releases, self._to_release = self._to_release, []
+        for frame, node in releases:
+            self._release_node(frame, node)
         retry_after = self._retry_after()
         self._quiescent = (
-            not (dispatch or settled or unrunnable or absent_nodes)
+            not (dispatch or settled or unrunnable or absent_nodes or loops)
             and retry_after is None
             and not self._in_flight
         )
@@ -1896,6 +2034,7 @@ class GraphRunner:
             settled=settled,
             unrunnable=unrunnable,
             absent_nodes=absent_nodes,
+            loops=loops,
             retry_after=retry_after,
         )
 
@@ -1975,8 +2114,9 @@ class GraphRunner:
             if frame.graph is None:
                 continue
             for node in frame.graph.nodes:
+                label = node_label(node)
                 for index, upstream in list(node.unrunnable.items()):
-                    key = (id(node), index)
+                    key = (label, index)
                     if key in self._reported_unrunnable:
                         continue
                     self._reported_unrunnable.add(key)
@@ -1996,9 +2136,10 @@ class GraphRunner:
             if frame.graph is None:
                 continue
             for node in frame.graph.sorted_nodes:
-                if node.absent is None or id(node) in self._reported_absent_nodes:
+                label = node_label(node)
+                if node.absent is None or label in self._reported_absent_nodes:
                     continue
-                self._reported_absent_nodes.add(id(node))
+                self._reported_absent_nodes.add(label)
                 inherits = None
                 if node.absent_inherits is not None:
                     inherits = node_label(frame.graph.node(node.absent_inherits))
@@ -2118,15 +2259,32 @@ class GraphRunner:
         upstream node without a state and for an input that reads the upstream whole
         (combined, or the sequence a splitter splits over).
 
+        It is valid from the job's hand-out until its outcome is reported: a loop
+        releases its older rounds (RFC 0002 section 2.3(d)).
+
         Parameters
         ----------
         job : Job
             A leaf job handed out by :meth:`ready`
+
+        Raises
+        ------
+        LookupError
+            The runner no longer holds the job
         """
         frame = self._frame_of.get(job)
         if frame is None:
             frame = self._child[job].parent if job in self._child else self._root
-        node: NodeExecution = frame.graph.node(job.name)
+        try:
+            node: NodeExecution = frame.graph.node(job.name)
+        except KeyError:
+            node = None
+        if node is None or not any(j is job for j in (node._tasks or {}).values()):
+            raise LookupError(
+                f"Job {job.name!r} (path {'/'.join(job.workflow_path) or '-'}) is no "
+                "longer held by the runner: upstream() is valid from a job's hand-out "
+                "until its outcome is reported, and a loop releases its older rounds"
+            )
         if node.is_partial:
             index = job.state_key
             split, inputs_ind = (
@@ -2192,7 +2350,7 @@ class GraphRunner:
             return None
         msg = ""
         for frame in self._frames:
-            if frame.state == "expanding" and not frame.nodes_done:
+            if frame.state == "expanding" and not self._nodes_done(frame):
                 msg += self._diagnose(frame)
         return msg or "Nothing can progress, but the run is not done"
 
@@ -2244,27 +2402,28 @@ class GraphRunner:
         root = self._root
         if root.owned:
             finished = root.state == "finished"
-        else:
-            finished = self._done_upto(root.graph) == len(root.graph.sorted_nodes)
+        else:  # an open loop is not done between a round and the next ``ready``
+            finished = self._nodes_done(root)
         if self._unreported():
             return False
         return finished or (bool(self._not_run) and self._quiescent)
 
     def _unreported(self) -> bool:
         """Whether :meth:`ready` has records it has not returned yet"""
-        if self._settled:
+        if self._settled or self._closed_loops:
             return True
         for frame in self._frames:
             if frame.graph is None:
                 continue
             for node in frame.graph.nodes:
+                label = node_label(node)
                 if any(
-                    (id(node), index) not in self._reported_unrunnable
+                    (label, index) not in self._reported_unrunnable
                     for index in node.unrunnable
                 ):
                     return True
                 if node.absent is not None and (
-                    id(node) not in self._reported_absent_nodes
+                    label not in self._reported_absent_nodes
                 ):
                     return True
         return False
