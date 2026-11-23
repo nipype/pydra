@@ -54,6 +54,15 @@ def GatedKeyed(xs: list[int]) -> list[str]:
     return g.out
 
 
+@workflow.define
+def GatedKeyedSibling(xs: list[int], tag: str = "b") -> list[str]:
+    """`GatedKeyed`'s nodes under another workflow key, so nothing is served whole"""
+    c = workflow.add(Check().split(x=xs), name="C")
+    d = workflow.add(Download(url="x").combine("C.x"), name="D", when=c.out)
+    g = workflow.add(KeyedGather(vals=d.out), name="G")
+    return g.out
+
+
 def _messages(caplog) -> list[str]:
     return [r.getMessage() for r in caplog.records if r.name == "pydra.submitter"]
 
@@ -174,9 +183,19 @@ def _suffixed(spy) -> str:
 
 def test_v2_check_key_accepts_absence_suffix(tmp_path, monkeypatch):
     """A supplied-key gather with one accepted ``Absent`` from a gate: run 1 publishes under
-    the suffixed checksum with the triples in its key, run 2 reads it with no quarantine
-    and no recompute"""
+    the suffixed checksum with the triples in its key; run 2, a sibling workflow with the
+    same nodes, looks the gather up under that checksum and its key is accepted, with no
+    quarantine and no recompute"""
     spy = Spy(monkeypatch)
+    checked = []
+    real_check = PydraIdentityV2.check_key
+
+    def check_key(self, checksum, key):
+        accepted = real_check(self, checksum, key)
+        checked.append((checksum, accepted))
+        return accepted
+
+    monkeypatch.setattr(PydraIdentityV2, "check_key", check_key)
     root = tmp_path / "cache"
     with Submitter(worker="debug", store=_store(root)) as sub:
         first = sub(GatedKeyed(xs=[1, -1]))
@@ -187,6 +206,7 @@ def test_v2_check_key_accepts_absence_suffix(tmp_path, monkeypatch):
     assert doc["key"]["absent"] == [["vals", {"$int": "1"}, "not-routed"]]
     assert checksum == "gather-n2" + absence_suffix([("vals", 1, "not-routed")])
     spy.calls.clear()
+    checked.clear()
     quarantined = []
     real = PortableStore._quarantine
 
@@ -196,9 +216,12 @@ def test_v2_check_key_accepts_absence_suffix(tmp_path, monkeypatch):
 
     monkeypatch.setattr(PortableStore, "_quarantine", quarantine)
     with Submitter(worker="debug", store=_store(root)) as sub:
-        second = sub(GatedKeyed(xs=[1, -1]))
+        second = sub(GatedKeyedSibling(xs=[1, -1]))
     assert second.outputs.out == ["X", "absent:not-routed"]
-    assert spy.of_kind("publish") == []  # served: nothing ran again
+    assert "find" in spy.of(checksum)  # the gather is looked up under its suffix
+    assert (checksum, True) in checked and (checksum, False) not in checked
+    # only the new outer workflow is published: the gather was served, not run again
+    assert [c for c in spy.of_kind("publish") if not c.startswith("workflow-")] == []
     assert quarantined == []
 
 
