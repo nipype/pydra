@@ -61,6 +61,8 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "__qualname__",
     ): "a callable may have no qualified name",
     ("engine/portable/store.py", "os", "sync"): "POSIX only",
+    ("engine/procgroup.py", "os", "waitid"): "POSIX only",
+    ("engine/procgroup.py", "subprocess", "CREATE_NEW_PROCESS_GROUP"): "Windows only",
     (
         "engine/runner.py",
         "exc",

@@ -86,7 +86,9 @@ class Provider(ty.Protocol):
         """Load the state for ``spec`` on ``device``: an object, or a client of a process it starts"""
 
     def close(self, obj: object) -> None:
-        """Stop what ``load`` started, and wait"""
+        """Stop what ``load`` started, and wait. A provider that starts a process
+        subclasses :class:`pydra.engine.procgroup.ProcessProvider`, whose ``close``
+        stops the process group and waits for its members and device memory"""
 
     def footprint(self, spec: ty.Any) -> Footprint | None:
         """The declared bytes ``spec`` will hold, host and device"""
