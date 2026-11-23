@@ -64,6 +64,9 @@ class FitRequest:
     resources : ComputeResources
     units : float, optional
         The job's size in the task's own units, when it declares one.
+    batch : int, optional
+        The task's declared batch (``python.define(batch=)``): the most jobs of one batched call
+        its author states; None when it declares none.
     key : str, optional
         The residency digest (`pydra.engine.resident.residency_digest`); None without resident
         state.
@@ -77,6 +80,7 @@ class FitRequest:
     units: float | None = None
     key: str | None = None
     code: ty.Any = None
+    batch: int | None = None
 
 
 def fit_request(job: "Job", providers: Sequence[ty.Any] = ()) -> FitRequest:
@@ -96,12 +100,14 @@ def fit_request(job: "Job", providers: Sequence[ty.Any] = ()) -> FitRequest:
     except Exception:
         return FitRequest(residency=(), resources=res)
     units = job_units(job)
+    batch = getattr(type(job.task), "_batch", None)
     if not residency:
-        return FitRequest(residency=(), resources=res, units=units)
+        return FitRequest(residency=(), resources=res, units=units, batch=batch)
     return FitRequest(
         residency=residency,
         resources=res,
         units=units,
+        batch=batch,
         key=residency_key(residency),
         code=code_of(job, providers),
     )
@@ -165,7 +171,7 @@ def _fmt(n: "int | None") -> str:
 class DeclaredFit:
     """Judge from declared figures: device memory, host memory and time.
 
-    No figure to compare gives ``"unknown"``. ``batch`` returns 1.
+    No figure to compare gives ``"unknown"``. ``batch`` returns the task's declared batch, else 1.
     """
 
     def judge(self, request: FitRequest, cls: WorkerClass) -> ClassTried:
@@ -210,7 +216,7 @@ class DeclaredFit:
         return ClassTried(cls.name, "fits", "declared figures fit")
 
     def batch(self, request, cls, units) -> int:
-        return 1
+        return request.batch or 1
 
 
 def _candidate_reason(res: ComputeResources, cls: WorkerClass) -> "str | None":

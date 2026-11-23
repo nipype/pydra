@@ -104,6 +104,7 @@ def define(
     checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
     batched: ty.Callable[..., ty.Sequence[ty.Any]] | None = None,
     units: ty.Callable[..., float | None] | None = None,
+    batch: int | None = None,
 ) -> "Task":
     """
     Create an interface for a function or a class.
@@ -167,6 +168,11 @@ def define(
         job's inputs that its signature names and returning a number or None. A pool orders
         the jobs of a batched call by it and fits memory against it. Never part of the
         checksum.
+    batch: int, optional
+        The most jobs one batched call takes, the author's statement: a pool's fit takes it
+        as the batch, or the measured memory bound when that is smaller. Without it a
+        batched task runs one job per call. Never part of the checksum; an edit of the
+        batched function does not invalidate stored results either.
 
     Returns
     -------
@@ -252,8 +258,13 @@ def define(
         for what, value in (("batched", batched), ("units", units)):
             if value is not None and not callable(value):
                 raise TypeError(f"{what} must be callable, not {value!r}")
+        if batch is not None and (
+            isinstance(batch, bool) or not isinstance(batch, int) or batch < 1
+        ):
+            raise ValueError(f"batch must be a positive int, not {batch!r}")
         defn._batched = batched
         defn._units = units
+        defn._batch = batch
         return defn
 
     if wrapped is not None:
@@ -298,6 +309,7 @@ class PythonTask(base.Task[PythonOutputsType]):
     # section 4.4). Class attributes, never fields, so neither enters the checksum.
     _batched: ty.ClassVar[ty.Callable[..., ty.Sequence[ty.Any]] | None] = None
     _units: ty.ClassVar[ty.Callable[..., float | None] | None] = None
+    _batch: ty.ClassVar[int | None] = None  # the declared most jobs of one batched call
 
     def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:
         element = getattr(job, "batched_element", None)

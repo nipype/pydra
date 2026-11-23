@@ -52,7 +52,8 @@ class MeasuredFit:
     holds); then, when per-job times at two or more batch sizes at or below that bound are recorded,
     the fastest of them. The formula has no value without a measured ``m1`` or a known length:
     1 when ``m1`` is unknown, or when ``m1 > 0`` and no unit is known; ``quantum_jobs`` only when
-    ``m1`` was measured as 0. 1 with nothing measured.
+    ``m1`` was measured as 0. 1 with nothing measured. A task's declared batch (``FitRequest.batch``)
+    caps the bound once ``m1`` is known, and is the batch while it is not.
 
     Parameters
     ----------
@@ -150,8 +151,9 @@ class MeasuredFit:
     ) -> int:
         fit = self._memory(request, cls)
         _, share = _grant(cls)
+        declared = request.batch
         if fit is None or share is None or fit.m1 is None:
-            return 1
+            return declared or 1
         room = self.headroom * share - fit.resident - fit.m0
         known = [u for u in units if u is not None]
         if room < 0:
@@ -166,6 +168,8 @@ class MeasuredFit:
                 bound = cls.quantum_jobs
             else:
                 bound = max(1, min(cls.quantum_jobs, math.floor(room / per_job)))
+        if declared is not None:
+            bound = min(bound, declared)
         if request.key is None:
             return bound
         times = [

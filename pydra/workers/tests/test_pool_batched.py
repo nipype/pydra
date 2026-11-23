@@ -31,7 +31,7 @@ LEASE = LeaseSettings(
 BOUND = 120.0  # seconds any wait on another process may take before the test fails
 
 TASKS = """
-import json, os, signal
+import json, os, signal, time
 from pathlib import Path
 from uuid import uuid4
 from pydra.compose import python, workflow
@@ -60,11 +60,15 @@ def square_many(x, where, mode):
     _mark(where[0] if where else "", xs)
     if "kill" in mode:
         os.kill(os.getpid(), signal.SIGKILL)
+    if "hang" in mode:
+        time.sleep(600)
     if "lost" in mode:
         raise WorkerLost("the provider's process ended mid-request")
     out = []
     for v, m in zip(xs, mode):
         try:
+            if m == "batch-error":
+                raise ValueError(f"item {v} failed in its batch")
             out.append(_one(v, m))
         except Exception as err:
             out.append(err)
@@ -75,11 +79,15 @@ def size(x):
     return float(x)
 
 
-@python.define(batched=square_many, units=size)
+@python.define(batched=square_many, units=size, batch=4)
 def Square(x: int, where: str = "", mode: str = "") -> dict:
     _mark(where, [x])
     if mode == "kill":
         os.kill(os.getpid(), signal.SIGKILL)
+    if mode == "hang":
+        time.sleep(600)
+    if mode == "batch-error":
+        mode = ""
     if mode == "lost":
         raise WorkerLost("the provider's process ended mid-request")
     return _one(x, mode)
@@ -341,13 +349,13 @@ def _age(path: Path) -> None:
     os.utime(path, (old, old))
 
 
-def _hand_worker(pool: Pool, processes, tmp_path, cls=None):
+def _hand_worker(pool: Pool, processes, tmp_path, cls=None, settings=None):
     from pydra.workers.pool.worker import class_record
 
     cls = cls or _class()
     pool.pool.put_class(cls.name, class_record(cls))
     path = tmp_path / f"settings-{len(processes)}.json"
-    path.write_text(json.dumps(_settings().to_json()))
+    path.write_text(json.dumps((settings or _settings()).to_json()))
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -467,19 +475,25 @@ def test_pool_facts_carry_the_batch(tasks, pool, monkeypatch):
     seen = {}
     real = Worker.pool_facts
 
-    def spy(self, claim, entry, job, attempt, group, batch=(1, 0)):
-        facts = real(self, claim, entry, job, attempt, group, batch)
+    def spy(self, claim, entry, job, attempt, group, batch=(1, 0), batched=None):
+        facts = real(self, claim, entry, job, attempt, group, batch, batched)
         seen[job.task.x] = facts["batch"]
         return facts
 
     monkeypatch.setattr(Worker, "pool_facts", spy)
     pool.put([pool.job(tasks.Square(x=x), f"s{x}") for x in (5, 2, 8)], batch=4)
+    pool.put([pool.job(tasks.Square(x=9), "alone")])  # one job per call: the function
     _, code = _run(pool)
     assert code == 0
+    implementation = {
+        "batched": True,
+        "function": "_pydra_pool_batched_tasks:square_many",
+    }
     assert seen == {
-        2: {"size": 3, "index": 0},
-        5: {"size": 3, "index": 1},
-        8: {"size": 3, "index": 2},
+        2: {"size": 3, "index": 0, **implementation},
+        5: {"size": 3, "index": 1, **implementation},
+        8: {"size": 3, "index": 2, **implementation},
+        9: {"size": 1, "index": 0},
     }
 
 
@@ -690,15 +704,11 @@ def test_a_lost_claim_settles_nothing_of_the_call(tasks, pool, monkeypatch):
         assert pool.newest(job) is None and pool.result(job) is None
 
 
-def test_an_expired_batched_call_expires_each_job(tasks, pool):
-    """A batched call's deadline is the sum of its jobs' times; when it passed, the taker types each
-    job of the call alone: one that published settles ``done``, the others move up the ladder.
-    """
-    from pydra.workers.pool.worker import class_record
-
-    jobs = [pool.job(tasks.Square(x=x), f"s{x}") for x in (1, 2)]
-    digest = pool.put(jobs, batch=2, ladder=("big",))
-    pool.pool.put_class("big", class_record(_class("big", time=7200)))
+def _lost_call(pool, digest, jobs, *, expired=False, published=()):
+    """Leave ticket ``digest`` as a worker killed mid-call leaves it: every job of ``jobs`` started
+    under the dead worker's token and listed in its in-flight call record, each given an
+    ``expired`` outcome when ``expired``, those of ``published`` committed to the store; the claim
+    aged."""
     dead = "d" * 32
     claim = pool.pool.take("cpu", digest, beat="external")
     entries = {e.key: e for e in claim.ticket.jobs}
@@ -713,12 +723,45 @@ def test_an_expired_batched_call_expires_each_job(tasks, pool):
                 "attempt": attempt,
             }
         )
-        claim.outcome(entry, attempt, "expired")
-        if job is jobs[0]:
+        if expired:
+            claim.outcome(entry, attempt, "expired")
+        if job in published:
             job.attempt = attempt
-            job.run()  # it published before its worker was killed
+            job.run()  # what the call published before its worker was killed
     pool.pool.write_call(dead, 1, {"jobs": listed})
     _age(claim.lease.lockfile)
+
+
+def test_an_expired_batched_call_is_bisected_not_laddered(tasks, pool):
+    """A batched call that passed its deadline is bisected by its taker (RFC 0005 sections 5.3, 6): a
+    job its call published settles ``done``; the others are split in halves, uncharged, as
+    ``split``, and none of them is moved up the ladder or spends ``resource_moves``."""
+    from pydra.workers.pool.worker import class_record
+
+    jobs = [pool.job(tasks.Square(x=x), f"s{x}") for x in (1, 2, 3, 4)]
+    digest = pool.put(jobs, batch=4, ladder=("big",))
+    pool.pool.put_class("big", class_record(_class("big", time=7200)))
+    _lost_call(pool, digest, jobs, expired=True, published=jobs[:1])
+    _, code = _run(pool, _class(time=60))
+    assert code == 0
+    assert sorted(tasks.CALLS) == [[2, 3], [4]]
+    first, *rest = jobs
+    assert pool.newest(first)["outcome"] == "done"
+    for job in rest:
+        gens = pool.generations(job)
+        assert [g["cause"] for g in gens] == ["put", "takeover", "split"]
+        assert not any(g["charged"] for g in gens)
+        assert pool.pool.charges(*pool.key(job))["resource_moves"] == 0
+        assert pool.newest(job)["outcome"] == "done"
+
+
+def test_a_lone_expired_job_still_moves_up_the_ladder(tasks, pool):
+    from pydra.workers.pool.worker import class_record
+
+    jobs = [pool.job(tasks.Square(x=x), f"s{x}") for x in (1, 2)]
+    digest = pool.put(jobs, batch=4, ladder=("big",))
+    pool.pool.put_class("big", class_record(_class("big", time=7200)))
+    _lost_call(pool, digest, jobs, expired=True, published=jobs[:1])
     _, code = _run(pool, _class(time=60))
     assert code == 0 and tasks.CALLS == []
     published, slow = jobs
@@ -730,28 +773,241 @@ def test_an_expired_batched_call_expires_each_job(tasks, pool):
     ]
 
 
+@pytest.mark.skipif(not POSIX, reason="the beater kills its hung worker by signal")
+def test_one_hanging_item_fails_alone_on_a_one_class_pool(
+    tasks, pool, processes, tmp_path
+):
+    """A batch of four with one item that hangs, on a pool whose only class has no larger ``time``:
+    each expiry bisects the call, so the hanging job is alone after three calls and only it fails
+    ``ResourceExhausted`` (a timeout); the other three are done."""
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    jobs = [
+        pool.job(
+            tasks.Square(x=x, where=str(marks), mode="hang" if x == 2 else ""),
+            f"s{x}",
+        )
+        for x in (1, 2, 3, 4)
+    ]
+    hanging = jobs[1]
+    pool.put(jobs, batch=4)
+    settings = _settings(call_timeout=1.0, timeout_grace=1.0)
+    for _ in range(12):  # a bound on worker starts that only fails a runaway test
+        proc = _hand_worker(pool, processes, tmp_path, settings=settings)
+        code = proc.wait(BOUND)
+        if code == 0 and all(pool.newest(j) is not None for j in jobs):
+            break
+        for d in (pool.path / "queues").glob("*/claims/*.lease"):
+            _age(d)
+    else:
+        raise AssertionError("the hanging job was never settled")
+    calls = [json.loads(p.read_text()) for p in marks.iterdir()]
+    assert sorted(len(c) for c in calls if 2 in c) == [1, 2, 4]
+    for job in jobs:
+        outcome = pool.newest(job)
+        if job is hanging:
+            assert (outcome["outcome"], outcome["fault"]["type"]) == (
+                "failed",
+                "ResourceExhausted",
+            )
+            assert outcome["fault"]["reason"] == "timeout"
+        else:
+            assert outcome["outcome"] == "done"
+            assert pool.result(job).outputs.out["square"] == job.task.x**2
+
+
+def test_a_failed_batched_jobs_pickle_reruns_the_function(tasks, pool):
+    """A failed batched job's ``_job.pklz`` carries no element of its call: a rerun from it runs the
+    task's function."""
+    from pydra.engine.job import load_job
+
+    jobs = [
+        pool.job(tasks.Square(x=x, mode="batch-error" if x == 2 else ""), f"s{x}")
+        for x in (1, 2)
+    ]
+    pool.put(jobs, batch=4)
+    _, code = _run(pool)
+    assert code == 0
+    failed = jobs[1]
+    assert pool.newest(failed)["outcome"] == "failed"
+    pickles = [load_job(p) for p in Path(pool.store.path).rglob("_job.pklz")]
+    [loaded] = [j for j in pickles if j.checksum == failed.checksum]
+    assert loaded.batched_element is None
+    result = loaded.run(rerun=True)
+    assert not result.errored and result.outputs.out["square"] == 4
+
+
+def test_a_jobs_own_run_error_goes_through_the_classifier(tasks, pool, monkeypatch):
+    """An exception a job's own ``Job.run`` raises (not its element) is typed by the worker's
+    classifier, as a lone call's is: an infrastructure fault requeues the job rather than failing
+    it as content, and the job runs again."""
+    from pydra.engine.job import Job as JobClass
+    from pydra.workers.pool import faults
+
+    def classify(exc, phase):
+        if isinstance(exc, OSError):
+            return faults.FaultRecord("infrastructure", "OSError", str(exc), phase)
+        return faults.classify(exc, phase)
+
+    raised = []
+    real = JobClass._record_pool_facts
+
+    def flaky(self, result):
+        if self.pool_facts is not None and self.task.x == 2 and not raised:
+            raised.append(self.task.x)
+            raise OSError(5, "input/output error")
+        return real(self, result)
+
+    monkeypatch.setattr(JobClass, "_record_pool_facts", flaky)
+    jobs = [pool.job(tasks.Square(x=x), f"s{x}") for x in (1, 2, 3)]
+    pool.put(jobs, batch=4)
+    _, code = _run(pool, classify=classify)
+    assert code == 0 and raised == [2]
+    for job in jobs:
+        assert pool.newest(job)["outcome"] == "done"
+    causes = [(g["cause"], g.get("phase")) for g in pool.generations(jobs[1])]
+    assert ("restart", "call") in causes
+
+
+def test_committed_jobs_are_served_not_recomputed(tasks, pool):
+    """A job the store already holds settles ``done`` (served) before the batched call and is left
+    out of it."""
+    jobs = [pool.job(tasks.Square(x=x), f"s{x}") for x in (1, 2, 3, 4)]
+    pool.put(jobs, batch=4)
+    for job in jobs[:2]:
+        job.run()
+    _, code = _run(pool)
+    assert code == 0
+    assert tasks.CALLS == [[3, 4]]
+    for job in jobs:
+        outcome = pool.newest(job)
+        assert outcome["outcome"] == "done"
+        assert outcome.get("served", False) is (job in jobs[:2])
+
+
+def test_a_taker_serves_what_the_lost_call_published(tasks, pool):
+    """Jobs a lost batched call published are served by the taker before it splits the rest."""
+    jobs = [pool.job(tasks.Square(x=x), f"s{x}") for x in (1, 2, 3, 4)]
+    digest = pool.put(jobs, batch=4)
+    _lost_call(pool, digest, jobs, published=jobs[:2])
+    _, code = _run(pool)
+    assert code == 0
+    assert sorted(tasks.CALLS) == [[3], [4]]
+    for job in jobs:
+        assert pool.newest(job)["outcome"] == "done"
+
+
+def test_a_lost_lease_mid_call_stops_the_later_jobs(tasks, pool, monkeypatch):
+    """A job whose proof before publish fails (`LeaseLost`) ends the batched call: no later job of it
+    runs or publishes, and nothing of it is settled; the ticket, claimed again, runs every job.
+    """
+    from pydra.engine import job as job_module
+
+    runs = []
+    real = job_module.Job.run
+
+    def counting(self, *args, **kwargs):
+        runs.append(self.task.x)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(job_module.Job, "run", counting)
+    proofs = []
+    real_proof = job_module.lease_still_held
+
+    def lost_once(lease):
+        proofs.append(lease)
+        return len(proofs) > 1 and real_proof(lease)
+
+    monkeypatch.setattr(job_module, "lease_still_held", lost_once)
+    jobs = [pool.job(tasks.Square(x=x), f"s{x}") for x in (1, 2, 3)]
+    pool.put(jobs, batch=4)
+    _, code = _run(pool)
+    assert code == 0
+    assert runs == [1, 1, 2, 3]  # the lost call ran one job; the next call ran them all
+    for job in jobs:
+        outcome = pool.newest(job)
+        assert outcome["outcome"] == "done" and not outcome.get("served")
+
+
+# -- the declared batch ------------------------------------------------------------------------
+
+
+def test_a_declared_batch_is_the_fits_batch(tasks, pool):
+    """``python.define(batch=N)`` is unhashed and is the batch `DeclaredFit` gives; `MeasuredFit`
+    gives it before a per-unit memory is measured and the smaller of it and the memory bound after;
+    no declared batch is 1."""
+    from pydra.compose import python
+    from pydra.workers.pool.calibration import MemoryFit
+    from pydra.workers.pool.fit import MeasuredFit
+    from pydra.workers.pool.placement import DeclaredFit, FitRequest, fit_request
+    from pydra.utils.resources import ComputeResources
+
+    def Twice(x: int) -> int:  # noqa: N802
+        return 2 * x
+
+    assert (
+        python.define(Twice, batched=tasks.square_many, batch=8)(x=1)._checksum
+        == python.define(Twice)(x=1)._checksum
+    )
+    with pytest.raises(ValueError, match="batch must be a positive int"):
+        python.define(Twice, batch=0)
+    cpu = _class()
+    declared = fit_request(pool.job(tasks.Square(x=3), "s"))
+    assert declared.batch == 4
+    assert DeclaredFit().batch(declared, cpu, [3.0]) == 4
+    plain = fit_request(pool.job(tasks.PlainSquare(x=3), "p"))
+    assert plain.batch is None and DeclaredFit().batch(plain, cpu, [None]) == 1
+
+    G = 2**30
+    figures = {"fit": None}
+
+    class Fixed:
+        def memory(self, key, hardware):
+            return figures["fit"]
+
+        def unfit(self, key):
+            return ()
+
+        def times(self, key, hardware):
+            return ()
+
+    gpu = _class("gpu", device="cuda", gpus=1, gpu_mem=80 * G, quantum_jobs=64)
+    request = FitRequest(
+        residency=(), resources=ComputeResources(gpus=1), key="k", batch=4
+    )
+    fit = MeasuredFit(Fixed(), headroom=0.9)
+    assert fit.batch(request, gpu, [4.0]) == 4  # nothing measured: the declared batch
+    figures["fit"] = MemoryFit(resident=10 * G, m0=2 * G, m1=None, n=6)
+    assert fit.batch(request, gpu, [4.0]) == 4  # per-unit memory unknown
+    figures["fit"] = MemoryFit(resident=10 * G, m0=2 * G, m1=0.5 * G, n=6)
+    assert fit.batch(request, gpu, [4.0]) == 4  # a memory bound of 30: the declared 4
+    figures["fit"] = MemoryFit(resident=64 * G, m0=2 * G, m1=0.5 * G, n=6)
+    assert fit.batch(request, gpu, [4.0]) == 3  # a memory bound of 3 below it
+
+
+def test_no_declared_batch_runs_one_job_per_call(tasks, tmp_path):
+    """A batched task with no declared ``batch`` gets no ticket ``batch``, whatever its fit says: it
+    runs one job per call."""
+    from pydra.workers.pool.pool import _ticket_batch
+
+    sub = Submitter(cache_root=tmp_path / "store", worker="debug")
+
+    class J:
+        def __init__(self, task):
+            self.job = Job(task=task, submitter=sub, name="j")
+            self.batch = 8
+
+    assert _ticket_batch([J(tasks.Short(x=1))]) is None
+    assert _ticket_batch([J(tasks.Square(x=1))]) == 8
+
+
 # -- through a WarmPool ------------------------------------------------------------------------
 
 
-class _BatchOf:
-    """A fit that judges every class ``unknown`` and batches ``size`` jobs per call."""
-
-    def __init__(self, size):
-        from pydra.workers.pool.placement import DeclaredFit
-
-        self.size = size
-        self.declared = DeclaredFit()
-
-    def judge(self, request, cls):
-        return self.declared.judge(request, cls)
-
-    def batch(self, request, cls, units):
-        return self.size
-
-
 def test_a_pool_writes_its_placements_batch_and_units(tasks, tmp_path):
-    """A `WarmPool` writes each ticket's ``batch`` from its jobs' placements and each job's units
-    from the task's ``units``, so its workers batch the node's jobs."""
+    """A `WarmPool` writes each ticket's ``batch`` from its jobs' placements (the task's declared
+    batch, through `DeclaredFit`) and each job's units from the task's ``units``, so its workers
+    batch the node's jobs."""
     from pydra.workers.pool.pool import WarmPool
     from pydra.workers.pool.storage import Ticket
     from pydra.workers.pool.substrate import LocalSubstrate
@@ -764,7 +1020,6 @@ def test_a_pool_writes_its_placements_batch_and_units(tasks, tmp_path):
         substrate,
         store=store,
         settings=_settings(idle_polls=40),
-        fit=_BatchOf(4),
     )
     try:
         with Submitter(store=store, worker=executor) as sub:

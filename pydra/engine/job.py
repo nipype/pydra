@@ -289,6 +289,8 @@ class Job(ty.Generic[TaskType]):
         state.pop("_cached_result", None)
         state.pop("_awaiting_run", None)
         state.pop("claim", None)
+        # a batched call's element belongs to that call: a rerun from the pickle runs the task
+        state.pop("batched_element", None)
         # A lookup made before dispatch is current only for a run in this process: a job
         # handed to a worker may wait in a queue, so it looks the store up again
         state.pop("looked_up", None)

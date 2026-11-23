@@ -14,7 +14,8 @@ one loop:
    is handed to the beater before anything runs under it. A claim that took a stale one over places
    its jobs again under fresh attempts first: a lone open job under a ``takeover`` generation, charged
    as a crash only when it was alone in the dead worker's in-flight call; two or more are split; a job
-   whose attempt expired is looked up in the store, then typed a timeout (a resource fault).
+   whose attempt expired is looked up in the store, then typed a timeout (a resource fault); two or
+   more expired jobs (a batched call's) are split in halves, uncharged, instead.
 3. **Re-judge** the ticket against the hardware read (a class whose ``gpu_mem`` was unknown): a ticket
    needing more device memory is withdrawn, reason ``refused``, and nothing runs. **Load** its
    residency through the process's `ResidentSet`, on the granted device (the process device, which
@@ -258,6 +259,31 @@ def _machinery(exc: Exception) -> Exception:
 
 
 # -- the worker --------------------------------------------------------------------------------
+
+
+def _batch_fact(batch: tuple[int, int], batched: ty.Callable | None) -> dict:
+    """The ``batch`` entry of the pool facts: the call's size, the job's index in it and, when a
+    batched function ran, ``batched`` and that function's ``module:qualname``."""
+    fact: dict[str, ty.Any] = {"size": batch[0], "index": batch[1]}
+    if batched is not None:
+        fact["batched"] = True
+        fact["function"] = (
+            f"{getattr(batched, '__module__', '?')}:"
+            f"{getattr(batched, '__qualname__', type(batched).__qualname__)}"
+        )
+    return fact
+
+
+def _raised_from(exc: BaseException, element: ty.Any) -> bool:
+    """Whether ``exc`` is ``element`` or has it in its ``__cause__``/``__context__`` chain."""
+    seen: set[int] = set()
+    link: BaseException | None = exc
+    while link is not None and id(link) not in seen:
+        if link is element:
+            return True
+        seen.add(id(link))
+        link = link.__cause__ or link.__context__
+    return False
 
 
 _SKIPPED = object()
@@ -976,8 +1002,8 @@ class Worker:
         if claim.took_over:
             if not self._take_over(claim):
                 return
-        else:
-            self._expired_pass(claim)
+        elif not self._expired_pass(claim):
+            return
         entries = claim.open_jobs()
         jobs: list[tuple[TicketJob, "Job"]] = []
         for entry in entries:
@@ -1733,7 +1759,7 @@ class Worker:
         """
         tries = 0
         used: set = set()  # jobs whose decoded object a call already ran
-        pending = members
+        pending = self._unserved(claim, members)
         while pending:
             tries += 1
             jobs = {e.key: j for e, j in pending}
@@ -1812,10 +1838,15 @@ class Worker:
                 group["stop"] = True
                 return
             retry = []
-            for (entry, job), one in zip(pending, settled):
+            # the jobs that completed first, so that a fault that holds the residency settles
+            # only the jobs it leaves open
+            order = sorted(
+                zip(pending, settled), key=lambda pair: pair[1].fault is not None
+            )
+            for (entry, job), one in order:
                 if one.value is _SKIPPED and one.fault is None:
                     continue
-                if group.get("stop") or self._lost_claim(claim):
+                if self._lost_claim(claim):
                     break
                 state = {
                     "attempt": attempts.get(entry.key),
@@ -1830,6 +1861,34 @@ class Worker:
             if group.get("stop") or self._lost_claim(claim):
                 return
             pending = retry
+
+    def _unserved(
+        self, claim: Claim, members: list[tuple[TicketJob, "Job"]]
+    ) -> list[tuple[TicketJob, "Job"]]:
+        """``members`` less each job the store already holds a result for (find before run, RFC
+        0005 section 5.5), which settles ``done`` (served) under its current attempt and is left
+        out of the batched call; a job to be rerun is always run."""
+        left = []
+        for entry, job in members:
+            if not getattr(job, "rerun", False) and self._found(job):
+                current = claim.current(entry)
+                if current is not None:
+                    claim.outcome(entry, current[1]["attempt"], "done", served=True)
+                continue
+            left.append((entry, job))
+        return left
+
+    @staticmethod
+    def _found(job: "Job") -> bool:
+        """Whether the job's store serves a result for it that is not errored."""
+        find = getattr(getattr(job, "store", None), "find", None)
+        if find is None:
+            return False
+        try:
+            result = getattr(find(job), "result", None)
+        except Exception:
+            return False
+        return result is not None and not getattr(result, "errored", False)
 
     def _invoke_batch(
         self,
@@ -1856,7 +1915,13 @@ class Worker:
             job.batched_element = None
             self._add_providers(job)
             job.pool_facts = self.pool_facts(
-                claim, entry, job, attempt, group, batch=(size, index)
+                claim,
+                entry,
+                job,
+                attempt,
+                group,
+                batch=(size, index),
+                batched=type(job.task)._batched,
             )
             listed.append(
                 {
@@ -1925,6 +1990,9 @@ class Worker:
             except LeaseLost:
                 raise  # the claim is lost: no job after this one publishes either
             except BaseException as exc:  # noqa: B036 - that job's own error
+                if isinstance(exc, Exception) and not _raised_from(exc, element):
+                    # raised by the job's own run, not its element: typed as a lone call's is
+                    attach(exc, fault_of(exc, "call", self._classify_call))
                 results.append((None, exc))
             finally:
                 job.batched_element = None
@@ -2047,11 +2115,13 @@ class Worker:
         attempt: str,
         group: dict,
         batch: tuple[int, int] = (1, 0),
+        batched: ty.Callable | None = None,
     ) -> dict:
         """The ``pool`` section of the call's execute context (``pool-facts@1``, RFC 0005 section 8),
         from state this worker already holds: the worker, its host and class, the pool attempt, the
         hardware it read at start, each resident's key, provider and version with whether this call
-        loaded it, the batch (its size, the job's index in it) and the job's survived losses. The
+        loaded it, the batch (its size, the job's index in it and, for a batched call, the batched
+        function that ran) and the job's survived losses. The
         job's `PortableStore` records it in the execute context when its identity lists ``pool`` in
         ``recorded_only``; the job sends it to its audit and ``Result.runtime`` in any case.
         """
@@ -2098,7 +2168,7 @@ class Worker:
                 "cpus": hw.cpus,
             },
             "residency": residency,
-            "batch": {"size": batch[0], "index": batch[1]},
+            "batch": _batch_fact(batch, batched),
             "losses_survived": self._losses(claim, entry),
         }
 
@@ -2495,6 +2565,9 @@ class Worker:
         open_entries: list[TicketJob] = []
         charged: dict[tuple[str, str], bool] = {}
         in_call: list[TicketJob] = []  # open jobs of the lost holder's in-flight call
+        expired: list[TicketJob] = (
+            []
+        )  # jobs of the lost holder's call that passed its deadline
         for entry in claim.ticket.jobs:
             current = claim.current(entry)
             if current is None:
@@ -2506,7 +2579,7 @@ class Worker:
             if kind in FINAL:
                 continue
             if kind == "expired":
-                self._expired_job(claim, entry)
+                expired.append(entry)
                 continue
             if kind is not None:
                 continue
@@ -2521,31 +2594,88 @@ class Worker:
             if mark is not None and this in listed:
                 in_call.append(entry)
             open_entries.append(entry)
+        # a job the store holds settles done, uncharged, before anything is split or run again
+        for entry in list(open_entries):
+            if self._stored(entry):
+                attempt = claim.takeover(entry, charged=False)
+                claim.outcome(entry, attempt, "done", served=True)
+                open_entries.remove(entry)
+                if entry in in_call:
+                    in_call.remove(entry)
+        expired = self._expired_left(claim, expired)
+        if len(expired) >= 2:
+            # a batched call that passed its deadline is bisected, uncharged: only a lone job of
+            # it is typed a timeout and moved up the ladder
+            rest = [open_entries] if open_entries else []
+            self._split_expired(claim, expired, rest, charged)
+            return False
+        for entry in expired:
+            self._expired_job(claim, entry)
         if len(open_entries) >= 2:
             rest = [e for e in open_entries if e not in in_call]
             if in_call and rest:
                 # the lost call's jobs apart from the rest, halved: a batched call's crashing
                 # job is alone after at most log2 of its call's size more calls
-                half = (len(in_call) + 1) // 2
-                parts = [in_call[:half], in_call[half:], rest]
-                claim.move(
-                    [p for p in parts if p], claim.queue, cause="split", charged=charged
-                )
+                self._split_apart(claim, in_call, [rest], charged)
             else:
                 claim.split(charged=charged)
-            self._release(claim)
+                self._release(claim)
             return False
         for entry in open_entries:
-            if self._stored(entry):  # a committed result settles done, uncharged
-                attempt = claim.takeover(entry, charged=False)
-                claim.outcome(entry, attempt, "done", served=True)
-                continue
             claim.takeover(entry, charged=charged.get(entry.key, False))
         return True
 
-    def _expired_pass(self, claim: Claim) -> None:
-        """Type each job whose current attempt in this ticket expired (a claim released after its
-        deadline passed, rather than left to go stale)."""
+    def _expired_left(self, claim: Claim, expired: list[TicketJob]) -> list[TicketJob]:
+        """The jobs of ``expired`` the store holds no result for; each one it holds (its call
+        published it before the deadline was acted on) settles done under a fresh, uncharged
+        ``takeover`` attempt. A lone expired job is left for `_expired_job`, which looks it up.
+        """
+        if len(expired) < 2:
+            return expired
+        left = []
+        for entry in expired:
+            if self._stored(entry):
+                attempt = claim.takeover(entry, charged=False)
+                claim.outcome(entry, attempt, "done", served=True)
+            else:
+                left.append(entry)
+        return left
+
+    def _split_expired(
+        self,
+        claim: Claim,
+        expired: list[TicketJob],
+        rest: list[list[TicketJob]],
+        charged: dict,
+    ) -> None:
+        """`_split_apart` for jobs whose attempt expired: each first takes a fresh, uncharged
+        ``takeover`` attempt in this ticket, which the move withdraws, so the ticket resolves.
+        """
+        for entry in expired:
+            claim.takeover(entry, charged=False)
+        self._split_apart(claim, expired, rest, charged)
+
+    def _split_apart(
+        self,
+        claim: Claim,
+        jobs: list[TicketJob],
+        rest: list[list[TicketJob]],
+        charged: dict,
+    ) -> None:
+        """Move ``jobs`` into two half-tickets and each group of ``rest`` into its own, on the
+        ticket's queue (cause ``split``, each job under a fresh generation, charged as ``charged``
+        says), and release the claim."""
+        half = (len(jobs) + 1) // 2
+        parts = [jobs[:half], jobs[half:], *rest]
+        claim.move([p for p in parts if p], claim.queue, cause="split", charged=charged)
+        self._release(claim)
+
+    def _expired_pass(self, claim: Claim) -> bool:
+        """Type the jobs whose current attempt in this ticket expired (a claim released after its
+        deadline passed, rather than left to go stale): two or more are split in halves, uncharged,
+        apart from the ticket's open jobs, and the claim released (False); a lone one is typed a
+        timeout (`_expired_job`). Return whether this worker runs the ticket."""
+        expired = []
         for entry in claim.ticket.jobs:
             current = claim.current(entry)
             if current is None:
@@ -2554,7 +2684,15 @@ class Worker:
                 claim.queue, claim.digest, entry, current[1]["attempt"]
             )
             if found is not None and found.get("outcome") == "expired":
-                self._expired_job(claim, entry)
+                expired.append(entry)
+        expired = self._expired_left(claim, expired)
+        if len(expired) >= 2:
+            others = claim.open_jobs()
+            self._split_expired(claim, expired, [others] if others else [], {})
+            return False
+        for entry in expired:
+            self._expired_job(claim, entry)
+        return True
 
     def _call_jobs(self, token: str | None) -> list[dict]:
         """The jobs of worker ``token``'s in-flight call (a call record with no ``done``), as the

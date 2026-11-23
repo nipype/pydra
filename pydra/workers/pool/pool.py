@@ -256,11 +256,16 @@ class _Ticket:
 
 def _ticket_batch(group: "list[_Job]") -> int | None:
     """The most jobs of a ticket one call takes: the least `Placement.batch` of its jobs, for a
-    task declared ``batched``; None otherwise, or when a job's is unknown."""
+    task declared ``batched`` with a ``batch``; None otherwise (one job per call), or when a job's
+    is unknown."""
     from pydra.compose.python import PythonTask
 
     task = group[0].job.task
-    if not isinstance(task, PythonTask) or type(task)._batched is None:
+    if (
+        not isinstance(task, PythonTask)
+        or type(task)._batched is None
+        or type(task)._batch is None
+    ):
         return None
     sizes = [j.batch for j in group]
     if any(b is None for b in sizes):

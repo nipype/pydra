@@ -2,8 +2,9 @@
 
 Runs one node of ``--jobs`` jobs of a task declared ``batched=`` through a `WarmPool` with one worker
 on a `LocalSubstrate`, once per batch size in ``--batch`` (1 runs the task's function, one job per
-call). The fake model costs ``--overhead-ms`` per call, whatever it holds, plus ``--item-ms`` per
-item, as a forward pass on a device does. Reports, per batch size:
+call), set by a fit that returns it under the task's declared ceiling ``batch=1024``. The fake
+model costs ``--overhead-ms`` per call, whatever it holds, plus ``--item-ms`` per item, as a forward
+pass on a device does. Reports, per batch size:
 
 - ``wall_per_job_ms``: the run's wall time over its jobs, from the first ``submit`` to the last report
   (worker start-up included);
@@ -40,7 +41,7 @@ def forward_many(x):
     return [v * 2 for v in x]
 
 
-@python.define(batched=forward_many)
+@python.define(batched=forward_many, batch=1024)
 def Forward(x: int) -> int:
     time.sleep(OVERHEAD + ITEM)
     return x * 2
