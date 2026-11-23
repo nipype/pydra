@@ -451,7 +451,7 @@ def test_drain_stops_the_warm_command(tmp_path, roots_below, queue_of, monkeypat
     stopped by closing the container; the job is released unsettled and the worker exits cleanly.
     """
     fake = FakeRuntime(monkeypatch, tmp_path)
-    fake.exec_delay = 5.0
+    fake.exec_delay = SLOW
     returned = []
     execute = fake.execute
 
@@ -475,14 +475,14 @@ def test_drain_stops_the_warm_command(tmp_path, roots_below, queue_of, monkeypat
     )
 
     def drain():
-        _until(lambda: fake.execs)  # bounded: the worker stops either way
+        _until(fake.running.is_set)  # bounded: the worker stops either way
         worker.stop.set()
         worker._wake.set()
 
     threading.Thread(target=drain, daemon=True).start()
     began = time.monotonic()
     assert worker.run() == 0
-    assert time.monotonic() - began < fake.exec_delay  # the call was not waited for
+    assert time.monotonic() - began < SOON  # the call was not waited for
     (name,) = fake.started
     assert name in fake.stopped
     for thread in threading.enumerate():
@@ -490,6 +490,12 @@ def test_drain_stops_the_warm_command(tmp_path, roots_below, queue_of, monkeypat
             thread.join(30)
     assert returned == [137]  # the command was killed with its container
     assert COMMITS == []
+
+
+SLOW = 60.0
+"""Seconds a command that must be stopped would run: far beyond any stop, even on a loaded runner"""
+SOON = SLOW / 4
+"""The bound a stopped command's run must stay within: well before ``SLOW``"""
 
 
 def _recording_execs(fake, monkeypatch) -> list[tuple[int, float, float]]:
@@ -609,7 +615,7 @@ def test_lost_claim_stops_the_warm_command(
     container, so the command ends (137) at once rather than after its full run, and the worker,
     still running, serves the next claim in a fresh container."""
     fake = FakeRuntime(monkeypatch, tmp_path)
-    fake.exec_delay = 5.0
+    fake.exec_delays = [SLOW]  # the first command only; the ones after it are quick
     returned = _recording_execs(fake, monkeypatch)
     q = queue_of(_store(tmp_path), docker.Docker(image=IMAGE, warm=True))
     srcs = [_input(tmp_path / "inputs" / f"in{i}.txt", f"{i}\n") for i in range(2)]
@@ -622,8 +628,7 @@ def test_lost_claim_stops_the_warm_command(
     )
 
     def lose():
-        _until(lambda: fake.execs)  # bounded: the claim is lost either way
-        fake.exec_delay = 0.0  # the commands after this one are quick
+        _until(fake.running.is_set)  # the command is running; bounded either way
         for token_dir in list(worker._held):
             worker._on_lost(token_dir, "taken over")
 
@@ -633,7 +638,7 @@ def test_lost_claim_stops_the_warm_command(
         assert worker.run() == 0
 
     code, began, ended = returned[0]
-    assert code == 137 and ended - began < 2.5  # stopped, not run to its end
+    assert code == 137 and ended - began < SOON  # stopped, not run to its end
     assert len(fake.starts) >= 2  # the next claim got a fresh container
     assert [c for c, _, _ in returned[1:]] and all(c == 0 for c, _, _ in returned[1:])
     assert len(COMMITS) == 2  # both jobs, the lost one run again under a restart
@@ -650,7 +655,7 @@ def test_expired_warm_call_acknowledged(tmp_path, roots_below, queue_of, monkeyp
     from pydra.workers.pool.worker import EXIT_RECYCLE, Worker
 
     fake = FakeRuntime(monkeypatch, tmp_path)
-    fake.exec_delay = 8.0
+    fake.exec_delay = SLOW
     returned = _recording_execs(fake, monkeypatch)
     # never kill this process: an acknowledgement that does not come shows as a late one
     monkeypatch.setattr(
@@ -682,9 +687,9 @@ def test_expired_warm_call_acknowledged(tmp_path, roots_below, queue_of, monkeyp
         if thread.name == "pydra-pool-call":
             thread.join(30)
     ((code, began, ended),) = returned
-    assert code == 137 and ended - began < 6.0
+    assert code == 137 and ended - began < SOON
     assert (
-        acks and acks[0] - began < 6.0
+        acks and acks[0] - began < SOON
     )  # acknowledged when stopped, not after the command
     assert COMMITS == []
 
