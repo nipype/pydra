@@ -71,6 +71,13 @@ HOLDER_FILE = "holder.json"
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
 _BEATS = ("thread", "external")
 _ESTALE = getattr(errno, "ESTALE", None)
+IS_WINDOWS = sys.platform == "win32"
+
+
+def _delete_pending(err: OSError) -> bool:
+    """Whether ``err`` may be Windows refusing a mkdir on, or in, a directory pending
+    deletion: one removed while another handle to it is still open."""
+    return IS_WINDOWS and isinstance(err, PermissionError)
 
 
 class LeaseTimeout(TimeoutError):
@@ -594,14 +601,24 @@ class DirectoryLease:
         except FileNotFoundError:
             self.lockfile.parent.mkdir(parents=True, exist_ok=True)
             return False
+        except PermissionError as err:
+            if not _delete_pending(err):
+                raise
+            # held: a release removed the lease while a handle to it was open. A
+            # refusal that persists ends the wait in LeaseUnavailable
+            self._refused = err
+            return False
         token = uuid.uuid4().hex
         token_dir = self.lockfile / token
         try:
             os.mkdir(token_dir)
         except OSError as err:
-            # the lease was removed as empty by a process taking it over; APFS
-            # answers EINVAL instead of ENOENT when the rmdir races this mkdir
-            if err.errno in (errno.ENOENT, errno.EINVAL, _ESTALE):
+            # the lease was removed as empty by a process taking it over or
+            # releasing; APFS answers EINVAL instead of ENOENT when the rmdir races
+            # this mkdir, Windows a PermissionError
+            if err.errno in (errno.ENOENT, errno.EINVAL, _ESTALE) or _delete_pending(
+                err
+            ):
                 return False
             raise
         try:
@@ -866,9 +883,11 @@ class DirectoryLease:
         try:
             os.mkdir(gone / marker)
         except OSError as err:
-            lost = err.errno in (errno.ENOENT, errno.EEXIST, _ESTALE) or (
-                os.name == "nt" and isinstance(err, PermissionError)
-            )  # Windows refuses a mkdir in a directory pending deletion
+            lost = err.errno in (
+                errno.ENOENT,
+                errno.EEXIST,
+                _ESTALE,
+            ) or _delete_pending(err)
             if not lost:
                 raise
             logger.debug("Lost the claim of %s: %s", gone, err)

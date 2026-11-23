@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 import pytest
 from pydra.compose import python
+from pydra.engine import lease as lease_module
 import cloudpickle as cp
 from pydra.engine.lease import (
     HOLDER_FILE,
@@ -1411,3 +1412,89 @@ def test_async_release_does_not_block_the_event_loop(tmp_path, monkeypatch):
     assert len(refused) == 2
     assert lease.lost is None
     assert not lockfile.exists()
+
+
+def delete_pending(path) -> PermissionError:
+    """What Windows raises for a mkdir on a name whose directory was removed while a
+    handle to it was still open: ERROR_ACCESS_DENIED, errno EACCES."""
+    return PermissionError(errno.EACCES, "Access is denied", str(path), 5)
+
+
+@pytest.fixture
+def refused_mkdir(monkeypatch):
+    """Patch ``os.mkdir`` so that each path in the returned dict is refused as a
+    delete-pending name as many times as counted there (-1: always)."""
+    real_mkdir = os.mkdir
+    refusals = {}
+
+    def mkdir(path, *args, **kwargs):
+        left = refusals.get(Path(path), 0)
+        if left:
+            refusals[Path(path)] = left - 1
+            raise delete_pending(path)
+        return real_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "mkdir", mkdir)
+    return refusals
+
+
+@pytest.mark.parametrize("windows", [True, False])
+def test_try_take_on_a_name_pending_deletion(
+    tmp_path, monkeypatch, refused_mkdir, windows
+):
+    """On Windows a mkdir on a lease a holder has just removed is refused while a
+    handle to the removed directory is open. The waiter retries; elsewhere the
+    refusal is a real permission error and raises."""
+    lockfile = tmp_path / "abc.lock"
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
+    refused_mkdir[lockfile] = 2  # the first attempt and its retry after judging
+    monkeypatch.setattr(lease_module, "IS_WINDOWS", windows)
+    if not windows:
+        with pytest.raises(PermissionError):
+            lease.try_take()
+        return
+    delay = lease.try_take()
+    assert delay is not None and delay > 0
+    assert refused_mkdir[lockfile] == 0
+    assert lease.try_take() is None
+    lease.__exit__(None, None, None)
+    assert not lockfile.exists()
+
+
+def test_try_take_when_a_releaser_removes_the_new_lease(tmp_path, monkeypatch):
+    """A releaser's trailing rmdir can remove the empty lease this process has just
+    made, before its token mkdir; on Windows that mkdir is then refused, not ENOENT,
+    and the taker tries again."""
+    lockfile = tmp_path / "abc.lock"
+    real_mkdir = os.mkdir
+    refused = []
+
+    def mkdir(path, *args, **kwargs):
+        if Path(path).parent == lockfile and not refused:
+            refused.append(path)
+            os.rmdir(lockfile)  # the releaser's rmdir
+            raise delete_pending(path)
+        return real_mkdir(path, *args, **kwargs)
+
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
+    monkeypatch.setattr(os, "mkdir", mkdir)
+    monkeypatch.setattr(lease_module, "IS_WINDOWS", True)
+    assert lease.try_take() is None  # the retry after judging the lease gone
+    assert len(refused) == 1
+    lease.__exit__(None, None, None)
+    assert not lockfile.exists()
+
+
+def test_mkdir_refused_for_good_on_windows_raises_lease_unavailable(
+    tmp_path, monkeypatch, refused_mkdir
+):
+    """A refusal that persists is a real permission problem, not a delete-pending
+    name: the wait ends in LeaseUnavailable naming it instead of spinning."""
+    lockfile = tmp_path / "abc.lock"
+    refused_mkdir[lockfile] = -1
+    monkeypatch.setattr(lease_module, "IS_WINDOWS", True)
+    clock = FakeTime(time.time())
+    with pytest.raises(LeaseUnavailable) as excinfo:
+        clock.lease(tmp_path, lockfile, SLOW).__enter__()
+    assert isinstance(excinfo.value.error, PermissionError)
+    assert 15 <= clock.t < 17
