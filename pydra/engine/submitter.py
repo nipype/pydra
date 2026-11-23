@@ -53,11 +53,31 @@ IDENTITY_MARKER = ".pydra-identity"
 keyed under (RFC 0004 section 9.1)"""
 
 
+_MARKER_WARNED: set[str] = set()  # the roots a marker line was logged for
+
+
+def _scheme_version(named: str) -> int | None:
+    """``N`` of ``pydra-identity@N``, else None"""
+    prefix, _, version = named.partition("@")
+    if prefix != "pydra-identity" or not version.isdigit():
+        return None
+    return int(version)
+
+
+def _warn_once(root: Path, message: str, *args: ty.Any) -> None:
+    key = os.fspath(root)
+    if key not in _MARKER_WARNED:
+        _MARKER_WARNED.add(key)
+        logger.warning(message, root, *args)
+
+
 def check_identity_marker(root: Path) -> None:
-    """Read ``<root>/.pydra-identity`` and, unless it names this process's identity scheme,
-    log one line (when it names an older scheme, or is missing from a root that holds
-    slots: their results are recomputed once, as every key changed) and write it. One
-    read when the marker is current; a root that cannot be written is left as it is."""
+    """Read ``<root>/.pydra-identity``. When it names an older scheme, or is missing from a
+    root that holds slots, log one line (their results are recomputed once, as every key
+    changed) and write it. A marker naming a newer or an unknown scheme is left as it is,
+    with one line, so installs sharing a cache never flip it. One read when the marker is
+    current; a root that cannot be written is left as it is. Each root is logged at most
+    once per process."""
     from pydra.utils.identity import IDENTITY_SCHEME
 
     path = Path(root) / IDENTITY_MARKER
@@ -77,18 +97,28 @@ def check_identity_marker(root: Path) -> None:
         except OSError:
             held = False
         if held:
-            logger.warning(
+            _warn_once(
+                root,
                 "%s holds results keyed before %s: every job runs again once, and its "
                 "results are then reused",
-                root,
                 IDENTITY_SCHEME,
             )
     else:
-        logger.warning(
+        version = _scheme_version(named)
+        if version is None or version >= _scheme_version(IDENTITY_SCHEME):
+            _warn_once(
+                root,
+                "%s is marked as keyed under %s, which this pydra (%s) does not write: "
+                "its results are not reused here, and the marker is left as it is",
+                named or "an unnamed scheme",
+                IDENTITY_SCHEME,
+            )
+            return
+        _warn_once(
+            root,
             "%s holds results keyed under %s, not %s: every job runs again once, and "
             "its results are then reused",
-            root,
-            named or "an unnamed scheme",
+            named,
             IDENTITY_SCHEME,
         )
     tmp = path.with_name(f"{IDENTITY_MARKER}.{uuid4().hex}.tmp")

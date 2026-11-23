@@ -107,6 +107,22 @@ def test_missing_marker_with_slots_logged_once(tmp_path, caplog):
     assert "keyed before" in line and IDENTITY_SCHEME in line
 
 
+@pytest.mark.parametrize("named", ["pydra-identity@3", "someone-else@1"])
+def test_newer_marker_left_alone_logged_once(tmp_path, caplog, named):
+    """A marker naming a newer (or unknown) scheme is never overwritten, so two installs
+    sharing a cache do not flip it back and forth"""
+    root = tmp_path / "cache"
+    root.mkdir()
+    (root / IDENTITY_MARKER).write_text(named + "\n")
+    with caplog.at_level(logging.WARNING, logger="pydra.submitter"):
+        for a in (1, 2):
+            with Submitter(worker="debug", store="pickle", cache_root=root) as sub:
+                sub(Add(a=a))
+    (line,) = _messages(caplog)
+    assert named in line
+    assert (root / IDENTITY_MARKER).read_text().strip() == named
+
+
 def test_marker_one_stat_per_run(tmp_path, monkeypatch):
     calls = []
     real = submitter_module.check_identity_marker
