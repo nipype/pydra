@@ -869,6 +869,39 @@ def test_a_jobs_own_run_error_goes_through_the_classifier(tasks, pool, monkeypat
     assert ("restart", "call") in causes
 
 
+def test_one_calls_infrastructure_faults_count_once(tasks, pool, monkeypatch):
+    """Infrastructure faults of several jobs of one batched call are one fault of the residency:
+    the three jobs are requeued together, the residency is not held, and all three end done.
+    """
+    from pydra.engine.job import Job as JobClass
+    from pydra.workers.pool import faults
+
+    def classify(exc, phase):
+        if isinstance(exc, OSError):
+            return faults.FaultRecord("infrastructure", "OSError", str(exc), phase)
+        return faults.classify(exc, phase)
+
+    raised = []
+    real = JobClass._record_pool_facts
+
+    def flaky(self, result):
+        if self.pool_facts is not None and self.task.x not in raised:
+            raised.append(self.task.x)
+            raise OSError(5, "input/output error")
+        return real(self, result)
+
+    monkeypatch.setattr(JobClass, "_record_pool_facts", flaky)
+    jobs = [pool.job(tasks.Square(x=x), f"s{x}") for x in (1, 2, 3)]
+    pool.put(jobs, batch=4)
+    _, code = _run(pool, classify=classify)
+    assert code == 0 and sorted(raised) == [1, 2, 3]
+    assert not pool.pool.holds("cpu")
+    for job in jobs:
+        assert pool.newest(job)["outcome"] == "done"
+        causes = [(g["cause"], g.get("phase")) for g in pool.generations(job)]
+        assert causes.count(("restart", "call")) == 1
+
+
 def test_committed_jobs_are_served_not_recomputed(tasks, pool):
     """A job the store already holds settles ``done`` (served) before the batched call and is left
     out of it."""

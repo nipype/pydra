@@ -1843,6 +1843,10 @@ class Worker:
             order = sorted(
                 zip(pending, settled), key=lambda pair: pair[1].fault is not None
             )
+            faulted: list[TicketJob] = (
+                []
+            )  # jobs of the call with an infrastructure fault
+            fault, sample = None, None
             for (entry, job), one in order:
                 if one.value is _SKIPPED and one.fault is None:
                     continue
@@ -1854,8 +1858,19 @@ class Worker:
                 }
                 if state["attempt"] is None:
                     continue
+                if (
+                    one.fault is not None
+                    and one.fault.kind == "infrastructure"
+                    and not one.charged
+                ):
+                    faulted.append(entry)
+                    fault, sample = one.fault, state["sample"]
+                    continue
                 if self._settle_job(claim, entry, one, state, group, tries) == "retry":
                     retry.append((entry, job))
+            if faulted and not self._lost_claim(claim):
+                # one call's infrastructure faults are one fault of the residency
+                self._infrastructure(claim, faulted, fault, group, sample)
             for fault in survived:
                 self._survived(claim, fault, group)
             if group.get("stop") or self._lost_claim(claim):
