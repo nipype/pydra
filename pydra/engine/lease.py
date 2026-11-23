@@ -13,7 +13,6 @@ import os
 import re
 import shutil
 import socket
-import sys
 import threading
 import time
 import typing as ty
@@ -22,6 +21,7 @@ from pathlib import Path
 import attrs
 from pydra.utils.general import atomic_write
 from pydra.utils.storage import require_lease_storage, storage_now
+from pydra.utils.storagedir import IS_WINDOWS
 
 logger = logging.getLogger("pydra")
 
@@ -57,7 +57,6 @@ HOLDER_FILE = "holder.json"
 
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
 _ESTALE = getattr(errno, "ESTALE", None)
-IS_WINDOWS = sys.platform == "win32"
 
 
 def _delete_pending(err: OSError) -> bool:
