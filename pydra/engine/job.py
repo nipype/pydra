@@ -190,6 +190,10 @@ class Job(ty.Generic[TaskType]):
         # The stored entry the job runs against, set from a `Verify` by `_reusable` or by a
         # runner (`Candidate | None`; RFC 0003 section 7.1)
         self.verify = None
+        # A rerun under a store that replaces: set by the store's ``begin_rerun`` (RFC 0003
+        # section 10); ``replaces`` is the output digest of the entry it evicts
+        self.replace = False
+        self.replaces = None
         self._work_dir_memo = None
 
         # Save the submitter attributes needed to run the job later
@@ -251,6 +255,8 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("attempt", None)
         self.__dict__.setdefault("committed", None)
         self.__dict__.setdefault("verify", None)
+        self.__dict__.setdefault("replace", False)
+        self.__dict__.setdefault("replaces", None)
         self.__dict__.setdefault("_work_dir_memo", None)
 
     @classmethod
@@ -492,6 +498,16 @@ class Job(ty.Generic[TaskType]):
             return result
         return self.result()
 
+    def _begin_rerun(self, rerun: bool) -> None:
+        """Under a store that replaces a stored result on a rerun (`PortableStore`), mark the
+        job so that its commit evicts the entry it read and takes its place; a job that is not
+        a rerun is not marked."""
+        if rerun:
+            self.store.begin_rerun(self)
+        else:
+            self.replace = False
+            self.replaces = None
+
     def _published(self, result: Result) -> Result:
         """The result of a run, as the job reads it from here on: under a store with
         work directories its outputs are read from the entry (or the kept outputs), which
@@ -528,6 +544,7 @@ class Job(ty.Generic[TaskType]):
         result the workflow's outputs are later put in (see `_finish_workflow`)."""
         self._errored = False
         self._audit_started = False
+        self._begin_rerun(self.rerun)
         self._withdraw_success(lease)
         self._populate_filesystem()
         result = Result(
@@ -617,6 +634,7 @@ class Job(ty.Generic[TaskType]):
                     self._awaiting_run = False
                     self._cached_result = result
                     return result
+            self._begin_rerun(rerun)
             self._errored = False
             enters = self._enters_cache_dir
             cwd = os.getcwd()
@@ -692,6 +710,7 @@ class Job(ty.Generic[TaskType]):
                     self._awaiting_run = False
                     self._cached_result = result
                     return result
+            self._begin_rerun(rerun)
             self._errored = False
             enters = self._enters_cache_dir
             cwd = os.getcwd()
