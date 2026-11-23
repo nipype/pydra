@@ -44,7 +44,8 @@ uv run --no-sync pytest pydra/environments/tests/test_env_resolution_hpc.py \
     -m "lmod or singularity" --timeout=300 -v -s -rs 2>&1 | tee new.log
 gate new.log 3
 
-# test_singularity_1 and test_singularity_st_1 need --fakeroot; a node whose user has
+# test_singularity_1, test_singularity_1_subm (removed by the test_singularity_1 prefix)
+# and test_singularity_st_1 need --fakeroot; a node whose user has
 # no subuid mapping cannot give it, so probe a SIF the tests above cached, else
 # docker://alpine, which the apptainer cache holds from the tests above
 sif=$( (find "$PYDRA_IMAGE_CACHE" -name '*.sif' -type f 2>/dev/null || true) | head -1)

@@ -16,12 +16,12 @@ read, served or deleted.
 * A ``PickleStore`` root (``Submitter(store="pickle")``) gets a ``.pydra-identity``
   marker naming the scheme it is keyed under. The first run on a root that holds slots
   and no marker, or whose marker names an older scheme, logs one line saying every job
-  runs again once. The check is one read per ``Submitter`` call.
+  runs again once. The check is one read per ``Submitter`` call. A marker naming a newer
+  or unknown scheme is left as it is, with one line.
 * A ``PortableStore`` root names its identity in ``pydra-store.json``. A root created
-  under ``pydra-identity@1`` is refused under the new default with
-  ``StoreLayoutMismatch`` naming ``identity``, even when it holds only supplied-checksum
-  entries. Point the submitter at a new root, or open the old one with
-  ``PortableStore(root, identity=PydraIdentityV1())`` to read it.
+  under ``pydra-identity@1`` is not readable under ``pydra-identity@2`` (RFC 0004 section
+  9.1): it is refused with ``StoreLayoutMismatch`` naming ``identity``, even when it holds
+  only supplied-checksum entries. Point the submitter at a new root and recompute.
 * ``Result.record`` holds the key record for results read from a ``PortableStore``,
   first runs included, as it did under ``PickleStore``. ``pydra explain`` reads a
   portable entry directory as well as a JSON record or a pickle result directory.
