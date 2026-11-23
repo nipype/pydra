@@ -13,7 +13,6 @@ from traceback import format_exception
 import attr
 import cloudpickle as cp
 from pydra.compose.base import Task
-from pydra.utils.hash import hash_function
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
@@ -666,9 +665,18 @@ class Job(ty.Generic[TaskType]):
         hash_changes = self.task._hash_changes()
         details = ""
         for changed in hash_changes:
-            field = getattr(attr.fields(type(self.task)), changed)
-            hash_function(getattr(self.task, changed))
             val = getattr(self.task, changed)
+            field = getattr(attr.fields(type(self.task)), changed, None)
+            if field is None:
+                # Not an input field, e.g. the "Outputs" class, which is included in
+                # the hash in case the names/types of the outputs change
+                details += (
+                    f"- {changed}: the hash of {val!r} appears to be unstable. This "
+                    "could be due to a stochastic/non-thread-safe attribute(s) of it, "
+                    "or a function/lambda referenced by it (e.g. an output callable) "
+                    "that can't be consistently hashed\n"
+                )
+                continue
             field_type = type(val)
             if inspect.isclass(field.type) and issubclass(field.type, FileSet):
                 details += (
