@@ -12,8 +12,22 @@ import pytest
 
 def makedir(path: Path, name: str) -> Path:
     newdir = path / name
-    newdir.mkdir()
+    newdir.mkdir(mode=0o700)  # a portable root must be private, whatever the umask
     return newdir
+
+
+@no_win
+def test_makedir_root_is_a_private_store_root_under_a_group_umask(tmp_path):
+    """A cluster's umask 002 would make a plain mkdir 0o775, which the default store
+    refuses as not private"""
+    import os
+
+    old = os.umask(0o002)
+    try:
+        root = makedir(tmp_path, "cache")
+    finally:
+        os.umask(old)
+    Submitter(cache_root=root)
 
 
 def drop_stderr(dct: dict[str, ty.Any]):
