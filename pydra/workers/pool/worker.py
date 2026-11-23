@@ -351,6 +351,9 @@ class Worker:
         self.meter = meter if meter is not None else CallMeter()
         # residency key -> (host bytes, device bytes) gained across its load in this worker
         self._load_bytes: dict[str, tuple[int | None, int | None]] = {}
+        # residency key -> seconds its latest load took in this worker
+        self._load_s: dict[str, float] = {}
+        self._hardware: HardwareClass | None = None
         self.codec = codec or PrivatePickle()
         self.calibration: DirectoryCalibration | None = DirectoryCalibration(
             self.root / "calibration"
@@ -545,6 +548,7 @@ class Worker:
             self._worker_lease = lease
             self.client.hold(lease)
             hardware = self.hardware()
+            self._hardware = hardware
             try:
                 self.cls = check_hardware(cls, hardware)
             except WrongHardware as err:
@@ -1054,6 +1058,8 @@ class Worker:
             )
             rs.release(key)
         took = time.monotonic() - began
+        if loaded:
+            self._load_s[residency_key(keys)] = took
         if before is not None:
             after = self._held_bytes()
             self._load_bytes[residency_key(keys)] = tuple(  # type: ignore[assignment]
@@ -1362,9 +1368,12 @@ class Worker:
                 except Exception as exc:
                     raise _machinery(exc)
                 try:
-                    self._load(current)
+                    _, loaded = self._load(current)
                 except Exception as exc:
                     raise attach(exc, fault_of(exc, "load", self.classify))
+                if loaded:  # a reload after a fault: this call is cold
+                    group["cold"] = True
+                    self._warm[claim.queue] = 0
                 try:
                     ran = self._invoke(claim, item, current, attempt, group)
                 except Exception as exc:
@@ -1456,6 +1465,7 @@ class Worker:
         job.chdir = False
         job.claim = claim.lease
         self._add_providers(job)
+        job.pool_facts = self.pool_facts(claim, entry, job, attempt, group)
         self._seq += 1
         seq = self._seq
         token_dir = claim.lease.token_dir
@@ -1518,6 +1528,72 @@ class Worker:
         self._warm[claim.queue] = self._warm.get(claim.queue, 0) + 1
         return call, self._sample(
             claim, entry, call.wall, group, peaks, task=task_key(job.task)
+        )
+
+    def pool_facts(
+        self, claim: Claim, entry: TicketJob, job: "Job", attempt: str, group: dict
+    ) -> dict:
+        """The ``pool`` section of the call's execute context (``pool-facts@1``, RFC 0005 section 8),
+        from state this worker already holds: the worker, its host and class, the pool attempt, the
+        hardware it read at start, each resident's key, provider and version with whether this call
+        loaded it, the batch and the job's survived losses. The job's `PortableStore` records it in
+        the execute context when its identity lists ``pool`` in ``recorded_only``; the job sends it
+        to its audit and ``Result.runtime`` in any case."""
+        from pydra.engine import resident
+
+        cold = bool(group.get("cold", False))
+        since = self._warm.get(claim.queue, 0)  # reset to 0 by the load of a cold call
+        residency = []
+        key = residency_key(claim.ticket.residency)
+        load_s = self._load_s.get(key) if key is not None else None
+        for field, name in resident.provided_fields(job.task):
+            try:
+                version: str | None = str(resident.find_provider(job, name).version())
+            except Exception:
+                version = None
+            residency.append(
+                {
+                    "key": resident.spec_key(job.task, field, name).digest(),
+                    "kind": "provider",
+                    "name": name,
+                    "version": version,
+                    "state": "cold" if cold else "warm",
+                    "since_load": since,
+                    "load_s": None if load_s is None else round(load_s, 6),
+                }
+            )
+        hw = self._hardware or HardwareClass()
+        gpu = hw.gpus[0] if hw.gpus else None
+        return {
+            "scheme": "pool-facts@1",
+            "worker": self.token,
+            "host": _host_token(),
+            "class": self.cls.name,
+            "attempt": attempt,
+            "hardware": {
+                "device": self.cls.device,
+                "name": None if gpu is None else gpu.product,
+                "memory_mib": (
+                    None if gpu is None or gpu.memory is None else gpu.memory // 2**20
+                ),
+                "compute_capability": None if gpu is None else gpu.compute_capability,
+                "cpus": hw.cpus,
+            },
+            "residency": residency,
+            "batch": {"size": 1, "index": 0},
+            "losses_survived": self._losses(claim, entry),
+        }
+
+    def _losses(self, claim: Claim, entry: TicketJob) -> int:
+        """The takeovers the job survived: its generations caused by one, listed only when its current
+        generation is not its first put."""
+        current = claim.current(entry)
+        if current is not None and current[1].get("cause") == "put":
+            return 0
+        return sum(
+            1
+            for _, r in self.pool.generations(*entry.key)
+            if r.get("cause") == "takeover"
         )
 
     def _run_call(

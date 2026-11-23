@@ -32,6 +32,7 @@ from pydra.engine.store import (
 )
 from pydra.utils.storage import StorageUnsupported
 from pydra.engine.result import (
+    Runtime,
     RuntimeSpec,
     Result,
     record_error,
@@ -117,6 +118,9 @@ class Job(ty.Generic[TaskType]):
     # finalised with the job
     _audit_started: bool = False
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
+    # The ``pool`` section a pool worker computed for this call (``pool-facts@1``, RFC 0005
+    # section 8), None elsewhere; see `_record_pool_facts`
+    pool_facts: dict[str, ty.Any] | None = None
 
     _inputs: dict[str, ty.Any] | None = None
     _run_start_time: datetime | None
@@ -877,6 +881,7 @@ class Job(ty.Generic[TaskType]):
                 finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
+                    self._record_pool_facts(result)
                     self._prove_claim(result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
@@ -961,6 +966,7 @@ class Job(ty.Generic[TaskType]):
                 finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
+                    self._record_pool_facts(result)
                     self._prove_claim(result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
@@ -979,6 +985,31 @@ class Job(ty.Generic[TaskType]):
         if self._has_work_dir:
             self._cached_result = result
         return result
+
+    def _record_pool_facts(self, result: Result) -> None:
+        """Put the facts a pool worker attached (`pool_facts`) on ``result.runtime`` and send them to
+        the audit, before the commit. They enter the execute context only through the store (a
+        `PortableStore` whose identity lists ``pool`` in ``recorded_only``)."""
+        if self.pool_facts is None:
+            return
+        if result.runtime is None:
+            result.runtime = Runtime()
+        result.runtime.pool = self.pool_facts
+        if self.audit.audit_check(AuditFlag.PROV):
+            try:
+                self.audit.audit_message(
+                    {
+                        "@type": "pool-facts",
+                        "checksum": self.checksum,
+                        "attempt": self.attempt,
+                        "pool": self.pool_facts,
+                    },
+                    AuditFlag.PROV,
+                )
+            except Exception as err:  # the commit that follows must still run
+                logger.warning(
+                    "could not audit the pool facts of %s: %s", self.name, err
+                )
 
     def _run_task(self, rerun: bool) -> None:
         """Run the task. The state of each provided field is bound for the duration of

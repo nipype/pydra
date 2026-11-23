@@ -7,13 +7,16 @@ their outcomes and reports them, and scales each class's workers through its sub
 coordinator is live per pool: a new one waits up to ``coordinator_wait`` (then `PoolBusy`), and
 one that sees a newer epoch reports its open jobs ``NotRun`` (`PoolFenced`). A class whose
 workers keep failing to start is broken and its jobs held. A sampled fraction of settled jobs is
-run again alone and compared with the committed entry (`ParityRecord`, RFC 0005 section 4.4).
-`close` ends the coordinator, which then stops the workers its substrate lists.
+run again alone and compared with the committed entry (`ParityRecord`, RFC 0005 section 4.4). A
+pool outlives the runs driven on it; whoever made it closes it. It refuses a store whose
+identity would split slots by pool facts (`PoolFactsWouldSplitSlots`).
 """
 
 from __future__ import annotations
 
+import asyncio
 import collections
+import contextvars
 import contextlib
 import hashlib
 import importlib
@@ -86,6 +89,7 @@ if ty.TYPE_CHECKING:
 
 __all__ = [
     "PoolBusy",
+    "PoolFactsWouldSplitSlots",
     "PoolFenced",
     "PoolJobFailed",
     "PoolSettings",
@@ -100,6 +104,38 @@ JobKey = tuple[str, str]
 
 class PoolBusy(RuntimeError):
     """Another coordinator's lease on the pool stayed live for ``coordinator_wait`` seconds."""
+
+
+class PoolFactsWouldSplitSlots(ValueError):
+    """The store's identity would key the ``pool`` section of the execute context: every worker and
+    every batch size would split one result into many slots (RFC 0005 section 8)."""
+
+
+POOL_FACTS_SECTION = "pool"
+"""The execute-context section a worker adds (``pool-facts@1``)."""
+
+
+def pool_facts_recorded(store: ty.Any) -> bool:
+    """Whether the pool facts enter the execute context of a job published to ``store``: True when its
+    identity lists ``pool`` in ``recorded_only``; False under a store with no identity (`PickleStore`),
+    whose facts reach the audit record and ``Result.runtime`` only.
+
+    Raises
+    ------
+    PoolFactsWouldSplitSlots
+        An identity that does not list ``pool`` in ``recorded_only``: it would key the facts.
+    """
+    identity = store.identity
+    if identity is None:
+        return False
+    if POOL_FACTS_SECTION in identity.recorded_only:
+        return True
+    name = identity.name
+    raise PoolFactsWouldSplitSlots(
+        f"the store's identity {name!r} does not list {POOL_FACTS_SECTION!r} in recorded_only, so "
+        "the pool facts of each worker and batch would split one result into many slots; list it "
+        "in the identity's recorded_only"
+    )
 
 
 class PoolFenced(RuntimeError):
@@ -159,6 +195,11 @@ class _Job:
     ticket: "_Ticket | None" = (
         None  # the ticket that holds it, once written or followed
     )
+    # where its outcome goes: the binding of the run that submitted it (None: the latest binding)
+    report: "ty.Callable[[Job, Outcome], None] | None" = None
+    # jobs of other runs with its key, submitted while it was open: they settle with it
+    twins: "list[_Job]" = attrs.field(factory=list)
+    twin_of: "_Job | None" = None
 
 
 def ticket_time(jobs: ty.Iterable["Job"]) -> float | None:
@@ -266,6 +307,38 @@ def _fingerprint(job: "Job") -> str:
     return hashlib.sha256(jcs(job.context)).hexdigest()
 
 
+_RUN: contextvars.ContextVar[tuple[object, object] | None] = contextvars.ContextVar(
+    "pydra_pool_run", default=None
+)
+"""The run a `bind` was made in: ``(token, owner)``, the owner being the asyncio task or thread that
+set it. Each task and thread has its own copy of the context, so two runs on one event loop are told
+apart; a copy inherited from a parent carries its token to code that does not bind (a hop to a
+thread), and is replaced by the first `bind` of its own."""
+
+
+def _owner() -> object:
+    """The asyncio task running this code, or its thread outside one."""
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:
+        task = None
+    return task if task is not None else threading.current_thread()
+
+
+def _run_token(create: bool = False) -> object | None:
+    """This context's run token. With ``create`` (a `bind`), the token is this task's or thread's
+    own: one inherited from a parent context is replaced by a fresh one."""
+    held = _RUN.get()
+    if not create:
+        return None if held is None else held[0]
+    owner = _owner()
+    if held is not None and held[1] is owner:
+        return held[0]
+    token = object()
+    _RUN.set((token, owner))
+    return token
+
+
 def _newest_mtime(lease: Path) -> float | None:
     """The newest mtime of a lease directory, its entries and theirs (a beater's heartbeats);
     None when it is missing."""
@@ -297,13 +370,10 @@ class WarmPool:
     fit : Fit
         Judges a job's request against a class (default `DeclaredFit`).
     calibration : Calibration, optional
-        Where measurements go: a `DirectoryCalibration`'s directory is written into the pool for
-        the coordinator's epoch, and every worker writes its samples and unfit records there;
-        the coordinator writes its re-checks' `ParityRecord`s to it. None:
-        `DirectoryCalibration` at ``root / "calibration"``. Any other `Calibration` receives only
-        the parity records and warns, since workers then write to ``root / "calibration"``. A
-        `MeasuredFit` given as ``fit`` reads the calibration it was made with, and warns when
-        that is not where the workers write.
+        Where measurements go; None: `DirectoryCalibration` at ``root / "calibration"``. A
+        `DirectoryCalibration`'s directory is where the workers write samples and unfit
+        records; any other `Calibration` receives only the coordinator's `ParityRecord`s,
+        with a warning, as does a `MeasuredFit` whose calibration is not the workers'.
     providers : sequence of Provider or "module:qualname"
         Providers the workers this pool starts load before the jobs' own.
     faults : FaultBudgets
@@ -324,6 +394,17 @@ class WarmPool:
     ------
     PoolBusy
         Another coordinator stayed live for ``settings.coordinator_wait`` seconds.
+    PoolFactsWouldSplitSlots
+        The store's identity would key the ``pool`` section of the execute context.
+
+    Notes
+    -----
+    Several runs may share a pool, one after another or at once (two `Submitter`s on two threads,
+    or two ``drive`` calls on one event loop): each job's outcome goes to the run that submitted it
+    (`bind` is per run, that is per asyncio task or thread, through a context variable), a job
+    another run already has open here settles with it, and a run's ``cancel`` touches only its own
+    jobs. All runs share its workers and their resident state. A twin of a job run with
+    ``rerun=True`` settles with the other run's attempt rather than computing again.
     """
 
     checks_store: ty.ClassVar[bool] = True
@@ -349,6 +430,7 @@ class WarmPool:
         codec: JobCodec = PrivatePickle(),
         probe: bool = True,
     ):
+        pool_facts_recorded(store)  # before the pool is touched
         self.batches = True
         classify_ref = (
             None if classify is _faults.classify else _classifier_reference(classify)
@@ -404,7 +486,9 @@ class WarmPool:
         self.classify = classify
         self.settings = settings
         self.codec = codec
-        self._report: ty.Callable[["Job", "Outcome"], None] | None = None
+        # each run's binding, by its run token (`_RUN`): the report of the jobs it submits
+        self._reports: dict[object, ty.Callable[["Job", "Outcome"], None]] = {}
+        self._by_key: dict[JobKey, _Job] = {}  # the open job followed for each key
         self._lock = threading.RLock()
         self._wake = threading.Event()
         self._stop = threading.Event()
@@ -534,15 +618,42 @@ class WarmPool:
     # -- the executor protocol -----------------------------------------------------------------
 
     def bind(self, report: ty.Callable[["Job", "Outcome"], None]) -> None:
-        """Set the callable that receives each job's outcome (from the follower thread)."""
-        self._report = report
+        """Set the callable that receives the outcomes (from the follower thread) of the jobs this
+        run submits from here on. A run is the context it binds in (`contextvars`: each asyncio
+        task and each thread has its own), so runs on other tasks or threads keep their own.
+        """
+        with self._lock:
+            self._reports[_run_token(create=True)] = report
+
+    def unbind(self, report: ty.Callable[["Job", "Outcome"], None]) -> None:
+        """Forget the binding of the run calling it, if it is ``report``; its jobs still open are
+        reported to it."""
+        with self._lock:
+            token = _run_token()
+            if token is not None and self._reports.get(token) is report:
+                del self._reports[token]
+
+    def _sole_report(self) -> "ty.Callable[[Job, Outcome], None] | None":
+        """The binding when exactly one run is bound, else None."""
+        if len(self._reports) == 1:
+            return next(iter(self._reports.values()))
+        return None
 
     def submit(self, jobs: ty.Sequence["Job"]) -> Handle:
         """Place the jobs and queue them for the follower to write as tickets; never blocks on
         capacity. A job that fits no class is reported ``Failed`` before this returns.
         """
-        if self._report is None:
-            raise RuntimeError("bind() a report callable before submitting jobs")
+        with self._lock:
+            token = _run_token()
+            report = self._reports.get(token) if token is not None else None
+            if report is None:
+                report = self._sole_report()
+            bound = len(self._reports)
+        if report is None:
+            raise RuntimeError(
+                "bind() a report callable in this run (task or thread) before submitting jobs: "
+                f"{bound} runs are bound, none here, so the outcomes would have nowhere to go"
+            )
         handle = Handle(self, tuple(jobs), set(jobs))
         with self._lock:
             if self._closed:
@@ -550,8 +661,8 @@ class WarmPool:
             if self._fenced is not None:
                 reports = [(j, None, NotRun(self._fenced, held=True)) for j in jobs]
             else:
-                reports = self._queue_jobs(jobs, handle)
-        self._deliver(reports, handle)
+                reports = self._queue_jobs(jobs, handle, report)
+        self._deliver(reports, handle, report)
         self._ensure_thread()
         self._wake.set()
         return handle
@@ -562,15 +673,17 @@ class WarmPool:
         whose results stay in the store. Every cancelled job is reported ``NotRun(held=False)``.
         """
         with self._lock:
-            cancelled = [self._open[j] for j in handle.jobs if j in self._open]
+            found = [self._open[j] for j in handle.jobs if j in self._open]
+            cancelled: list[_Job] = []
             by_ticket: dict[tuple[str, str], list[_Job]] = {}
-            for j in cancelled:
-                self._unwait(j)
-                if j.ticket is not None:
-                    by_ticket.setdefault((j.ticket.queue, j.ticket.digest), []).append(
-                        j
-                    )
-                self._forget(j)
+            for j in found:
+                gone, withdraw = self._cancel_one(j)
+                cancelled.append(gone)
+                if withdraw:
+                    by_ticket.setdefault(
+                        (gone.ticket.queue, gone.ticket.digest), []
+                    ).append(gone)
+                gone.ticket = None
         for (queue, digest), group in by_ticket.items():
             try:
                 claim = self.pool.take(queue, digest)
@@ -723,13 +836,17 @@ class WarmPool:
         )
 
     def _queue_jobs(
-        self, jobs: ty.Sequence["Job"], handle: Handle | None
+        self,
+        jobs: ty.Sequence["Job"],
+        handle: Handle | None,
+        report: "ty.Callable[[Job, Outcome], None] | None" = None,
     ) -> list[tuple["Job", _Job | None, "Outcome"]]:
         """Place each job and queue it for the follower, which checks it against the pool (a live
         ticket that holds it, a refusal) before writing it; no storage is read here. Return the
         reports due now: jobs that cannot be placed, and jobs placed on a broken class.
         """
         reports: list[tuple["Job", _Job | None, "Outcome"]] = []
+        report = report or self._sole_report()
         startable = self._startable()
         for job in jobs:
             if is_workflow(job.task):
@@ -747,15 +864,33 @@ class WarmPool:
                 )
                 continue
             try:
-                placement, ladder, residency = self._placement(job, startable=startable)
                 key = (job.checksum, _fingerprint(job))
+                primary = self._by_key.get(key)
+                if primary is not None and primary.job in self._open:
+                    # another run's job of this key is open here: settle with it
+                    twin = _Job(
+                        job,
+                        handle,
+                        key,
+                        primary.queue,
+                        primary.ladder,
+                        primary.residency,
+                        report=report,
+                        twin_of=primary,
+                    )
+                    primary.twins.append(twin)
+                    self._open[job] = twin
+                    continue
+                placement, ladder, residency = self._placement(job, startable=startable)
             except Exception as exc:
                 reports.append((job, None, Failed(exc)))
                 continue
             if isinstance(placement, Unplaceable):
                 reports.append((job, None, Failed(UnplaceableJob(placement))))
                 continue
-            j = _Job(job, handle, key, placement.queue, ladder, residency)
+            j = _Job(
+                job, handle, key, placement.queue, ladder, residency, report=report
+            )
             broken = self._broken.get(placement.worker_class) or self._held.get(
                 (placement.queue, _label(residency))
             )
@@ -763,6 +898,7 @@ class WarmPool:
                 reports.append((job, j, NotRun(broken, held=True)))
                 continue
             self._open[job] = j
+            self._by_key[key] = j
             self._unchecked[j] = None
         return reports
 
@@ -928,9 +1064,45 @@ class WarmPool:
                     del self._queues[t.queue]
 
     def _forget(self, j: _Job) -> None:
+        """Stop following ``j``. A twin leaves its primary; a primary's twins leave the open jobs
+        with it and are reported with it (`_deliver`)."""
+        if j.twin_of is not None:
+            if j in j.twin_of.twins:
+                j.twin_of.twins.remove(j)
+            j.twin_of = None
+            self._open.pop(j.job, None)
+            return
         self._release(j)
+        if self._by_key.get(j.key) is j:
+            del self._by_key[j.key]
         if j.job is not None:
             self._open.pop(j.job, None)
+        for twin in j.twins:
+            self._open.pop(twin.job, None)
+
+    def _cancel_one(self, j: _Job) -> tuple[_Job, bool]:
+        """Stop following the cancelled job ``j``: the `_Job` to report ``NotRun``, and whether its
+        ticket entry may be withdrawn. A primary with twins hands its place, ticket and all, to its
+        first twin and is not withdrawn; a twin just leaves its primary."""
+        if j.twin_of is not None:
+            self._forget(j)
+            return j, False
+        if not j.twins:
+            self._unwait(j)
+            ticket = j.ticket
+            self._forget(j)
+            j.ticket = ticket  # read by the withdrawal, then cleared
+            return j, ticket is not None
+        heir = j.twins.pop(0)
+        gone = _Job(
+            j.job, j.handle, j.key, j.queue, j.ladder, j.residency, report=j.report
+        )
+        self._open.pop(j.job, None)
+        j.job, j.handle, j.report = heir.job, heir.handle, heir.report
+        for twin in j.twins:
+            twin.twin_of = j
+        self._open[j.job] = j
+        return gone, False
 
     def _queued(self, queue: str) -> int:
         return sum(len(self._tickets[tid].jobs) for tid in self._queues.get(queue, ()))
@@ -1437,21 +1609,45 @@ class WarmPool:
         logger.warning(why)
         with self._lock:
             self._fenced = why
-            reports = [(j.job, j, NotRun(why, held=True)) for j in self._open.values()]
-            for j in list(self._open.values()):
+            primaries = [j for j in self._open.values() if j.twin_of is None]
+            reports = [(j.job, j, NotRun(why, held=True)) for j in primaries]
+            for j in primaries:
                 self._forget(j)
             self._waiting.clear()
         self._deliver(reports)
 
-    def _deliver(self, reports: list, handle: Handle | None = None) -> None:
+    def _deliver(
+        self,
+        reports: list,
+        handle: Handle | None = None,
+        report: "ty.Callable[[Job, Outcome], None] | None" = None,
+    ) -> None:
+        """Report each outcome to the run that submitted the job (its `_Job`'s binding; else
+        ``report``, else the one binding when exactly one run is bound), and a primary's outcome to
+        its twins too.
+        """
+        expanded = []
         for job, j, outcome in reports:
+            expanded.append((job, j, outcome))
+            if j is not None and j.twin_of is None and j.twins:
+                expanded.extend((t.job, t, outcome) for t in list(j.twins))
+                j.twins.clear()
+        for job, j, outcome in expanded:
             if job is None:
                 continue
             owner = j.handle if j is not None else handle
             if owner is not None:
                 owner.open.discard(job)
+            to = (j.report if j is not None else None) or report or self._sole_report()
+            if to is None:
+                logger.error(
+                    "the outcome of %s has no run to go to: it was submitted outside a bound run "
+                    "while several runs are bound",
+                    job.name,
+                )
+                continue
             try:
-                self._report(job, outcome)
+                to(job, outcome)
             except Exception as err:  # the driver is gone
                 logger.warning("reporting %s failed: %s", job.name, err)
 
@@ -1640,6 +1836,8 @@ class WarmPool:
         with self._lock:
             held = []
             for j in list(self._open.values()):
+                if j.twin_of is not None:
+                    continue  # reported with its primary
                 queue = j.queue if j.ticket is None else j.ticket.queue
                 why = self._broken.get(_queue_class(queue)) or self._held.get(
                     (queue, _label(j.residency))

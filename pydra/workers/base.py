@@ -104,6 +104,82 @@ class Worker(metaclass=abc.ABCMeta):
         return plugin_name
 
 
+@attrs.define
+class ExecutorWorker(Worker):
+    """An executor (`pydra.engine.executor.Executor`, such as a `WarmPool`) given to a `Submitter` as
+    a worker. The submitter hands its runs' jobs to the executor itself, and a lone job through `run`.
+
+    Parameters
+    ----------
+    executor : Executor
+        The executor; bound to each run's driver in turn.
+    owned : bool
+        Whether the submitter made it (by name) and closes it with itself; an executor passed in
+        belongs to its caller, who closes it, and `close` leaves it open.
+    """
+
+    executor: ty.Any = None
+    owned: bool = False
+    _plugin_name: ty.ClassVar[str] = "executor"
+
+    def __getstate__(self) -> dict[str, ty.Any]:
+        """The executor stays in the submitting process."""
+        state = super().__getstate__()
+        state["executor"] = None
+        return state
+
+    async def run(self, job: "Job[TaskType]", rerun: bool = False) -> "Result":
+        """Hand ``job`` to the executor alone and wait for its outcome: its result, the error of a
+        ``Failed`` job, or `RunIncomplete` for a job that did not run."""
+        from pydra.engine.runner import Failed, NotRun
+        from pydra.engine.submitter import RunIncomplete
+
+        if self.executor is None:
+            raise RuntimeError(
+                "an executor worker copied to another process cannot run jobs"
+            )
+        loop = asyncio.get_running_loop()
+        done: asyncio.Future = loop.create_future()
+
+        def settle(outcome: ty.Any) -> None:
+            if not done.done():
+                done.set_result(outcome)
+
+        def report(reported: "Job", outcome: ty.Any) -> None:
+            if reported is job:
+                loop.call_soon_threadsafe(settle, outcome)
+
+        job.rerun = rerun
+        self.executor.bind(report)
+        try:
+            handle = self.executor.submit([job])
+            try:
+                outcome = await done
+            except BaseException:
+                if handle.open:
+                    self.executor.cancel(handle)
+                raise
+        finally:
+            self.executor.unbind(report)
+        if isinstance(outcome, Failed):
+            raise outcome.error
+        if isinstance(outcome, NotRun):
+            held = ", held by infrastructure" if outcome.held else ""
+            raise RunIncomplete(
+                f"Job {job.name!r} did not run{held}: {outcome.reason}. A later run resumes "
+                "it from the store.",
+                [],
+                [],
+                [(job, outcome)],
+            )
+        return outcome
+
+    def close(self) -> None:
+        """Close the executor when the submitter made it; one passed in is its caller's."""
+        if self.owned and self.executor is not None:
+            self.executor.close()
+
+
 async def read_and_display_async(*cmd, hide_display=False, strip=False):
     """
     Capture standard input and output of a process, displaying them as they arrive.

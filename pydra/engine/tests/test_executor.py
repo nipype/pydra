@@ -61,6 +61,9 @@ class Counting(WorkerExecutor):
 
         super().bind(counted)
 
+    def unbind(self, report):
+        pass
+
     def submit(self, jobs):
         self.calls.append([j.name for j in jobs])
         return super().submit(jobs)

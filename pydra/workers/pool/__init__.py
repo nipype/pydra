@@ -28,6 +28,7 @@ _EXPORTS = {
     "fit_request": "placement",
     "place": "placement",
     "PoolBusy": "pool",
+    "PoolFactsWouldSplitSlots": "pool",
     "PoolFenced": "pool",
     "PoolJobFailed": "pool",
     "PoolSettings": "settings",

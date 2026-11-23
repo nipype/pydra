@@ -429,14 +429,17 @@ def _drive(sub, task, executor):
     from pydra.engine.runner import GraphRunner
 
     runner = GraphRunner(task, sub.store, on_error="raise_at_end", submitter=sub)
-    asyncio.run(
-        drive(
-            runner,
-            {"pool": executor},
-            lambda job: "pool",
-            on_error="raise_at_end",
+    try:
+        asyncio.run(
+            drive(
+                runner,
+                {"pool": executor},
+                lambda job: "pool",
+                on_error="raise_at_end",
+            )
         )
-    )
+    finally:
+        executor.close()  # its owner closes it: drive never does
     if runner.errors:
         raise AssertionError("\n".join(runner.errors))
     return runner
@@ -1516,7 +1519,7 @@ def test_follower_continues_while_a_recheck_blocks(tmp_path, tasks, pools, monke
     sub.providers = (tasks.Recorder(),)
     settings = _settings(idle_polls=40, recheck_fraction=1.0, drain_s=0.1)
     warm = _warm(tmp_path, pools, sub, settings=settings)
-    runner = _drive(sub, tasks.Chain(x=1), warm)  # the driver closes the pool
+    runner = _drive(sub, tasks.Chain(x=1), warm)  # _drive closes the pool
     assert runner.done and entered.is_set() and not release.is_set()
     assert warm.rechecks_dropped == 1  # C's: the queue held B's
     assert warm._recheck_thread.is_alive()
