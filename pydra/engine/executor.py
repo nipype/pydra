@@ -17,6 +17,7 @@ READ_BACK = Backoff(first=0.05, cap=1.0)
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
     from pydra.engine.runner import Outcome
+    from pydra.engine.store import ResultStore
     from pydra.workers.base import Worker
 
 
@@ -57,9 +58,14 @@ class Executor(ty.Protocol):
     inline: ty.ClassVar[bool]
     # whether the driver feeds it one job at a time under ``fail_fast``
     serial: bool
+    # the store its jobs must use (a pool's), None for any
+    store: "ResultStore | None"
 
     def bind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
         """Set the callable that receives the outcome of each job"""
+
+    def unbind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
+        """Forget ``report`` once its run has ended"""
 
     def submit(self, jobs: "ty.Sequence[Job]") -> Handle:
         """Start the jobs; an executor with ``batches = False`` gets one per call"""
@@ -88,6 +94,7 @@ class InlineExecutor:
     checks_store = True
     inline = True
     serial = True
+    store = None
 
     def __init__(
         self, worker: "Worker", worker_for: "ty.Callable[[Job], Worker] | None" = None
@@ -99,6 +106,9 @@ class InlineExecutor:
     def bind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
         """Set the callable that receives the outcome of each job"""
         self._report = report
+
+    def unbind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
+        """Nothing to forget: a bind lasts until the next"""
 
     def submit(self, jobs: "ty.Sequence[Job]") -> Handle:
         """Run the jobs in order and report each outcome; an exception a job raises is
@@ -191,6 +201,7 @@ class WorkerExecutor:
     batches = False
     checks_store = True
     inline = False
+    store = None
 
     @property
     def serial(self) -> bool:
@@ -228,6 +239,9 @@ class WorkerExecutor:
     def bind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
         """Set the callable that receives the outcome of each job"""
         self._report = report
+
+    def unbind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
+        """Nothing to forget: a bind lasts until the next"""
 
     def submit(self, jobs: "ty.Sequence[Job]") -> Handle:
         """Schedule every job on the running loop before yielding to it"""
