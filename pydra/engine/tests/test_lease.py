@@ -1533,3 +1533,45 @@ def test_refused_for_good_on_windows_raises_lease_refused(
     assert not isinstance(err, LeaseTimeout) and isinstance(err, PermissionError)
     assert isinstance(err.error, PermissionError) and err.lockfile == lockfile
     assert release_patience(SLOW) <= clock.t < SLOW.timeout
+
+
+def test_refusals_seen_by_an_earlier_lease_object_count(tmp_path, monkeypatch, refused):
+    """A caller that makes a new lease per attempt passes on when refusals began
+    (`refusing_since`), so a persistent refusal still ends in LeaseRefused."""
+    lockfile = tmp_path / "abc.lock"
+    refused["mkdir"][lockfile] = -1
+    monkeypatch.setattr(lease_module, "IS_WINDOWS", True)
+    now = [0.0]
+
+    def make():
+        since = lease.refusing_since if lease is not None else None
+        return DirectoryLease.at(
+            lockfile, SLOW, monotonic=lambda: now[0], refused_since=since
+        )
+
+    lease = None
+    lease = make()
+    assert lease.try_take() is not None
+    assert lease.refusing_since == 0.0
+    now[0] = release_patience(SLOW)
+    lease = make()
+    with pytest.raises(LeaseRefused):
+        lease.try_take()
+
+
+def test_max_wait_before_the_patience_names_the_refusal(tmp_path, monkeypatch, refused):
+    """A ``max_wait`` shorter than the release patience ends the wait in LeaseTimeout
+    before LeaseRefused could; the timeout names the refusal and is caused by it."""
+    lockfile = tmp_path / "abc.lock"
+    refused["mkdir"][lockfile] = -1
+    monkeypatch.setattr(lease_module, "IS_WINDOWS", True)
+    settings = LeaseSettings(
+        stale_after=10, timeout=15, attribute_delay=0, max_wait=0.5
+    )
+    assert settings.max_wait < release_patience(settings)
+    clock = FakeTime(time.time())
+    with pytest.raises(LeaseTimeout) as excinfo:
+        clock.lease(tmp_path, lockfile, settings).__enter__()
+    assert not isinstance(excinfo.value, LeaseRefused)
+    assert isinstance(excinfo.value.__cause__, PermissionError)
+    assert "refusing" in str(excinfo.value)

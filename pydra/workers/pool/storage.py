@@ -568,6 +568,9 @@ class _Queue:
         self.targets: dict[tuple[int, int], str] = {}
         self.cached: dict[str, Ticket] = {}
         self.judged: dict[str, float] = {}  # tickets found under a live claim, when
+        self.refused: dict[str, float] = (
+            {}
+        )  # claim leases the storage refuses, since when
         self.missing: dict[str, float] = {}  # tickets found missing or corrupt, when
         self.faults: list[tuple[str, str]] = []
 
@@ -595,6 +598,7 @@ class PoolRoot:
         self._lease_settings = attrs.evolve(settings, holder="anonymous")
         self._queues: dict[str, _Queue] = {}
         self._labels: dict[str, str] = {}
+        self.monotonic: ty.Callable[[], float] = time.monotonic  # claims' local clock
 
     # -- opening -------------------------------------------------------------------------
 
@@ -1723,7 +1727,7 @@ class PoolRoot:
         held = self.holds(queue, epoch)
         if held and "#" in queue:
             return None
-        now = time.monotonic()
+        now = self.monotonic()
         interval = self.settings.renew_interval
         q.judged = {d: at for d, at in q.judged.items() if now - at < interval}
         q.missing = {d: at for d, at in q.missing.items() if now - at < interval}
@@ -1751,11 +1755,11 @@ class PoolRoot:
             ticket = self._ticket(q, digest)
         except CorruptTicket as err:
             q.faults.append((digest, f"corrupt: {err}"))
-            q.missing[digest] = time.monotonic()
+            q.missing[digest] = self.monotonic()
             return None
         if ticket is None:
             q.faults.append((digest, "missing"))
-            q.missing[digest] = time.monotonic()
+            q.missing[digest] = self.monotonic()
         return ticket
 
     def take(
@@ -1783,14 +1787,22 @@ class PoolRoot:
         beat: ty.Literal["thread", "external"],
     ) -> "Claim | None":
         lease = DirectoryLease.at(
-            q.path / "claims" / f"{digest}.lease", self._lease_settings, beat=beat
+            q.path / "claims" / f"{digest}.lease",
+            self._lease_settings,
+            beat=beat,
+            monotonic=self.monotonic,
+            refused_since=q.refused.get(digest),
         )
         try:
             wait = lease.try_take()
         except LeaseTimeout:
             wait = 0.0
+        if lease.refusing_since is None:
+            q.refused.pop(digest, None)
+        else:
+            q.refused[digest] = lease.refusing_since
         if wait is not None:
-            q.judged[digest] = time.monotonic()
+            q.judged[digest] = self.monotonic()
             return None
         claim = Claim(self, q, digest, ticket, lease, slot)
         try:

@@ -490,6 +490,10 @@ class DirectoryLease:
         Who renews the lease once taken: a heartbeat thread in this process
         (default), or another process, a `LeaseBeater` reached through
         `BeaterClient`, given `token_dir`; with ``"external"`` no thread is started.
+    refused_since : float, optional
+        When, on ``monotonic``, an earlier lease object of the same ``lockfile`` began
+        seeing the refusals `LeaseRefused` bounds (its `refusing_since`), so a caller
+        that makes a lease per attempt still reaches the bound.
     """
 
     checksum: str | None
@@ -502,6 +506,7 @@ class DirectoryLease:
     beat: ty.Literal["thread", "external"] = attrs.field(
         default="thread", kw_only=True, validator=attrs.validators.in_(_BEATS)
     )
+    refused_since: float | None = attrs.field(default=None, kw_only=True, repr=False)
     broke: list[dict] = attrs.field(factory=list, init=False, repr=False)
     lost: str | None = attrs.field(default=None, init=False, repr=False)
     _token: str | None = attrs.field(default=None, init=False, repr=False)
@@ -531,6 +536,7 @@ class DirectoryLease:
         clock: ty.Callable[[], float] | None = None,
         monotonic: ty.Callable[[], float] = time.monotonic,
         sleep: ty.Callable[[float], None] = time.sleep,
+        refused_since: float | None = None,
     ) -> "DirectoryLease":
         """A named lease: the lease directory ``lockfile``, guarding no job.
 
@@ -544,6 +550,8 @@ class DirectoryLease:
             See `DirectoryLease`.
         clock, monotonic, sleep : callable, optional
             See `DirectoryLease`.
+        refused_since : float, optional
+            See `DirectoryLease`.
         """
         return cls(
             None,
@@ -554,7 +562,14 @@ class DirectoryLease:
             monotonic=monotonic,
             sleep=sleep,
             beat=beat,
+            refused_since=refused_since,
         )
+
+    @property
+    def refusing_since(self) -> float | None:
+        """When, on ``monotonic``, the refusals `LeaseRefused` bounds began, None while the
+        latest attempt saw none."""
+        return self._pending_since
 
     @property
     def held(self) -> bool:
@@ -611,7 +626,7 @@ class DirectoryLease:
         self.broke, self.lost, self._last_seen = [], None, (None, None)
         self._newest_seen, self._refused, self._delay = None, None, POLL_MIN
         self._unreadable_since = None
-        self._pending, self._pending_since = None, None
+        self._pending, self._pending_since = None, self.refused_since
         now = self.monotonic()
         self._restarted = now
         self._deadline = now + self.settings.timeout
@@ -753,16 +768,16 @@ class DirectoryLease:
         """Take over the lease if it is stale; whether it was removed."""
         try:
             st = os.lstat(self.lockfile)
-            if not os.path.isdir(self.lockfile) or os.path.islink(self.lockfile):
-                return self._judge_legacy(st)
-            holder, entries = self._read_holder()
         except FileNotFoundError:
             return True
         except PermissionError as err:
-            if not _delete_pending(err):
-                raise
-            self._pending = err  # held: the name stays until the last handle closes
-            return False
+            return self._held_pending(err)
+        if not os.path.isdir(self.lockfile) or os.path.islink(self.lockfile):
+            return self._judge_legacy(st)
+        try:
+            holder, entries = self._read_holder()
+        except PermissionError as err:
+            return self._held_pending(err)
         if entries and all(e.startswith("gone-") for e in entries):
             return self._clear_remains(entries)
         now = self._now()  # before the marks: a stall after this only shrinks the age
@@ -1000,6 +1015,11 @@ class DirectoryLease:
             )
         if capped:
             why = f"max_wait {self.settings.max_wait:.1f}s passed"
+            if self._pending is not None:
+                why += (
+                    "; the storage was refusing to make or list it "
+                    f"({self._pending.strerror or self._pending})"
+                )
         else:
             why = (
                 f"no renewal was seen for {self.settings.timeout:.1f}s and it could not "
@@ -1027,13 +1047,22 @@ class DirectoryLease:
         now = self.monotonic()
         self._check_pending(now)
         if self._cap is not None and now >= self._cap:
-            raise self._timeout(capped=True)
+            raise self._timeout(capped=True) from self._pending
         if now >= self._deadline:
             raise self._timeout(capped=False)
         bound = self._deadline if self._cap is None else min(self._deadline, self._cap)
         delay = min(self._delay, bound - now)
         self._delay = min(self._delay * 2, POLL_MAX)
         return delay
+
+    def _held_pending(self, err: PermissionError) -> bool:
+        """Count a refusal of the lease directory as held on Windows (False); raise it
+        elsewhere. A directory pending deletion keeps its name until its last handle
+        closes."""
+        if not _delete_pending(err):
+            raise err
+        self._pending = err
+        return False
 
     def _check_pending(self, now: float) -> None:
         """Raise `LeaseRefused` once refusals that a directory pending deletion explains

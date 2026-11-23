@@ -1116,3 +1116,30 @@ def test_settled_listing_bounded_and_collected(tmp_path):
     )  # the index still serves live tickets
     claim.release()
     assert pool.collect_settled(age=3600) == 0
+
+
+def test_a_claim_lease_refused_for_good_on_windows_raises(tmp_path, monkeypatch):
+    """Each claim makes a new claim lease. A refusal of its mkdir that outlasts the release
+    patience ends in LeaseRefused, rather than passing the ticket over on every claim.
+    """
+    from pydra.engine import lease as lease_module
+    from pydra.engine.lease import LeaseRefused, release_patience
+
+    pool = _pool(tmp_path)
+    pool.put("cpu", _ticket("a"))
+    now = [0.0]
+    pool.monotonic = lambda: now[0]
+    real_mkdir = os.mkdir
+
+    def mkdir(path, *args, **kwargs):
+        path_ = Path(path)
+        if path_.suffix == ".lease" and path_.parent.name == "claims":
+            raise PermissionError(errno.EACCES, "Access is denied", str(path), 5)
+        return real_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "mkdir", mkdir)
+    monkeypatch.setattr(lease_module, "IS_WINDOWS", True)
+    assert pool.claim("cpu") is None
+    now[0] = max(release_patience(FAST), FAST.renew_interval)  # judged again
+    with pytest.raises(LeaseRefused):
+        pool.claim("cpu")
