@@ -139,11 +139,18 @@ class Fit(ty.Protocol):
 
 @attrs.frozen
 class Placement:
+    """Where a job runs. ``batch`` is the most jobs of its residency one call takes, as it will
+    run (what ``plan()`` reports): the fit's batch for a task that declares ``batch``, else 1.
+    ``memory_bound`` is the fit's batch for the job without a declared batch (`MeasuredFit`'s
+    memory bound; 1 under `DeclaredFit`), recorded so that the measurement is not lost.
+    """
+
     worker_class: str
     queue: str
     tried: tuple[ClassTried, ...]
     batch: int
     roots: frozenset[Path] = frozenset()
+    memory_bound: int | None = None
 
 
 @attrs.frozen
@@ -287,10 +294,13 @@ def place(
             queue = cls.name
             if request.key is not None and res.residency == "route":
                 queue = f"{cls.name}#{request.key}"
+            units = [request.units]
+            bound = fit.batch(attrs.evolve(request, batch=None), cls, units)
             return Placement(
                 worker_class=cls.name,
                 queue=queue,
                 tried=tuple(walked),
-                batch=fit.batch(request, cls, [request.units]),
+                batch=1 if request.batch is None else fit.batch(request, cls, units),
+                memory_bound=bound,
             )
     return Unplaceable(tried=tuple(tried + walked), request=res)

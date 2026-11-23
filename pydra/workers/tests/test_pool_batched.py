@@ -986,19 +986,37 @@ def test_a_declared_batch_is_the_fits_batch(tasks, pool):
 
 
 def test_no_declared_batch_runs_one_job_per_call(tasks, tmp_path):
-    """A batched task with no declared ``batch`` gets no ticket ``batch``, whatever its fit says: it
-    runs one job per call."""
+    """A batched task with no declared ``batch`` is placed, for ``plan()`` as for its ticket, with a
+    batch of 1, whatever its fit says; the fit's own figure is kept as ``memory_bound``. A task that
+    declares one is placed with the fit's batch."""
     from pydra.workers.pool.pool import _ticket_batch
+    from pydra.workers.pool.placement import place
 
     sub = Submitter(cache_root=tmp_path / "store", worker="debug")
 
-    class J:
-        def __init__(self, task):
-            self.job = Job(task=task, submitter=sub, name="j")
-            self.batch = 8
+    class EightFit:
+        def judge(self, request, cls):
+            from pydra.workers.pool.placement import ClassTried
 
-    assert _ticket_batch([J(tasks.Short(x=1))]) is None
-    assert _ticket_batch([J(tasks.Square(x=1))]) == 8
+            return ClassTried(cls.name, "fits", "")
+
+        def batch(self, request, cls, units):
+            return 8
+
+    def placed(task):
+        job = Job(task=task, submitter=sub, name="j")
+        return job, place(job, [_class()], EightFit(), lambda cls: True)
+
+    class J:
+        def __init__(self, job, placement):
+            self.job, self.batch = job, placement.batch
+
+    job, undeclared = placed(tasks.Short(x=1))
+    assert (undeclared.batch, undeclared.memory_bound) == (1, 8)
+    assert _ticket_batch([J(job, undeclared)]) == 1
+    job, declared = placed(tasks.Square(x=1))
+    assert (declared.batch, declared.memory_bound) == (8, 8)
+    assert _ticket_batch([J(job, declared)]) == 8
 
 
 # -- through a WarmPool ------------------------------------------------------------------------
