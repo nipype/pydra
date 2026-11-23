@@ -1734,14 +1734,14 @@ def test_container_herd_over_a_regular_file(tmp_path, writers, retry_clock):
                 got = publish(store, checksum=name)
             except BaseException as err:  # noqa
                 got = err
-            out[i] = (got, None)
+            out[i] = got
 
         ts = [threading.Thread(target=go, args=(i,)) for i in range(writers)]
         [t.start() for t in ts]
         [t.join() for t in ts]
-        assert not [o for o, _ in out if isinstance(o, BaseException)], out
-        assert [(o.won, o.stored) for o, _ in out].count((True, True)) == 1, out
-        assert all(o.stored and o.kept is None for o, _ in out), out
+        assert not [o for o in out if isinstance(o, BaseException)], out
+        assert [(o.won, o.stored) for o in out].count((True, True)) == 1, out
+        assert all(o.stored and o.kept is None for o in out), out
     assert sum(retry_clock.waits) < store.visibility_timeout
     assert probe.exists()
 
