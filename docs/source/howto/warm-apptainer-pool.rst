@@ -110,7 +110,8 @@ What a worker does with a warm environment
   under a label naming the environment and its resolved reference: tickets with a job of it are
   reported held, and every other ticket of the class keeps running. The held jobs' outcomes and
   ``pydracli pool status`` name the label; ``pydracli pool release-hold <root> --queue <queue>
-  --residency <label>`` lifts the hold, and a ``retry`` of the held jobs runs them again.
+  --residency <label>`` lifts the hold; a running coordinator forgets it at its next poll, and a
+  ``retry`` of the held jobs runs them again.
 * The start runs before the job's call, so no call deadline bounds it: a slow image pull or SIF
   build holds the ticket until it ends or the worker's own time limit stops it.
 
