@@ -666,6 +666,11 @@ class Worker:
                     self.token,
                 )
                 return EXIT_REUSED
+            if self.pool.worker_record(self.token, STOP_MARK) is not None:
+                logger.info(
+                    "worker %s was stopped before it started: exiting", self.token
+                )
+                return EXIT_OK
             self.pool.worker_dir(self.token).close()
             lease = DirectoryLease.at(
                 self.pool.path / "workers" / self.token / "lease",
@@ -748,12 +753,24 @@ class Worker:
             if main:
                 signal.signal(signal.SIGTERM, previous)
             done.set()
-            watcher.join()
+            watcher.join(self.settings.poll_s)  # a read stuck on hung storage is left
 
     def _watch_stop_mark(self, done: threading.Event, drain) -> None:
-        mark = self.pool.path / "workers" / self.token / STOP_MARK
+        failing = False
         while not self.stop.is_set():
-            if mark.exists():
+            try:
+                marked = self.pool.worker_record(self.token, STOP_MARK) is not None
+            except OSError as err:
+                if not failing:
+                    logger.warning(
+                        "reading the stop mark of worker %s failed, retrying: %s",
+                        self.token,
+                        err,
+                    )
+                failing, marked = True, False
+            else:
+                failing = False
+            if marked:
                 logger.info("worker %s was told to stop: draining", self.token)
                 drain()
                 return

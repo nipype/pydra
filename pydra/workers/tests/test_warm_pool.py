@@ -2119,20 +2119,50 @@ def test_stop_wait_shorter_than_the_drain_is_refused(tmp_path, pools):
 
 
 def test_collect_sweeps_the_stop_mark_of_a_worker_that_never_started(tmp_path):
-    """Stopping a worker before it started leaves its directory holding only ``stop.json``;
-    collect removes it once ``payload_age`` has passed, and keeps a started worker's."""
+    """Stopping a worker before it started leaves its directory holding only its stop mark.
+    Collect removes it once older than ``payload_age`` and than the pool's
+    ``max_honoured_stale_after``, the floor that covers a worker still starting; it keeps a
+    younger one and a started worker's."""
     from pydra.workers.pool.pool import collect_pool
     from pydra.workers.pool.storage import STOP_MARK, PoolRoot
 
-    never, started = "a" * 32, "b" * 32
+    never, starting, started = "a" * 32, "e" * 32, "b" * 32
     with PoolRoot.open(tmp_path / "pool", LEASE) as raw:
-        for token in (never, started):
+        for token in (never, starting, started):
             raw.write_worker_record(token, STOP_MARK, {"at": 0})
         raw.write_worker_record(started, "ready.json", {"class": "cpu"})
+    workers = tmp_path / "pool" / "workers"
+    old = workers.stat().st_mtime - LEASE.max_honoured_stale_after - 1
+    for token in (never, started):
+        os.utime(workers / token / STOP_MARK, (old, old))
     report = collect_pool(tmp_path / "pool", payload_age=0)
     assert report["workers"] == [never]
-    assert not (tmp_path / "pool" / "workers" / never).exists()
-    assert (tmp_path / "pool" / "workers" / started / STOP_MARK).exists()
+    assert not (workers / never).exists()
+    assert (workers / starting / STOP_MARK).exists()
+    assert (workers / started / STOP_MARK).exists()
+
+
+def test_local_substrate_needs_the_pools_drain_bound(tmp_path):
+    """`LocalSubstrate` checks ``stop_wait`` against the drain bound of the settings the
+    attachment carries, and refuses an attachment without them; its default ``stop_wait`` adds
+    the shutdown bound to the drain bound."""
+    from pydra.workers.pool.substrate import (
+        Attachment,
+        LocalSubstrate,
+        drain_bound,
+        shutdown_bound,
+    )
+
+    settings = _settings()
+    with pytest.raises(ValueError, match="settings"):
+        LocalSubstrate().attach(Attachment(tmp_path, tmp_path / "settings.json"))
+    local = LocalSubstrate()
+    local.attach(Attachment(tmp_path, tmp_path / "s.json", pool_settings=settings))
+    assert local.stop_wait == drain_bound(settings) + shutdown_bound(settings)
+    with pytest.raises(ValueError, match="stop_wait"):
+        LocalSubstrate(stop_wait=drain_bound(settings) / 2).attach(
+            Attachment(tmp_path, tmp_path / "s.json", pool_settings=settings)
+        )
 
 
 def _without_the_run_cache(tmp_path, tasks, pools, store):

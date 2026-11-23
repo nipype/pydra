@@ -594,6 +594,7 @@ class WarmPool:
                 codec_ref,
                 pool_id=self.pool.pool_id,
                 classes=self.classes,
+                pool_settings=settings,
             )
             attach = getattr(substrate, "attach", None)
             if attach is not None:
@@ -2179,7 +2180,8 @@ def collect_pool(root: os.PathLike, payload_age: float = 86400.0) -> dict:
     `PoolRoot.collect_settled` (tickets resolved more than ``payload_age`` ago, with their marks and
     outcomes), then the directories of ended coordinators below the newest epoch, which stays
     so that no epoch number is taken twice, and the directories of workers stopped before they
-    started (holding only a `STOP_MARK` older than ``payload_age``)."""
+    started (holding only a `STOP_MARK` older than ``payload_age`` and than the pool's
+    ``max_honoured_stale_after``)."""
     import shutil
 
     with _open_existing(root) as pool:
@@ -2193,12 +2195,13 @@ def collect_pool(root: os.PathLike, payload_age: float = 86400.0) -> dict:
                 shutil.rmtree(where, ignore_errors=True)
                 gone.append(epoch)
         swept = []
+        mark_age = max(payload_age, pool.settings.max_honoured_stale_after)
         workers = pool.path / "workers"
         for d in sorted(workers.iterdir()) if workers.is_dir() else []:
             mark = d / STOP_MARK
             try:
                 only_mark = [e.name for e in d.iterdir()] == [STOP_MARK]
-                old = time.time() - mark.stat().st_mtime >= payload_age
+                old = time.time() - mark.stat().st_mtime >= mark_age
             except OSError:
                 continue
             if only_mark and old:

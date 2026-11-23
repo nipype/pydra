@@ -229,6 +229,7 @@ class Attachment:
     pool_id: str = ""
     epoch: int | None = None  # the coordinator's epoch, set once it is taken
     classes: tuple[WorkerClass, ...] = ()  # the classes the pool places jobs on
+    pool_settings: PoolSettings | None = None  # the settings the pool's workers run on
 
 
 def worker_argv(python: str, at: Attachment, cls: WorkerClass, token: str) -> list[str]:
@@ -308,6 +309,15 @@ def drain_bound(settings: "PoolSettings") -> float:
     return settings.poll_s + settings.drain_s + release_patience(settings.lease)
 
 
+def shutdown_bound(settings: "PoolSettings") -> float:
+    """Most seconds a worker takes to shut down once drained: a provider's process group stopped
+    on the default timeouts, then its worker lease released."""
+    from pydra.engine.lease import release_patience
+    from pydra.engine.procgroup import KILL_TIMEOUT, TERM_TIMEOUT
+
+    return TERM_TIMEOUT + KILL_TIMEOUT + release_patience(settings.lease)
+
+
 class LocalSubstrate:
     """Starts worker processes on this host, each in its own session, under the submitting process.
 
@@ -323,9 +333,10 @@ class LocalSubstrate:
         The most CPUs (``cls.cpus``, 1 when unset) the live workers may hold together.
     python : str
         The interpreter that runs the workers.
-    stop_wait : float
+    stop_wait : float, optional
         Seconds `stop` waits for a worker to drain and exit before it kills its process group;
-        at least `drain_bound` of the pool's settings.
+        at least `drain_bound` of the pool's settings. Default `drain_bound` plus
+        `shutdown_bound`.
     """
 
     def __init__(
@@ -334,11 +345,12 @@ class LocalSubstrate:
         *,
         per_user_cpu_cap: int | None = None,
         python: str = sys.executable,
-        stop_wait: float = 30.0,
+        stop_wait: float | None = None,
     ):
         self._devices = None if devices is None else [str(d) for d in devices]
         self.per_user_cpu_cap = per_user_cpu_cap
         self.python = python
+        self._stop_wait_arg = stop_wait
         self.stop_wait = stop_wait
         self.handles: list[WorkerHandle] = []
         self._attachment: Attachment | None = None
@@ -349,18 +361,21 @@ class LocalSubstrate:
         Raises
         ------
         ValueError
-            ``stop_wait`` is shorter than `drain_bound` of the pool's settings.
+            The attachment carries no ``pool_settings``, or ``stop_wait`` is shorter than
+            their `drain_bound`.
         """
         from pydra.engine.lease import release_patience
-        from pydra.workers.pool.settings import PoolSettings
 
-        try:
-            settings = PoolSettings.from_json(
-                json.loads(Path(attachment.settings).read_text())
+        settings = attachment.pool_settings
+        if settings is None:
+            raise ValueError(
+                "a LocalSubstrate needs the pool's settings on its attachment, to bound "
+                "stop_wait"
             )
-        except (OSError, ValueError):
-            settings = None
-        if settings is not None and self.stop_wait < drain_bound(settings):
+        self.stop_wait = self._stop_wait_arg
+        if self.stop_wait is None:
+            self.stop_wait = drain_bound(settings) + shutdown_bound(settings)
+        if self.stop_wait < drain_bound(settings):
             raise ValueError(
                 f"stop_wait {self.stop_wait:g}s is shorter than a worker may need to stop: "
                 f"poll_s {settings.poll_s:g} + drain_s {settings.drain_s:g} + release "

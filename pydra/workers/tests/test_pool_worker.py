@@ -1839,3 +1839,59 @@ def test_ready_mark_records_uuid_and_index(pool, tmp_path, monkeypatch):
     assert code == 0
     gpu = pool.pool.worker_record(worker.token, "ready.json")["hardware"]["gpus"][0]
     assert (gpu["uuid"], gpu["index"]) == ("GPU-1-aaaa", 1)
+
+
+def test_a_worker_stopped_before_it_started_exits_unclaimed(pool):
+    """A worker whose directory already holds its stop mark when it starts was stopped before it
+    started: it exits 0 without becoming ready or claiming anything."""
+    from pydra.workers.pool.storage import STOP_MARK
+    from pydra.workers.pool.worker import EXIT_OK, Worker
+
+    token = "c" * 32
+    pool.pool.write_worker_record(token, STOP_MARK, {"at": 0})
+    worker = Worker(
+        pool.path,
+        _class(),
+        settings=_settings(idle_polls=10**6, orphan_after_s=10**6),
+        substrate=True,
+        token=token,
+        device_memory=lambda: None,
+    )
+    assert worker.run() == EXIT_OK
+    assert pool.pool.worker_record(token, "ready.json") is None
+    assert worker.claims == []
+
+
+def test_the_stop_mark_watch_outlives_a_storage_error(tmp_path):
+    """A storage error reading the stop mark (ESTALE on network storage) does not end the watch:
+    the next read finds the mark and the worker drains."""
+    import errno
+    from types import SimpleNamespace
+
+    from pydra.workers.pool.worker import Worker
+
+    reads = []
+
+    def worker_record(token, name):
+        reads.append(name)
+        if len(reads) == 1:
+            raise OSError(getattr(errno, "ESTALE", errno.EIO), "Stale file handle")
+        return {"at": 0}
+
+    stub = SimpleNamespace(
+        pool=SimpleNamespace(worker_record=worker_record, path=tmp_path),
+        token="d" * 32,
+        stop=threading.Event(),
+        settings=SimpleNamespace(poll_s=0.0),
+    )
+    drained, done = threading.Event(), threading.Event()
+    watch = threading.Thread(
+        target=Worker._watch_stop_mark, args=(stub, done, drained.set), daemon=True
+    )
+    watch.start()
+    try:
+        assert drained.wait(BOUND)
+    finally:
+        done.set()
+        watch.join(BOUND)
+    assert len(reads) == 2
