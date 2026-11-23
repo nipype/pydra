@@ -158,8 +158,30 @@ def test_runner_without_a_submitter(tmp_path):
         assert [j.name for j in runner.ready().dispatch] == ["A"]
 
 
-def test_max_concurrent_caps_running_jobs(any_worker, tmp_path):
+def count_in_flight(monkeypatch) -> dict[str, int]:
+    """The jobs the runner has handed out and had no outcome reported for, counted in
+    this process: ``now``, and the most at once, ``most``"""
+    counts = {"now": 0, "most": 0}
+    real_ready, real_complete = GraphRunner.ready, GraphRunner.complete
+
+    def ready(self, *args, **kwargs):
+        rnd = real_ready(self, *args, **kwargs)
+        counts["now"] += len(rnd.dispatch)
+        counts["most"] = max(counts["most"], counts["now"])
+        return rnd
+
+    def complete(self, job, outcome):
+        counts["now"] -= 1
+        return real_complete(self, job, outcome)
+
+    monkeypatch.setattr(GraphRunner, "ready", ready)
+    monkeypatch.setattr(GraphRunner, "complete", complete)
+    return counts
+
+
+def test_max_concurrent_caps_running_jobs(any_worker, tmp_path, monkeypatch):
     """No more than ``max_concurrent`` jobs of a workflow run at once"""
+    in_flight = count_in_flight(monkeypatch)
     logdir = tmp_path / "log"
     logdir.mkdir()
     # on cf each job waits for a second one to run beside it, so the cap is reached
@@ -175,10 +197,11 @@ def test_max_concurrent_caps_running_jobs(any_worker, tmp_path):
     assert not result.errored
     spans = [tuple(map(float, f.read_text().split())) for f in logdir.iterdir()]
     assert len(spans) == 8
-    peak = max(sum(a2 <= a < b2 for a2, b2 in spans) for a, _ in spans)
-    assert peak <= 2
-    if any_worker == "cf":
-        assert peak == 2
+    # the cap: never more than two handed out without an outcome
+    assert in_flight["most"] <= 2 and in_flight["now"] == 0
+    if any_worker == "cf":  # and the cap is reached: two ran at once
+        peak = max(sum(a2 <= a < b2 for a2, b2 in spans) for a, _ in spans)
+        assert peak >= 2
 
 
 def test_deprecated_submitter_wrappers(submitter):
