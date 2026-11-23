@@ -194,8 +194,8 @@ def load_record(path: str | Path) -> dict:
         record = json.loads((path / "entry.json").read_text()).get("key")
         if not isinstance(record, dict):
             raise click.ClickException(
-                f"{path} is an entry with no key record (one written before "
-                "pydra-identity@2)"
+                f"{path} is an entry with no key record; migrate its root "
+                "(`pydracli store migrate`)"
             )
         return record
     if path.is_dir():
@@ -236,39 +236,174 @@ def store():
 
 
 def _no_work_dir(checksum: str, fingerprint: str, attempt: str) -> Path:
-    raise ValueError("collect does not run jobs, so it names no work directory")
+    raise ValueError("this command runs no job, so it names no work directory")
 
 
 def _hook(name: str):
-    """The object at the importable dotted ``name``; a class is instantiated with no
-    arguments"""
-    obj = _import(name)
+    """The object at the importable ``module:attr`` (or dotted ``module.attr``); a class is
+    instantiated with no arguments"""
+    if ":" in name:
+        module, _, attr = name.partition(":")
+        obj = getattr(importlib.import_module(module), attr)
+    else:
+        obj = _import(name)
     return obj() if isinstance(obj, type) else obj
+
+
+_HOOK_HELP = (
+    "; a class is instantiated with no arguments, so one that takes parameters is given "
+    "as a module-level instance"
+)
+_identity_option = click.option(
+    "--identity",
+    default="pydra.engine.portable.identity:PydraIdentityV2",
+    show_default=True,
+    help="The importable StoreIdentity, module:attr" + _HOOK_HELP,
+)
+_entry_format_option = click.option(
+    "--entry-format",
+    default="pydra.engine.portable.entry:PydraEntryV1",
+    show_default=True,
+    help="The importable EntryFormat, module:attr" + _HOOK_HELP,
+)
+_policy_option = click.option(
+    "--policy",
+    default="pydra.utils.storagedir:StorePolicy",
+    show_default=True,
+    help="The importable StorePolicy, module:attr, which must be the one the root's "
+    "header records" + _HOOK_HELP,
+)
+
+
+def _trust_option(default: str):
+    return click.option(
+        "--trust",
+        type=click.Choice(["private", "trusted", "shared"]),
+        default=default,
+        show_default=True,
+        help="What you assert about who can write the root (RFC 0003 section 6.4)",
+    )
+
+
+def _open_store(root, trust, identity, entry_format, policy):
+    """The `PortableStore` at ``root``, opened as the options say; a header that differs is
+    reported, not raised"""
+    from pydra.engine.portable.layout import (
+        LegacyLayout,
+        StoreLayoutMismatch,
+        StoreLayoutUnknown,
+    )
+    from pydra.engine.portable.store import PortableStore
+
+    kw = {"work_dir": _no_work_dir} if trust == "shared" else {}
+    try:
+        return PortableStore(
+            root,
+            trust=trust,
+            identity=_hook(identity),
+            entry_format=_hook(entry_format),
+            policy=_hook(policy),
+            **kw,
+        )
+    except (StoreLayoutMismatch, StoreLayoutUnknown, LegacyLayout) as err:
+        raise click.ClickException(
+            f"{err} (give the root's --identity, --entry-format and --policy)"
+        ) from err
 
 
 @store.command("collect", context_settings=CONTEXT_SETTINGS)
 @click.argument(
     "root", type=click.Path(exists=True, file_okay=False, resolve_path=True)
 )
-@click.option(
-    "--trust",
-    type=click.Choice(["private", "trusted", "shared"]),
-    default="private",
-    show_default=True,
-    help="What you assert about who can write the root (RFC 0003 section 6.4)",
-)
-def store_collect(root, trust):
+@_trust_option("private")
+@_identity_option
+@_entry_format_option
+@_policy_option
+def store_collect(root, trust, identity, entry_format, policy):
     """Remove what the portable store at ROOT keeps only for a while: staging and
     quarantined entries, and default work directories, past their ages."""
-    from pydra.engine.portable.store import PortableStore
-
-    kw = {"work_dir": _no_work_dir} if trust == "shared" else {}
-    report = PortableStore(root, trust=trust, **kw).collect()
+    report = _open_store(root, trust, identity, entry_format, policy).collect()
     for path in report.removed:
         click.echo(f"removed {path}")
     for path, why in report.kept:
         click.echo(f"kept {path}: {why}")
     click.echo(f"{len(report.removed)} removed, {len(report.kept)} kept")
+
+
+@store.command("migrate", context_settings=CONTEXT_SETTINGS)
+@click.argument(
+    "cache_root", type=click.Path(exists=True, file_okay=False, resolve_path=True)
+)
+@click.argument("root", type=click.Path(file_okay=False, resolve_path=True))
+@click.option(
+    "--trust-source",
+    is_flag=True,
+    help="Assert that you trust whoever could write CACHE_ROOT: each result is unpickled, "
+    "which runs its code (required)",
+)
+@click.option(
+    "--supplied-checksums",
+    is_flag=True,
+    help="Assert that the cache's checksums were supplied (checksum=); required for a "
+    "pydra-identity@2 store, which holds no other old checksum",
+)
+@_trust_option("private")
+@_identity_option
+@_entry_format_option
+@_policy_option
+def store_migrate(
+    cache_root,
+    root,
+    trust_source,
+    supplied_checksums,
+    trust,
+    identity,
+    entry_format,
+    policy,
+):
+    """Publish the results of the PickleStore cache at CACHE_ROOT into the portable store
+    at ROOT under their stored contexts (RFC 0003 section 8.1). ROOT is created if it is
+    missing, and must not be inside CACHE_ROOT. A slot whose lease is held is reported busy;
+    run again to migrate it. A slot whose equal entry is already in ROOT is reported present.
+    A cache marked pydra-identity@2 refuses --supplied-checksums: read it in place with
+    PortableStore(legacy=...) instead."""
+    from pydra.engine.portable.migrate import (
+        MigrationRefused,
+        check_target_outside,
+        migrate,
+    )
+
+    if not trust_source:
+        raise click.ClickException(
+            "migrate unpickles each result of the cache, which runs its code: pass "
+            "--trust-source to assert you trust it"
+        )
+    try:
+        check_target_outside(cache_root, root)
+    except MigrationRefused as err:
+        raise click.ClickException(str(err)) from err
+    target = _open_store(root, trust, identity, entry_format, policy)
+    try:
+        report = migrate(
+            cache_root,
+            target,
+            trust_source=True,
+            supplied_checksums=supplied_checksums,
+        )
+    except MigrationRefused as err:
+        raise click.ClickException(str(err)) from err
+    for slot in report.slots:
+        where = f"{slot.checksum}/{slot.ctxkey}"
+        click.echo(
+            f"{slot.status} {where}"
+            + (f": {slot.reason}" if slot.reason is not None else "")
+        )
+    click.echo(
+        ", ".join(
+            f"{report.count(s)} {s}"
+            for s in ("migrated", "present", "skipped", "busy", "unencodable")
+        )
+    )
 
 
 @store.command("adopt", context_settings=CONTEXT_SETTINGS)
@@ -288,20 +423,8 @@ def store_collect(root, trust):
     required=True,
     help="The layout header to write: a JSON file, or the JSON itself",
 )
-@click.option(
-    "--identity",
-    default="pydra.engine.portable.identity.PydraIdentityV2",
-    show_default=True,
-    help="The importable StoreIdentity; a class is instantiated with no arguments, so "
-    "one that takes parameters is given as a module-level instance",
-)
-@click.option(
-    "--entry-format",
-    default="pydra.engine.portable.entry.PydraEntryV1",
-    show_default=True,
-    help="The importable EntryFormat; a class is instantiated with no arguments, so "
-    "one that takes parameters is given as a module-level instance",
-)
+@_identity_option
+@_entry_format_option
 @click.option(
     "--check",
     type=click.Choice(["none", "sample", "all"]),
@@ -309,13 +432,7 @@ def store_collect(root, trust):
     show_default=True,
     help="Which entries are read back through the identity and the entry format",
 )
-@click.option(
-    "--trust",
-    type=click.Choice(["private", "trusted", "shared"]),
-    default="trusted",
-    show_default=True,
-    help="What you assert about who can write the root (RFC 0003 section 6.4)",
-)
+@_trust_option("trusted")
 def store_adopt(root, old_entries, header_spec, identity, entry_format, check, trust):
     """Make the store at ROOT, already laid out like a portable store, a portable store
     without rewriting an entry (RFC 0003 section 8.2). Stop its writers first. Exits 1

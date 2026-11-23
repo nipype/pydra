@@ -62,7 +62,22 @@ _MARKER_WARNED: set[str] = set()  # the roots a marker line was logged for
 _SCHEME = re.compile(r"[a-z][a-z0-9_-]*@[0-9]+")
 
 
-def _scheme_version(named: str) -> int | None:
+MARKER_CAP = 256
+"""Bytes of a ``.pydra-identity`` marker read: it names one scheme, tens of bytes, so a
+longer file is garbled."""
+
+
+def marker_scheme(text: str | None) -> str | None:
+    """The scheme a marker's text names; None for no marker, or an empty or garbled one
+    (not ``<name>@<N>``: a write cut short), which a root keyed before markers matches
+    """
+    if text is None:
+        return None
+    text = text.strip()
+    return text if _SCHEME.fullmatch(text) else None
+
+
+def scheme_version(named: str) -> int | None:
     """``N`` of ``pydra-identity@N``, else None"""
     prefix, _, version = named.partition("@")
     if prefix != "pydra-identity" or not version.isdigit():
@@ -88,15 +103,13 @@ def check_identity_marker(root: Path) -> None:
     path = Path(root) / IDENTITY_MARKER
     try:
         with open(path, encoding="utf-8") as f:
-            named: str | None = f.read(256).strip()
+            named = marker_scheme(f.read(MARKER_CAP))
     except FileNotFoundError:
         named = None
     except (OSError, UnicodeDecodeError):
         return
     if named == IDENTITY_SCHEME:
         return
-    if named is not None and not _SCHEME.fullmatch(named):
-        named = None  # empty or garbled: a write cut short
     if named is None:
         try:
             with os.scandir(root) as entries:
@@ -111,8 +124,8 @@ def check_identity_marker(root: Path) -> None:
                 IDENTITY_SCHEME,
             )
     else:
-        version = _scheme_version(named)
-        if version is None or version >= _scheme_version(IDENTITY_SCHEME):
+        version = scheme_version(named)
+        if version is None or version >= scheme_version(IDENTITY_SCHEME):
             _warn_once(
                 root,
                 "%s is marked as keyed under %s, which this pydra (%s) does not write: "
