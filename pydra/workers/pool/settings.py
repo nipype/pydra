@@ -43,6 +43,11 @@ class PoolSettings:
         Seconds a queue's waiting jobs should take with the workers scaling starts.
     unmeasured_workers : int
         Workers wanted per queue while no per-job time is measured.
+    preemption_budget : int
+        Drains a job's attempts may be cut by, placed again uncharged; past it, a crash.
+    squeue_timeout : float
+        Seconds a worker waits for ``squeue`` to report its allocation's end when Slurm sets no
+        ``SLURM_JOB_END_TIME``.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -56,6 +61,8 @@ class PoolSettings:
     max_queued_jobs: int | None = attrs.field(default=None, validator=_positive)
     target_wall_s: float = attrs.field(default=600.0, validator=_positive)
     unmeasured_workers: int = attrs.field(default=1, validator=_positive)
+    preemption_budget: int = attrs.field(default=3, validator=attrs.validators.ge(0))
+    squeue_timeout: float = attrs.field(default=60.0, validator=_positive)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)

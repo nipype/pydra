@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime
+import functools
 import hashlib
 import importlib
 import json
@@ -24,6 +26,7 @@ import logging
 import os
 import re
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -64,6 +67,7 @@ from pydra.workers.pool.samples import (
 )
 from pydra.workers.pool.settings import PoolSettings
 from pydra.workers.pool.storage import (
+    EXIT_MARK,
     FINAL,
     Claim,
     PoolOwnerMismatch,
@@ -225,6 +229,46 @@ class _Call:
         self.wall = 0.0
 
 
+def _squeue(argv: list[str], timeout: float) -> str:
+    return subprocess.run(
+        argv, capture_output=True, text=True, timeout=timeout, check=True
+    ).stdout
+
+
+def allocation_end(
+    environ: ty.Mapping[str, str] = os.environ,
+    squeue: ty.Callable[[list[str]], str] | None = None,
+    timeout: float = PoolSettings().squeue_timeout,
+) -> float | None:
+    """The time (``time.time``) at which this process's Slurm allocation ends:
+    ``SLURM_JOB_END_TIME``, else the end ``squeue -h -j $SLURM_JOB_ID -o %e`` reports within
+    ``timeout`` seconds; None when neither gives one (no end is assumed)"""
+    if squeue is None:
+        squeue = functools.partial(_squeue, timeout=timeout)
+    try:
+        return float(environ["SLURM_JOB_END_TIME"])
+    except (KeyError, ValueError):
+        pass
+    job = environ.get("SLURM_JOB_ID")
+    if not job:
+        return None
+    try:
+        said = squeue(["squeue", "-h", "-j", job, "-o", "%e"]).strip()
+        return datetime.datetime.fromisoformat(said).timestamp()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def claims_fit(
+    ends_at: float | None, now: float, quantum_s: float, call_timeout: float | None
+) -> bool:
+    """Whether a worker whose allocation ends at ``ends_at`` may claim more: the time left
+    holds a quantum and a call's timeout"""
+    if ends_at is None:
+        return True
+    return ends_at - now >= max(quantum_s, call_timeout or 0)
+
+
 class Worker:
     """A pool worker of one class; `run` is the loop of RFC 0005 section 4.3.
 
@@ -277,6 +321,7 @@ class Worker:
         self.classify: Classifier = classify or _faults.classify
         self._classify_arg = classify
         self.settings = settings
+        self.ends_at = allocation_end(timeout=self.settings.squeue_timeout)
         self.faults = faults or FaultBudgets()
         self._faults_arg = faults
         self.substrate = substrate
@@ -345,6 +390,13 @@ class Worker:
                 return EXIT_FAULTS
             return self._run()
         finally:
+            if self.token is not None:  # a worker refused before it took a token
+                try:
+                    self.pool.write_worker_record(
+                        self.token, EXIT_MARK, {"at": time.time()}
+                    )
+                except OSError as err:
+                    logger.warning("could not write the exit mark: %s", err)
             self.pool.close()
 
     def _refresh(self) -> bool:
@@ -599,6 +651,11 @@ class Worker:
                     "no live coordinator for %ss: exiting", self.settings.orphan_after_s
                 )
                 break
+            if not claims_fit(
+                self.ends_at, time.time(), quantum_s, self.settings.call_timeout
+            ):  # infrastructure: no call is cut at the limit, none is charged
+                self.recycle = self.recycle or "its allocation ends before a quantum"
+                break
             ended = current is not None and (
                 spent >= quantum_jobs or time.monotonic() - began >= quantum_s
             )
@@ -678,7 +735,10 @@ class Worker:
         return []
 
     def _claim(self, queue: str, max_jobs: int | None) -> Claim | None:
-        claim = self.pool.claim(queue, beat="external", max_jobs=max_jobs)
+        left = None if self.ends_at is None else self.ends_at - time.time()
+        claim = self.pool.claim(
+            queue, beat="external", max_jobs=max_jobs, max_time=left
+        )
         if claim is None:
             return None
         try:
@@ -811,6 +871,26 @@ class Worker:
         if cold:
             self._warm[queue] = 0
         group["load_s"], group["cold"], group["reload"] = load_s, cold, False
+        self._run_lone(claim, jobs, group)
+
+    def _fits(self, job: "Job") -> bool:
+        """Whether the time left in the allocation holds ``job``'s declared time, or else the
+        call timeout; True when no end is known or neither is set"""
+        if self.ends_at is None:
+            return True
+        resources = job.resources
+        need = (
+            resources.time
+            if resources is not None and resources.time is not None
+            else self.settings.call_timeout
+        )
+        return need is None or self.ends_at - time.time() >= need
+
+    def _run_lone(
+        self, claim: Claim, jobs: list[tuple[TicketJob, "Job"]], group: dict
+    ) -> None:
+        """Run the ticket's jobs one call each; before each, the checks a call has, and a job the
+        time left does not hold recycles the worker, leaving it and the rest unrun"""
         for entry, job in jobs:
             if (
                 self.stop.is_set()
@@ -824,6 +904,9 @@ class Worker:
             if not self._within_crash_budget(claim, entry):
                 continue
             if self._held_here(claim):
+                return
+            if not self._fits(job):
+                self.recycle = f"the allocation ends before {job.name} could finish"
                 return
             self._run_job(claim, entry, job, group)
             if self._lost_claim(claim) or group.get("stop"):
@@ -1274,6 +1357,8 @@ class Worker:
             with contextlib.suppress(BeaterDead):  # then the loop enforces it
                 self.client.deadline(token_dir, deadline, payload)
         call = self._run_call(claim, job, deadline, payload)
+        if call.abandoned and self.stop.is_set() and not call.expired:
+            claim.drained(entry, self.token)
         if not call.abandoned:
             self.pool.call_done(self.token, seq)
             if deadline is not None and not call.expired:
@@ -1604,8 +1689,10 @@ class Worker:
             if kind is not None:
                 continue
             mark = self.pool.started(*entry.key, g)
-            charged[entry.key] = mark is not None and self._was_alone_in_call(
-                mark.get("worker"), entry, attempt
+            charged[entry.key] = (
+                mark is not None
+                and not self._preempted(entry, g)
+                and self._was_alone_in_call(mark.get("worker"), entry, attempt)
             )
             open_entries.append(entry)
         if len(open_entries) >= 2:
@@ -1632,6 +1719,14 @@ class Worker:
             )
             if found is not None and found.get("outcome") == "expired":
                 self._expired_job(claim, entry)
+
+    def _preempted(self, entry: TicketJob, g: int) -> bool:
+        """Whether attempt ``g`` was cut short by its worker's drain within the job's
+        ``preemption_budget``: an infrastructure event, retried uncharged."""
+        if not self.pool.drained(*entry.key, g):
+            return False
+        preemptions = self.pool.charges(*entry.key)["preemptions"]
+        return preemptions <= self.settings.preemption_budget
 
     def _was_alone_in_call(
         self, token: str | None, entry: TicketJob, attempt: str

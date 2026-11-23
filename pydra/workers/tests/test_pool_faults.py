@@ -492,10 +492,13 @@ def _classes(pool: Pool, *classes) -> None:
         pool.pool.put_class(cls.name, class_record(cls))
 
 
-def _dead_call(pool: Pool, digest: str, jobs, *, expired=(), call=None) -> str:
+def _dead_call(
+    pool: Pool, digest: str, jobs, *, expired=(), call=None, drained=()
+) -> str:
     """Leave ticket ``digest`` as a worker killed mid-call leaves it: its jobs started under the dead
     worker's token, ``call`` (default every job) in its in-flight call record, ``expired`` given an
-    ``expired`` outcome, and the claim aged. Return the dead token."""
+    ``expired`` outcome, ``drained`` marked cut short by a drain, and the claim aged. Return the
+    dead token."""
     dead = "d" * 32
     claim = pool.pool.take("cpu", digest, beat="external")
     entries = {e.key: e for e in claim.ticket.jobs}
@@ -513,6 +516,8 @@ def _dead_call(pool: Pool, digest: str, jobs, *, expired=(), call=None) -> str:
             )
         if job in expired:
             claim.outcome(entry, attempt, "expired")
+        if job in drained:
+            claim.drained(entry, dead)
     if listed:
         pool.pool.write_call(dead, 1, {"jobs": listed})
     _age(claim.lease.lockfile)
@@ -628,6 +633,7 @@ def test_fault_budgets_defaults_and_json():
         "infrastructure_replacements": 3,
         "crashes_charged": 2,
         "start_failures": 7,
+        "listing_failures": 7,
     }
     assert "start_failures" not in {f.name for f in attrs.fields(PoolSettings)}
     changed = FaultBudgets(content_attempts=2, start_failures=3)
@@ -636,6 +642,8 @@ def test_fault_budgets_defaults_and_json():
         FaultBudgets.from_json({"resource_replacements": 1})
     with pytest.raises(ValueError):
         FaultBudgets(start_failures=0)
+    with pytest.raises(ValueError):
+        FaultBudgets(listing_failures=0)
 
 
 def test_no_alias_left_in_the_worker():
@@ -968,6 +976,7 @@ def test_load_oom_moves_up_charges_nothing(pool, tasks, task, monkeypatch):
             ("ladder", "load", False),
         ]
         assert pool.pool.charges(*pool.key(job)) == {
+            "preemptions": 0,
             "crashes": 0,
             "infrastructure": 0,
             "resource_moves": 0,
@@ -1116,6 +1125,27 @@ def test_expired_prior_attempt_is_a_resource_fault_not_a_crash(pool, tasks):
     ]
     assert gens[2]["phase"] == "call" and pool.newest(job)[0] == "big"
     assert pool.pool.charges(*pool.key(job))["crashes"] == 0
+
+
+@pytest.mark.parametrize("budget, charged", [(1, False), (0, True)])
+def test_a_drained_call_is_placed_again_uncharged_within_the_budget(
+    pool, tasks, budget, charged
+):
+    """A call its worker's drain cut short (a scheduler preemption) is an infrastructure event: the
+    taker places the job again under a fresh attempt, uncharged, while its preemptions stay within
+    ``preemption_budget``; past it the cut is charged as a crash."""
+    job = pool.job(tasks.Echo(x=1), "preempted")
+    digest = pool.put([job])
+    _dead_call(pool, digest, [job], drained=[job])
+    _, code = _run(pool, settings=_settings(preemption_budget=budget))
+    assert code == 0
+    gens = pool.generations(job)
+    assert [(g["cause"], g["charged"]) for g in gens[:2]] == [
+        ("put", False),
+        ("takeover", charged),
+    ]
+    charges = pool.pool.charges(*pool.key(job))
+    assert charges["preemptions"] == 1 and charges["crashes"] == int(charged)
 
 
 def test_timeout_kill_spares_gathered_jobs(pool, tasks):
