@@ -144,6 +144,9 @@ class Lease(ty.Protocol):
     checksum: str
     # the directory a job holding the lease writes its files in, None if it has none
     cache_dir: "Path | None"
+    # whether holding it excludes other takers; False: a lookup made before taking it is
+    # still current when it is held
+    exclusive: bool
 
     def __enter__(self) -> "Lease":
         """Take the lease, waiting for it if another process holds it."""
@@ -394,6 +397,8 @@ class DirectoryLease:
     sleep : callable, optional
         Sleeps between attempts of a synchronous wait.
     """
+
+    exclusive: ty.ClassVar[bool] = True
 
     checksum: str
     cache_dir: Path
