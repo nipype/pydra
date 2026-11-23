@@ -448,7 +448,7 @@ class PydraEntryV1:
         decoder = Decoder(
             fetch, members, entry.path, allow_pickle=trust in ("private", "trusted")
         )
-        outputs = decoder.decode_outputs(doc["outputs"])
+        outputs = decoder.decode_outputs(doc["outputs"], _declared_types(task))
         _check_trees(entry, decoder.trees, members)
         stray = sorted(set(members) - decoder.referenced - {"context.json"})
         if stray:
@@ -704,6 +704,15 @@ def _has_fileset(tp: ty.Any) -> bool:
     if isinstance(tp, type) and issubclass(tp, FileSet):
         return True
     return any(_has_fileset(a) for a in ty.get_args(tp))
+
+
+def _declared_types(task: "Task | None") -> dict[str, ty.Any]:
+    """The declared type of each output field of ``task``, where it is known."""
+    if task is None:
+        return {}
+    from pydra.utils.general import get_fields
+
+    return {f.name: f.type for f in get_fields(task.Outputs)}
 
 
 def _declared(

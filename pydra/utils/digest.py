@@ -19,7 +19,8 @@ import typing as ty
 from decimal import Decimal
 
 import attrs
-from fileformats.core.fileset import FileSet
+from fileformats.core.exceptions import FormatDefinitionError, FormatRecognitionError
+from fileformats.core.fileset import FileSet, MockMixin
 
 try:
     import numpy as np
@@ -171,11 +172,14 @@ class Codec:
     decode: ty.Callable | None = None
     fileset: bool = False
     digest: ty.Callable[[ty.Any], str] | None = None
+    # a tag pydra gave a ``fileformats`` class itself; a user registration replaces it
+    default: bool = False
 
 
 _BY_TAG: dict[str, Codec] = {}
 _BY_TYPE: dict[type, Codec] = {}
 _DIGEST_RE = re.compile(r"[a-z][a-z0-9_]*@[0-9]+:[0-9a-f]{16,}")
+BUILT_IN_SCHEMES = frozenset({"json", "npy", "file", "py", "class", "code", "type"})
 
 
 def _register(entry: Codec) -> None:
@@ -188,12 +192,14 @@ def _register(entry: Codec) -> None:
         raise ValueError(
             f"tag {entry.tag!r} is already registered for {existing.type!r}"
         )
-    prior = _BY_TYPE.get(entry.type)
+    prior = _entry(entry.type)
     if prior is not None:
-        if prior.tag not in (None, entry.tag):
+        if not prior.default and prior.tag not in (None, entry.tag):
             raise ValueError(
                 f"{entry.type!r} is already registered under tag {prior.tag!r}"
             )
+        # a default tag is replaced by a registration; a registered digest is kept, and
+        # the default tag stays readable through `lookup_fileset_tag`
         entry = attrs.evolve(entry, digest=prior.digest)
     _BY_TAG[entry.tag] = entry
     _BY_TYPE[entry.type] = entry
@@ -221,14 +227,14 @@ def register_digest(
     It applies at any depth, where a digest form holds ``{"$digest": "<digest>"}``. A type
     that already has one raises ``ValueError`` unless ``replace=True``.
     """
-    prior = _BY_TYPE.get(type_)
+    prior = _entry(type_)
     if prior is not None and prior.digest is not None and not replace:
         raise ValueError(f"{type_!r} already has a registered digest")
     entry = (
         attrs.evolve(prior, digest=fn) if prior is not None else Codec(type_, digest=fn)
     )
     _BY_TYPE[type_] = entry
-    if entry.tag is not None:
+    if entry.tag is not None and not entry.default:
         _BY_TAG[entry.tag] = entry
 
 
@@ -240,7 +246,26 @@ def _registered_digest(entry: Codec, value: ty.Any) -> str:
             f"digest function for {entry.type!r} returned {result!r}, "
             "not '<tag>@<n>:<hex>'"
         )
+    if result.split("@", 1)[0] in BUILT_IN_SCHEMES:
+        raise ValueError(
+            f"digest function for {entry.type!r} returned {result!r}, whose scheme "
+            f"is one of the built-in ones ({', '.join(sorted(BUILT_IN_SCHEMES))})"
+        )
     return result
+
+
+def _entry(type_: type) -> Codec | None:
+    """The registry entry of exactly ``type_``; a ``fileformats`` class that nobody
+    registered gets the default one (`_default_fileset_entry`)."""
+    entry = _BY_TYPE.get(type_)
+    if entry is None and isinstance(type_, type) and issubclass(type_, FileSet):
+        entry = _default_fileset_entry(type_)
+    return entry
+
+
+def entry_of(type_: type) -> Codec | None:
+    """The entry of exactly ``type_``: registered, or a default ``$fileset`` one."""
+    return _entry(type_)
 
 
 def lookup_tag(tag: str) -> Codec | None:
@@ -250,8 +275,77 @@ def lookup_tag(tag: str) -> Codec | None:
 
 def tag_of(type_: type) -> str | None:
     """The tag registered for exactly ``type_``, or None."""
-    entry = _BY_TYPE.get(type_)
+    entry = _entry(type_)
     return entry.tag if entry is not None else None
+
+
+# ---------------------------------------------------------------------------
+# Default file set tags
+# ---------------------------------------------------------------------------
+
+
+def _mime_like(type_: type) -> str | None:
+    """``mime_like`` of a ``FileSet`` class, or None for one with none (defined outside
+    the ``fileformats`` namespace) and for a mock, which has no files."""
+    if issubclass(type_, MockMixin):
+        return None
+    try:
+        return str(type_.mime_like)
+    except FormatDefinitionError:
+        return None
+
+
+def _resolve_tag(tag: str) -> type | None:
+    """The class ``fileformats`` resolves ``tag`` to, if its own ``mime_like`` is ``tag``.
+    This imports from the ``fileformats`` namespace only. Only ``fileformats``' answer
+    that no class has the tag means None; any other error, such as an installed
+    ``fileformats`` plugin that fails to import, propagates."""
+    from fileformats.core import from_mime
+
+    try:
+        klass = from_mime(tag)
+    except FormatRecognitionError:
+        return None
+    if isinstance(klass, type) and issubclass(klass, FileSet):
+        if _mime_like(klass) == tag:
+            return klass
+    return None
+
+
+def _default_fileset_entry(type_: type) -> Codec | None:
+    """The entry of a ``FileSet`` class nobody registered: its ``mime_like`` is the tag,
+    computed here, on demand, whatever package the class comes from. A class with no
+    ``mime_like``, a mock, and a class whose tag ``fileformats`` cannot resolve back to
+    a class (it could not be read) have none, and are ``py@1``. Not entered in the tag
+    registry: `lookup_fileset_tag` resolves a tag."""
+    tag = _mime_like(type_)
+    if tag is None or _resolve_tag(tag) is None:
+        return None
+    entry = Codec(type_, tag, fileset=True, default=True)
+    _BY_TYPE[type_] = entry
+    return entry
+
+
+def lookup_fileset_tag(tag: str, declared: ty.Iterable[type] = ()) -> Codec | None:
+    """The entry that decodes the ``$fileset`` tag ``tag``: a declared class whose own
+    ``mime_like`` is ``tag`` (the reader says which class it expects), else a user
+    registration of ``tag``, else the class ``fileformats`` resolves the tag to. A class
+    is accepted under its ``mime_like`` whatever tag it is registered under now."""
+    for klass in declared:
+        if (
+            isinstance(klass, type)
+            and issubclass(klass, FileSet)
+            and _mime_like(klass) == tag
+        ):
+            entry = _entry(klass) or Codec(klass, tag, fileset=True, default=True)
+            return entry
+    entry = _BY_TAG.get(tag)
+    if entry is not None:
+        return entry
+    klass = _resolve_tag(tag)
+    if klass is not None:
+        return _entry(klass) or Codec(klass, tag, fileset=True, default=True)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +414,15 @@ def _posix_key(key: str, sep: str = os.sep) -> str:
     return key.replace(sep, "/") if sep != "/" else key
 
 
-def _fileset_members(value: FileSet) -> list[tuple[str, str]]:
+def _fileset_members(value: FileSet, cache: ty.Any = None) -> list[tuple[str, str]]:
+    """The ``(key, sha256)`` members of ``value``, through the stat-to-digest caches of
+    ``pydra.utils.hash`` (``cache`` is a ``hash.Cache``)."""
+    from pydra.utils.hash import fileset_members
+
+    return fileset_members(value, _read_fileset_members, cache)
+
+
+def _read_fileset_members(value: FileSet) -> list[tuple[str, str]]:
     members = []
     for key, chunks in value.byte_chunks(
         ignore_hidden_files=False, ignore_hidden_dirs=False
@@ -333,7 +435,7 @@ def _fileset_members(value: FileSet) -> list[tuple[str, str]]:
 
 
 def _is_tagged_fileset(value: ty.Any) -> bool:
-    entry = _BY_TYPE.get(type(value))
+    entry = _entry(type(value))
     return isinstance(value, FileSet) and entry is not None and entry.fileset
 
 
@@ -368,9 +470,12 @@ class FormWalker:
 
     tag_tuples = True
 
+    def __init__(self, cache: ty.Any = None) -> None:
+        self.cache = cache
+
     def walk(self, value: ty.Any) -> JSON:
         tp = type(value)
-        entry = _BY_TYPE.get(tp)
+        entry = _entry(tp)
         if entry is not None:
             form = self.registered(entry, value)
             if form is not _UNREGISTERED:
@@ -440,7 +545,9 @@ class FormWalker:
         if entry.fileset and isinstance(value, FileSet):
             return {
                 "$fileset": entry.tag,
-                "files": [[k, s] for k, s in sorted(_fileset_members(value))],
+                "files": [
+                    [k, s] for k, s in sorted(_fileset_members(value, self.cache))
+                ],
             }
         return _UNREGISTERED
 
@@ -466,7 +573,7 @@ class FormWalker:
         return isinstance(value, os.PathLike) and not isinstance(value, FileSet)
 
     def path_(self, value: ty.Any) -> JSON:
-        return os.fspath(value)
+        return os.fsdecode(value)
 
     def sort_key(self, form: JSON) -> bytes:
         return jcs(form)
@@ -479,12 +586,13 @@ def _float_tag(x: float) -> str:
     return x.hex() if math.isfinite(x) else str(x)
 
 
-def digest_form(value: ty.Any) -> JSON:
+def digest_form(value: ty.Any, cache: ty.Any = None) -> JSON:
     """RFC 0003's output encoding with typed numbers and tagged tuples (RFC 0004 §6.2).
 
     Raises an ``Exception`` for a value that has none, which ``digest`` turns into ``py@1``.
+    ``cache`` is the ``pydra.utils.hash.Cache`` that file sets are hashed through.
     """
-    return FormWalker().walk(value)
+    return FormWalker(cache).walk(value)
 
 
 def _py_digest(value: ty.Any, cache: ty.Any = None) -> str:
@@ -493,18 +601,22 @@ def _py_digest(value: ty.Any, cache: ty.Any = None) -> str:
     return "py@1:" + hash_object(value, cache=cache).hex()
 
 
-def digest(value: ty.Any) -> str:
-    """The typed digest ``"<tag>@<n>:<hex>"`` of ``value``; the first §6.2 row that applies."""
-    entry = _BY_TYPE.get(type(value))
+def digest(value: ty.Any, cache: ty.Any = None) -> str:
+    """The typed digest ``"<tag>@<n>:<hex>"`` of ``value``; the first §6.2 row that applies.
+
+    ``cache`` is a ``pydra.utils.hash.Cache``, shared by the ``py@1`` fallback and the
+    file sets, which are read through its persistent stat-to-digest cache."""
+    entry = _entry(type(value))
     if entry is not None and entry.digest is not None:
         return _registered_digest(entry, value)
     if is_canonical_array(value):
         return "npy@1:" + _sha256(canonical_npy(value))
     if _is_tagged_fileset(value):
-        entry = _BY_TYPE[type(value)]
-        return fileset_digest(str(entry.tag), _fileset_members(value))
+        entry = _entry(type(value))
+        assert entry is not None
+        return fileset_digest(str(entry.tag), _fileset_members(value, cache))
     try:
-        form = digest_form(value)
+        form = digest_form(value, cache)
     except _NoDigestForm:
-        return _py_digest(value)
+        return _py_digest(value, cache)
     return "json@1:" + _sha256(jcs(form))
