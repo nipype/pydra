@@ -431,8 +431,8 @@ be reused for this.
   argument) as a list and `...` as the token `...` (`tuple[int, ...]`);
 - `Literal[...]`: the tag `literal` over the sorted digest forms (§6.2) of its values, since
   `Literal["a", 1] == Literal[1, "a"]`;
-- `Annotated[T, *meta]`: `T`'s digest followed by the digests of the metadata values (§6.2), in
-  order;
+- `Annotated[T, *meta]`: `T`'s digest; metadata is not hashed (as upstream #887; field types are
+  stripped at definition);
 - a `TypeVar` or `ParamSpec`: its name and the digests of its bound and constraints.
 
 ### 5.2 The executable
@@ -933,6 +933,8 @@ Lmod resolution is measured on a cluster that has Lmod before it is merged.
   acceptable during the 1.0 alphas?
 
 ## 12. Changes in revisions 2 to 4
+
+Amendment after revision 4 (T4): `type@1` of `Annotated[T, *meta]` is `T`'s digest and the metadata is not hashed, as upstream #887, which this RFC had contradicted; task checksums do not change, since field types are stripped at definition (§5.1).
 
 Revision 4 answers the second re-review of #932 at `e98634c6`, made jointly with RFC 0003 at
 `547f7b1d`:
