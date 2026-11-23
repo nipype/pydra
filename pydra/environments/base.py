@@ -478,7 +478,10 @@ def visible_devices(device: "Device | None") -> str | None:
 
 
 OWNER_LABEL = "pydra.warm.owner"
-"""The label naming the ``<host>:<pid>`` that started a warm container"""
+"""The label naming the process that started a warm container (`owner_label`)"""
+
+UID_LABEL = "pydra.warm.uid"
+"""The label naming the uid that started a warm container, which a listing filters on"""
 
 
 def owner() -> tuple[str, int]:
@@ -486,6 +489,40 @@ def owner() -> tuple[str, int]:
     host has only letters, digits and ``-``"""
     host = re.sub(r"[^A-Za-z0-9-]", "-", socket.gethostname()) or "host"
     return host, os.getpid()
+
+
+def uid() -> str:
+    """This process's uid, ``""`` where there are no POSIX ids"""
+    return str(os.getuid()) if hasattr(os, "getuid") else ""
+
+
+def pid_namespace() -> str:
+    """The identity of this process's pid namespace (the inode of
+    ``/proc/self/ns/pid``), ``""`` where it cannot be read (macOS, Windows)"""
+    try:
+        return str(os.stat("/proc/self/ns/pid").st_ino)
+    except OSError:
+        return ""
+
+
+def owner_label() -> str:
+    """``<host>:<uid>:<pid namespace>:<pid>`` of this process, ``-`` for a pid
+    namespace that cannot be read"""
+    host, pid = owner()
+    return f"{host}:{uid()}:{pid_namespace() or '-'}:{pid}"
+
+
+def label_owner_dead(label: str) -> bool:
+    """Whether the process an `owner_label` names has ended and was this user's, on
+    this host, in this pid namespace. Where the namespace cannot be read (``-``) the
+    host and uid must match only. A label in any other form is never dead."""
+    parts = label.split(":")
+    if len(parts) != 4:
+        return False
+    host, owner_uid, namespace, pid = parts
+    if owner_uid != uid() or namespace != (pid_namespace() or "-"):
+        return False
+    return pid.isdigit() and owner_dead(host, int(pid))
 
 
 def owner_dead(host: str, pid: int) -> bool:
@@ -593,7 +630,12 @@ class WarmEnvironment:
     def start(self) -> None:
         """Start the environment: `Environment.setup`, then the runtime. A start that
         fails removes what it may have left running"""
-        self.environment.setup()
+        try:
+            self.environment.setup()
+        except BaseException:
+            self.closed = True
+            self._cleanup()
+            raise
         with _OPEN_LOCK:
             _OPEN.add(self)
         _hook()

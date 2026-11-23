@@ -193,9 +193,9 @@ class WarmDocker(base.WarmContainer):
     def _start(self) -> None:
         env: Docker = self.environment
         xargs, override = split_entrypoint(env.xargs)
-        host, pid = base.owner()
         cmd = ["docker", "run", "-d", "--rm", "--init", "--name", self.name]
-        cmd.extend(["--label", f"{base.OWNER_LABEL}={host}:{pid}"])
+        cmd.extend(["--label", f"{base.OWNER_LABEL}={base.owner_label()}"])
+        cmd.extend(["--label", f"{base.UID_LABEL}={base.uid()}"])
         cmd.extend(user_flag())
         devices = base.visible_devices(self.device)
         if devices is not None:
@@ -250,11 +250,15 @@ class WarmDocker(base.WarmContainer):
         base.execute(["docker", "rm", "-f", self.container_id or self.name])
 
     def _reap(self) -> None:
+        """Remove this user's warm containers whose owner has ended in this host's
+        pid namespace (`base.label_owner_dead`); never another user's"""
         rc, out, _ = base.execute(
             [
                 "docker",
                 "ps",
                 "-a",
+                "--filter",
+                f"label={base.UID_LABEL}={base.uid()}",
                 "--filter",
                 f"label={base.OWNER_LABEL}",
                 "--format",
@@ -266,8 +270,7 @@ class WarmDocker(base.WarmContainer):
             return
         for line in out.splitlines():
             container, _, label = line.partition("\t")
-            host, _, pid = label.rpartition(":")
-            if container and pid.isdigit() and base.owner_dead(host, int(pid)):
+            if container and base.label_owner_dead(label):
                 logger.info("Removing the orphaned warm container %s", container)
                 base.execute(["docker", "rm", "-f", container])
 
