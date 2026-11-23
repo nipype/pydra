@@ -83,13 +83,53 @@ def _kill_recorded(path):
             pass
 
 
-def _wait_for(path, timeout=20):
+def _wait_for(path, timeout=60):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if path.exists() and path.read_text().count(" "):
             return [int(p) for p in path.read_text().split()]
         time.sleep(0.05)
     raise AssertionError("child did not start")
+
+
+def _until_gone(pid, timeout=60):
+    """Wait, up to a generous bound, for ``pid`` to have exited"""
+    deadline = time.monotonic() + timeout
+    while _alive(pid):
+        assert time.monotonic() < deadline, f"{pid} did not exit"
+        time.sleep(0.05)
+
+
+def _record_stop(monkeypatch):
+    """The steps of each `ProcessGroup.stop`: ``("signal", sig)`` for each signal sent
+    to the group, ``("wait", timeout, all_gone)`` for each wait for it to be gone"""
+    from pydra.engine.procgroup import ProcessGroup
+
+    steps = []
+    real_signal, real_wait = ProcessGroup._signal_all, ProcessGroup._wait_all_gone
+
+    def signal_all(self, sig, table):
+        steps.append(("signal", sig))
+        return real_signal(self, sig, table)
+
+    def wait_all_gone(self, timeout):
+        gone = real_wait(self, timeout)
+        steps.append(("wait", timeout, gone))
+        return gone
+
+    monkeypatch.setattr(ProcessGroup, "_signal_all", signal_all)
+    monkeypatch.setattr(ProcessGroup, "_wait_all_gone", wait_all_gone)
+    return steps
+
+
+# SIGTERM, ignored for term_timeout (0.5 s), then SIGKILL, after which every member is
+# gone before kill_timeout (10 s) runs out
+ESCALATED = [
+    ("signal", signal.SIGTERM),
+    ("wait", 0.5, False),
+    ("signal", signal.SIGKILL),
+    ("wait", 10, True),
+]
 
 
 def _provider(tmp_path, record, **kw):
@@ -151,7 +191,7 @@ def test_eviction_kills_whole_group_and_waits(tmp_path):
 
 
 @posix_only
-def test_stop_escalates_to_sigkill_and_reaps(tmp_path):
+def test_stop_escalates_to_sigkill_and_reaps(tmp_path, monkeypatch):
     from pydra.engine.procgroup import ProcessGroup
 
     record = tmp_path / "pids"
@@ -162,12 +202,12 @@ def test_stop_escalates_to_sigkill_and_reaps(tmp_path):
         time.sleep(600)
         """)
     group = ProcessGroup.start([sys.executable, "-c", script, str(record)])
-    deadline = time.monotonic() + 20
+    deadline = time.monotonic() + 60
     while not record.exists() and time.monotonic() < deadline:
         time.sleep(0.05)
-    t0 = time.monotonic()
+    steps = _record_stop(monkeypatch)
     group.stop(term_timeout=0.5, kill_timeout=10)
-    assert time.monotonic() - t0 < 8
+    assert steps == ESCALATED
     assert group.proc.returncode == -signal.SIGKILL  # reaped, not a zombie
     assert not _alive(group.pid)
     group.stop()  # idempotent
@@ -526,7 +566,7 @@ def test_escaped_descendant_is_in_the_gpu_wait(tmp_path, monkeypatch):
 
 
 @posix_only
-def test_term_ignoring_grandchild_is_sigkilled(tmp_path):
+def test_term_ignoring_grandchild_is_sigkilled(tmp_path, monkeypatch):
     from pydra.engine.procgroup import ProcessGroup
 
     record = tmp_path / "pids"
@@ -534,9 +574,9 @@ def test_term_ignoring_grandchild_is_sigkilled(tmp_path):
         [sys.executable, "-c", TERM_IGNORING_GRANDCHILD, str(record)]
     )
     _, grandchild = _wait_for(record)
-    t0 = time.monotonic()
+    steps = _record_stop(monkeypatch)
     group.stop(term_timeout=0.5, kill_timeout=10)
-    assert time.monotonic() - t0 < 8
+    assert steps == ESCALATED
     assert not _alive(grandchild)
 
 
@@ -551,7 +591,7 @@ def test_crashed_leader_then_stop_does_not_reuse_or_resignal(tmp_path, monkeypat
     group = ProcessGroup.start([sys.executable, "-c", CHILD, str(record)])
     _, grandchild = _wait_for(record)
     os.kill(group.pid, signal.SIGKILL)  # the leader crashes; its group lives on
-    deadline = time.monotonic() + 20
+    deadline = time.monotonic() + 60
     while group.leader_running() and time.monotonic() < deadline:
         time.sleep(0.05)
     assert not group.leader_running()
@@ -654,7 +694,7 @@ def test_daemonised_server_is_stopped_and_counted_in_the_gpu_wait(
     handle = provider.load({}, Device("cuda", 0))
     launcher, server = _wait_for(record)
     (bindir / "pids").write_text(str(server))
-    time.sleep(0.5)  # the launcher has exited; the shim adopted the server
+    _until_gone(launcher)  # the launcher has exited; the shim adopted the server
     assert _alive(server)
     assert provider.measure(handle).device == 4096 * 1024 * 1024
     provider.close(handle)
@@ -672,8 +712,8 @@ def test_daemonised_server_is_gone_when_the_parent_is_sigkilled(tmp_path):
         """)
     parent = subprocess.Popen([sys.executable, "-c", parent_code])
     try:
-        _, server = _wait_for(record)
-        time.sleep(0.5)
+        launcher, server = _wait_for(record)
+        _until_gone(launcher)  # the launcher has exited; the shim adopted the server
         assert _alive(server)
         parent.send_signal(signal.SIGKILL)
         parent.wait(timeout=20)
@@ -771,7 +811,7 @@ def test_provider_env_and_cwd_reach_only_the_command(tmp_path):
         provider.argv({}, Device()), env=provider.env({}, Device()), cwd=shadow
     )
     try:
-        deadline = time.monotonic() + 20
+        deadline = time.monotonic() + 60
         while not out.exists() and time.monotonic() < deadline:
             time.sleep(0.05)
         cwd, pypath, mark = out.read_text().split("|")
