@@ -1295,24 +1295,32 @@ def is_library(obj: object) -> bool:
     unless its file is library code. A function unpickled by value
     (``"<dynamic-code>"``) is identified by the ``__file__`` its globals keep, or, if
     they keep none, by its module's name, never by a module of that name loaded
-    here; so is a class its module here does not hold whose body functions were
-    unpickled by value."""
+    here. A class its module here does not hold is identified as its functions
+    unpickled by value are: those of its body first, then those whose globals are
+    its module's (as dataclass generates them). With none, it is user code if it
+    carries an encoding (see `_class_code`)."""
     if isinstance(obj, types.ModuleType):
         return _module_is_library(obj.__name__, getattr(obj, "__file__", None))
     if isinstance(obj, type):
         module = obj.__module__
         library = isinstance(module, str) and _module_is_library(module)
         if library and _owner_name(obj) is None:
-            # a class unpickled by value is identified as its functions are
+            # a class unpickled by value is identified as the functions of its body,
+            # or those generated in its module (dataclass methods), are
             qualname = _class_qualname(obj)
             by_value = [
                 f
                 for _, f in _class_functions(obj)
                 if f.__code__.co_filename == _BY_VALUE_FILENAME
-                and _in_body_of(f, qualname)
             ]
-            if by_value:
-                return is_library(by_value[0])
+            own = [f for f in by_value if _in_body_of(f, qualname)] or [
+                f for f in by_value if f.__globals__.get("__name__") == module
+            ]
+            if own:
+                return is_library(own[0])
+            # an encoding is carried only by a class hashed as user code
+            if _carried_class_encoding(obj) is not None:
+                return False
         return library
     else:
         module = inspect.getattr_static(obj, "__module__", None)

@@ -2258,6 +2258,10 @@ class AttrsFields:
     b: str = "x"
 
 
+class Const:
+    x = 1
+
+
 def make_obj(n):
     return Obj(n)
 
@@ -2561,3 +2565,64 @@ def test_class_encoded_from_its_file_follows_an_edit(tmp_path, monkeypatch):
     os.utime(path, ns=(time.time_ns() + 10**9,) * 2)
     edited = hash_module._class_code(module.Obj, Cache())
     assert edited.startswith(b"class:ast@1:") and edited != code
+
+
+# Prints whether each class of a list pickled by value is library code, in a process
+# where the module named argv[2] is a library module that does not hold them (as a
+# process run from a library's ``__main__``). The code of the functions of the module
+# file named by argv[1], or generated from a string, is renamed "<dynamic-code>", as
+# cloudpickle >= 3.1.3 names it, also under older versions
+_IS_LIBRARY_IN_SUBPROCESS = """\
+import json, sys, types, cloudpickle
+from pydra.utils import hash as H
+
+library = types.ModuleType(sys.argv[2])
+library.__file__ = json.__file__
+sys.modules[sys.argv[2]] = library
+out = []
+for klass in cloudpickle.loads(sys.stdin.buffer.read()):
+    for member in list(vars(klass).values()):
+        for f in H._member_functions(member):
+            if f.__code__.co_filename in (sys.argv[1], "<string>"):
+                f.__code__ = f.__code__.replace(co_filename="<dynamic-code>")
+    out.append(H.is_library(klass))
+print(json.dumps(out))
+"""
+
+
+def test_by_value_class_is_classified_as_its_parent_classified_it(
+    tmp_path, monkeypatch
+):
+    """A class unpickled by value where a library module of its module's name is
+    loaded is user code: one with no body functions is classified by the functions
+    generated for it, and one with no function of its module at all by the encoding
+    it carries"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+
+    def classified(classes: list) -> list[bool]:
+        cloudpickle.register_pickle_by_value(module)
+        try:
+            payload = cloudpickle.dumps(classes)
+        finally:
+            cloudpickle.unregister_pickle_by_value(module)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _IS_LIBRARY_IN_SUBPROCESS,
+                module.__file__,
+                module.__name__,
+            ],
+            input=payload,
+            capture_output=True,
+            cwd=str(tmp_path.parent),
+        )
+        assert result.returncode == 0, result.stderr.decode()
+        return json.loads(result.stdout)
+
+    classes = [module.Fields, module.AttrsFields, module.Const, module.Obj]
+    assert not any(hash_module.is_library(k) for k in classes)
+    assert classified([module.Fields, module.Obj]) == [False, False]
+    for klass in classes:
+        hash_module.class_digest(klass)
+    assert classified(classes) == [False, False, False, False]
