@@ -1,5 +1,6 @@
 import typing as ty
 import inspect
+import warnings
 from typing import dataclass_transform
 import attrs
 from pydra.compose import base
@@ -117,6 +118,7 @@ def define(
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
     code_hash: str | None = None,
     checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
+    version: str | None = None,
 ) -> "Task":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
@@ -152,6 +154,13 @@ def define(
         as the task's ``__checksum__``: its return value is the job checksum and
         neither the constructor nor the input values are hashed. It must identify the task as
         well as its inputs, as jobs with equal checksums share one result and run once
+    version: str, optional
+        Declared version of the workflow. When given, the checksum uses the constructor's
+        module, name and this version in place of the code it reaches (see
+        ``code_hash``), so the version must be changed whenever a change to the
+        constructor should give new results. It does not stand for the run facts of the
+        nodes (their environments and tool versions), which the job's record keys as
+        ``nodes`` either way (RFC 0004 sections 4.3 and 6.1)
 
     Returns
     -------
@@ -226,6 +235,19 @@ def define(
         )
 
         defn.__doc__ = constructor.__doc__
+        if version is not None and (
+            constructor.__module__ == "__main__"
+            or "<locals>" in constructor.__qualname__
+        ):
+            warnings.warn(
+                f"version={version!r} identifies {constructor.__module__}."
+                f"{constructor.__qualname__}, which another constructor of the same name, "
+                "version and values read would share, so their results would be "
+                "reused as one",
+                UserWarning,
+                stacklevel=2,
+            )
+        defn._version = version
         defn._code_hash = None if code_hash is None else check_code_hash(code_hash)
         return defn
 

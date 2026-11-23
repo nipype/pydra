@@ -47,7 +47,14 @@ if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
     from pydra.engine.job import Job
 
-__all__ = ["IDENTITY_SCHEME", "job_record", "record_checksum", "task_record"]
+__all__ = [
+    "DEFERRED",
+    "IDENTITY_SCHEME",
+    "is_deferred",
+    "job_record",
+    "record_checksum",
+    "task_record",
+]
 
 IDENTITY_SCHEME = "pydra-identity@2"
 
@@ -56,6 +63,10 @@ Record = dict[str, ty.Any]
 # The digests of the definition of each shell field are kept beside the digests of the
 # inputs under ``template:<field>``, a name no field has
 TEMPLATE_PREFIX = "template:"
+
+# A node of a workflow's record whose run facts are not known at keying (RFC 0004
+# section 4.3); a record holding it at any depth is never served whole
+DEFERRED = "deferred"
 
 
 # The attributes of a field that shape the command line, besides its type (RFC 0004
@@ -247,21 +258,102 @@ def _written_executable(task: "Task", digest: str | None) -> ty.Any:
 def job_record(job: "Job") -> Record:
     """The identity record of ``job``: the task's record, plus ``job`` for a shell task:
     the environment it runs in (its resolved reference, ``Job.resolved``) and the version
-    the task's ``version_command`` reported when it runs natively (RFC 0004 section 3.1).
-    A python task has no ``job`` field, and a supplied checksum stands for the whole
-    record. The ``nodes`` of a workflow are added by the PR that keys them."""
+    the task's ``version_command`` reported when it runs natively (RFC 0004 section 3.1),
+    or ``nodes`` for a workflow task (`workflow_nodes`). A python task has no ``job``
+    field, and a supplied checksum stands for the whole record."""
+    record = task_record(job.task)
+    if "supplied" in record:
+        return record
+    if record["kind"] == "shell":
+        record["job"] = job_fields(
+            job.task, job.environment, lambda: job.resolved, job.resolves_reference
+        )[0]
+    elif record["kind"] == "workflow":
+        record["nodes"] = workflow_nodes(job.task, job.submitter)
+    return record
+
+
+def job_fields(
+    task: "Task",
+    environment: ty.Any,
+    resolve: ty.Callable[[], ty.Any],
+    resolves_reference: bool,
+) -> tuple[Record, bool]:
+    """The ``job`` fields of a shell task run in ``environment`` (RFC 0004 section 3.1),
+    and whether either is unresolved: the environment's resolved reference
+    (``resolve()``) and the version the ``version_command`` reports when it runs
+    natively"""
     from pydra.compose.shell.version import tool_version
     from pydra.environments.native import Native
 
-    record = task_record(job.task)
-    if "supplied" not in record and record["kind"] == "shell":
-        environment = job.environment
-        native = environment is None or isinstance(environment, Native)
-        record["job"] = {
-            "environment": None if environment is None else job.resolved.key,
-            "tool_version": tool_version(job.task) if native else None,
-        }
-    return record
+    native = environment is None or isinstance(environment, Native)
+    version = tool_version(task) if native else None
+    if environment is None:
+        return {"environment": None, "tool_version": version}, isinstance(version, dict)
+    ref = resolve()
+    fields = {"environment": ref.key, "tool_version": version}
+    return fields, isinstance(version, dict) or (resolves_reference and ref.unresolved)
+
+
+def workflow_nodes(task: "Task", submitter: ty.Any) -> "Record | str":
+    """The ``nodes`` of a workflow's record (RFC 0004 section 4.3), from its memoised construction
+    (`Workflow.construct`): for each shell node, by name, its ``job`` fields, resolved as a shell
+    job of the node resolves them; for a nested workflow node whose inputs are all concrete, its
+    own ``nodes``. Other nodes are left out. A node is `DEFERRED` when its run facts cannot be
+    known at keying (a nested workflow with a lazy input or a splitter, an unresolved environment
+    or tool version, or facts that raise), and the whole ``nodes`` when the workflow cannot be
+    constructed; the error is then raised when that job is keyed, run or expanded."""
+    from pydra.compose.shell.task import Task as ShellTask
+    from pydra.engine.job import resolve_reference
+    from pydra.utils.general import attrs_values, is_workflow
+    from pydra.utils.typing import is_lazy
+
+    try:
+        constructed = task.construct()
+    except Exception:
+        return DEFERRED
+    nodes: Record = {}
+    for node in constructed.nodes:
+        node_task = node._task
+        try:
+            if is_workflow(node_task):
+                if node_task._splitter or any(
+                    is_lazy(v) for v in attrs_values(node_task).values()
+                ):
+                    nodes[node.name] = DEFERRED
+                else:
+                    inner = workflow_nodes(node_task, submitter)
+                    nodes[node.name] = (
+                        DEFERRED if inner == DEFERRED else {"nodes": inner}
+                    )
+            elif isinstance(node_task, ShellTask):
+                environment = node._environment
+                if environment is None and submitter is not None:
+                    environment = submitter.environment
+                fields, unresolved = job_fields(
+                    node_task,
+                    environment,
+                    lambda: resolve_reference(environment, submitter),
+                    environment is not None and environment.resolves,
+                )
+                nodes[node.name] = DEFERRED if unresolved else fields
+        except Exception:
+            nodes[node.name] = DEFERRED
+    return nodes
+
+
+def is_deferred(record: ty.Mapping[str, ty.Any]) -> bool:
+    """Whether ``record`` holds `DEFERRED` at any depth of its ``nodes``, or as its
+    ``nodes``"""
+    nodes = record.get("nodes")
+    if nodes == DEFERRED:
+        return True
+    if not isinstance(nodes, ty.Mapping):
+        return False
+    return any(
+        value == DEFERRED or (isinstance(value, ty.Mapping) and is_deferred(value))
+        for value in nodes.values()
+    )
 
 
 def record_checksum(record: ty.Mapping[str, ty.Any]) -> str:
