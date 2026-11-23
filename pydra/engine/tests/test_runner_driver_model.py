@@ -1002,3 +1002,38 @@ def test_a_job_held_back_by_the_limit_is_not_read_again(tmp_path, n):
                 runner.complete(job, job.run())
     assert not runner.failed
     assert CountingReads.reads <= 2 * n  # held back and read every call: n(n+1)/2
+
+
+@python.define
+def Twin(x: int) -> int:
+    return x * 2
+
+
+@workflow.define
+def SplitTwins(xs: list[int]) -> list[int]:
+    b = workflow.add(Twin().split(x=xs), name="B")
+    return b.out
+
+
+def test_section_3_5_loop_sees_last_shared_twin(tmp_path):
+    """The RFC 0002 section 3.5 loop (``while not runner.done``) over a runner that does
+    not own its workflow job records every element, including a twin shared by the last
+    ``complete``"""
+    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+        runner = GraphRunner(
+            SplitTwins(xs=[5, 5]), sub.store, submitter=sub, on_error="raise_at_end"
+        )
+        seen = []
+        for _ in range(20):
+            if runner.done:
+                break
+            rnd = runner.ready()
+            seen.extend((s.job.name, s.job.state_index, s.how) for s in rnd.settled)
+            for job in rnd.dispatch:
+                seen.append((job.name, job.state_index, "dispatch"))
+                out = job.task.Outputs(out=job.task.x * 2)
+                runner.complete(
+                    job, Result(cache_dir=job.cache_dir, outputs=out, task=job.task)
+                )
+        assert runner.done
+    assert seen == [("B", 0, "dispatch"), ("B", 1, "shared")]
