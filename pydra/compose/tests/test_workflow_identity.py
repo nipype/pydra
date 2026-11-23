@@ -133,6 +133,28 @@ def VersionFails(x: int):
     return bad.out, ok.out
 
 
+@workflow.define(outputs=["bad", "ok"])
+def Root(x: int):
+    bad = workflow.add(Bad(x=x), name="bad")  # concrete at the parent's keying
+    ok = workflow.add(Add1(x=x), name="ok")
+    return bad.out, ok.out
+
+
+@workflow.define(outputs=["mid", "ok2"])
+def Top(x: int):
+    a = workflow.add(Add1(x=x), name="a")
+    mid = workflow.add(Root(x=a.out), name="mid")
+    ok2 = workflow.add(Add1(x=x), name="ok2")
+    return mid.ok, ok2.out
+
+
+@workflow.define(outputs=["tool", "ok"])
+def VersionRoot(x: int):
+    tool = workflow.add(NoMatch(x=x), name="tool")  # concrete at the parent's keying
+    ok = workflow.add(Add1(x=x), name="ok")
+    return tool.return_code, ok.out
+
+
 def _job(task, sub=None):
     return Job(name="main", task=task, submitter=sub or Submitter(store="pickle"))
 
@@ -259,10 +281,76 @@ def test_constructor_error_at_keying_is_job_error(tmp_path, task):
         assert ok.result().outputs.out == 2  # the parent's loop continued
     assert runner.failed
     (entry,) = runner.entries
-    assert (entry.job_name, entry.phase) == ("bad", "keying")
+    # the node is deferred at the parent's keying; its own job fails when it is built
+    assert (entry.job_name, entry.phase) == ("bad", "run")
     assert ("cannot build Bad" if task is KeyingFails else "no version") in (
         entry.message + entry.traceback
     )
+
+
+@pytest.mark.parametrize(
+    "task, done, message",
+    [
+        (Root(x=2), [Add1(x=2)], "cannot build Bad"),
+        (Top(x=1), [Add1(x=1), Add1(x=2)], "cannot build Bad"),
+        (VersionRoot(x=1), [Add1(x=1)], "no version here"),
+    ],
+    ids=["root", "nested", "version"],
+)
+def test_keying_error_in_a_concrete_node_stays_on_that_node(
+    tmp_path, task, done, message
+):
+    with Submitter(store="pickle", cache_root=tmp_path) as sub:
+        result = sub(task, raise_errors=False)  # the call does not raise
+        assert result.errored
+        for ok in done:  # the siblings ran
+            assert _job(ok, sub).result().outputs.out == ok.x + 1
+        if message == "cannot build Bad":  # the error is on Bad's own result
+            bad = _job(Bad(x=2), sub).result()
+            assert bad.errored
+            assert message in "".join(bad.errors["error message"])
+    assert any(message in str(e) for e in sub.errors + sub.entries) or (
+        message in str(result.errors)
+    )
+
+
+def test_version_error_at_keying_is_the_shell_nodes(tmp_path):
+    with Submitter(worker="debug", store="pickle", cache_root=tmp_path) as sub:
+        runner = GraphRunner(
+            VersionRoot(x=1), sub.store, on_error="raise_at_end", submitter=sub
+        )
+        drive_with_run(runner)
+        assert runner.exec_graph["ok"].job(None).result().outputs.out == 2
+    (entry,) = runner.entries
+    assert (entry.job_name, entry.phase) == ("tool", "keying")
+    assert "no version here" in entry.message
+
+
+@pytest.mark.parametrize("kind", ["pickle", "portable"])
+def test_deferred_nested_workflow_is_not_served_whole(tmp_path, monkeypatch, kind):
+    store = "pickle" if kind == "pickle" else make(tmp_path)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "c") as sub:
+        assert sub(Deep(x=1)).outputs.out == 3
+    asked = []
+    if kind == "portable":
+        real = store.find
+
+        def find(job, *args, **kwargs):
+            asked.append(job.name)
+            return real(job, *args, **kwargs)
+
+        monkeypatch.setattr(store, "find", find)
+    expansions = count_expansions(monkeypatch)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "c") as sub:
+        runner = _owned_runner(sub, Deep(x=1))
+        rounds = drive_with_run(runner)
+        assert runner.result().outputs.out == 3
+    settled = {(s.job.name, s.how) for r in rounds for s in r.settled}
+    assert ("mid", "workflow-stored") not in settled
+    assert "mid" not in asked
+    assert expansions[:2] == ["Deep", "Mid"]
+    assert ("inner", "workflow-stored") in settled  # concrete at run: served whole
+    assert ("a", "stored") in settled
 
 
 def test_deferred_workflow_is_miss_under_job_run(tmp_path, monkeypatch):

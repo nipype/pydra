@@ -72,8 +72,9 @@ class JobErrorEntry:
         ``"run"`` if the job ran and errored, ``"resolution"`` if its inputs could
         not be resolved from its upstream results, so it never ran, ``"expansion"`` if
         a block of a partial node could not be expanded, so it has no element,
-        ``"keying"`` if its checksum could not be computed (a workflow's constructor or
-        a version command raised), so it never ran,
+        ``"keying"`` if its checksum could not be computed (its version command, its
+        environment reference under ``resolve_images="require"``, or an input value
+        raised), so it never ran,
         ``"lease"`` if the lease of a workflow job could not be taken, ``"commit"`` if
         its result could not be committed (the lease was lost), ``"stopped"`` if the
         job was handed out but the run ended before it completed (its message names
@@ -1484,10 +1485,10 @@ class GraphRunner:
 
     def _keyed(self, job: Job, frame: _Frame) -> bool:
         """Compute the checksum of a released job inside the per-job error handling (RFC
-        0004 section 4.3): one that cannot be computed (a workflow's constructor or a
-        version command raised) is recorded as the job's error, phase ``"keying"``, its
-        readers become unrunnable and the rest of the run continues under ``on_error``
-        """
+        0004 section 4.3): one that cannot be computed (a version command, a reference
+        under ``resolve_images="require"`` or an input value raised) is recorded as the
+        job's error, phase ``"keying"``, its readers become unrunnable and the rest of
+        the run continues under ``on_error``"""
         try:
             job.checksum
         except Exception as exc:

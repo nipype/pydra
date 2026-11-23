@@ -292,46 +292,63 @@ def job_fields(
     return fields, isinstance(version, dict) or (resolves_reference and ref.unresolved)
 
 
-def workflow_nodes(task: "Task", submitter: ty.Any) -> Record:
+def workflow_nodes(task: "Task", submitter: ty.Any) -> "Record | str":
     """The ``nodes`` of a workflow's record (RFC 0004 section 4.3), from its construction
     (`Workflow.construct`, memoised, so a run reuses it): for each shell node, by name,
     its ``job`` fields, resolved as a shell job of the node resolves them; for a nested
-    workflow node whose inputs are all concrete, its own ``nodes``. A python node is left
-    out. A node is `DEFERRED` when its run facts cannot be known at keying: a nested
-    workflow with a lazy input or a splitter, or a shell node whose environment or tool
-    version is unresolved."""
+    workflow node whose inputs are all concrete, its own ``nodes``. Python nodes, and any
+    node that is neither shell nor workflow, are left out. A node is `DEFERRED` when its
+    run facts cannot be known at keying: a nested workflow with a lazy input or a
+    splitter, a shell node whose environment or tool version is unresolved, or a node
+    whose facts raise (its construction, version command or reference resolution), so
+    that the error is raised when the node's own job is keyed or run, not here. The whole
+    ``nodes`` is `DEFERRED` when the workflow itself cannot be constructed, so the error
+    is raised when its job is expanded."""
     from pydra.compose.shell.task import Task as ShellTask
     from pydra.engine.job import resolve_reference
     from pydra.utils.general import attrs_values, is_workflow
     from pydra.utils.typing import is_lazy
 
+    try:
+        constructed = task.construct()
+    except Exception:
+        return DEFERRED
     nodes: Record = {}
-    for node in task.construct().nodes:
+    for node in constructed.nodes:
         node_task = node._task
-        if is_workflow(node_task):
-            if node_task._splitter or any(
-                is_lazy(v) for v in attrs_values(node_task).values()
-            ):
-                nodes[node.name] = DEFERRED
-            else:
-                nodes[node.name] = {"nodes": workflow_nodes(node_task, submitter)}
-        elif isinstance(node_task, ShellTask):
-            environment = node._environment
-            if environment is None:
-                environment = getattr(submitter, "environment", None)
-            fields, unresolved = job_fields(
-                node_task,
-                environment,
-                lambda: resolve_reference(environment, submitter),
-                bool(getattr(environment, "resolves", False)),
-            )
-            nodes[node.name] = DEFERRED if unresolved else fields
+        try:
+            if is_workflow(node_task):
+                if node_task._splitter or any(
+                    is_lazy(v) for v in attrs_values(node_task).values()
+                ):
+                    nodes[node.name] = DEFERRED
+                else:
+                    inner = workflow_nodes(node_task, submitter)
+                    nodes[node.name] = (
+                        DEFERRED if inner == DEFERRED else {"nodes": inner}
+                    )
+            elif isinstance(node_task, ShellTask):
+                environment = node._environment
+                if environment is None:
+                    environment = getattr(submitter, "environment", None)
+                fields, unresolved = job_fields(
+                    node_task,
+                    environment,
+                    lambda: resolve_reference(environment, submitter),
+                    bool(getattr(environment, "resolves", False)),
+                )
+                nodes[node.name] = DEFERRED if unresolved else fields
+        except Exception:
+            nodes[node.name] = DEFERRED
     return nodes
 
 
 def is_deferred(record: ty.Mapping[str, ty.Any]) -> bool:
-    """Whether ``record`` holds `DEFERRED` at any depth of its ``nodes``"""
+    """Whether ``record`` holds `DEFERRED` at any depth of its ``nodes``, or as its
+    ``nodes``"""
     nodes = record.get("nodes")
+    if nodes == DEFERRED:
+        return True
     if not isinstance(nodes, ty.Mapping):
         return False
     return any(

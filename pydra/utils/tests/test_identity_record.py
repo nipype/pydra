@@ -205,6 +205,15 @@ def test_job_keeps_record_and_pickles_it():
     assert clone.checksum == job.checksum
 
 
+@pytest.mark.xfail(strict=True, reason="I8 maps StoredEntry.key to Result.record")
+def test_result_keeps_record_under_the_default_store(tmp_path):
+    from pydra.engine.submitter import Submitter
+
+    with Submitter(cache_root=tmp_path / "cache") as sub:
+        result = sub(Add(a=1))
+    assert result.record == task_record(Add(a=1))
+
+
 def test_result_keeps_record(tmp_path):
     job = Job(
         name="t",
