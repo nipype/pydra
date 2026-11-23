@@ -3,7 +3,6 @@
 import asyncio
 import sys
 import traceback
-import time
 from types import SimpleNamespace
 import pytest
 from pydra.compose import python, workflow
@@ -68,13 +67,23 @@ def test_dispatched_jobs_not_polled(submitter, monkeypatch):
     assert [j.name for j in runner.ready().dispatch] == ["B"]
 
 
-def test_stuck_is_immediate(submitter):
+def test_stuck_is_immediate(submitter, monkeypatch):
     """With nothing in flight and nothing released, the driver reports the diagnosis
     at once rather than waiting for results to become visible"""
+    rounds, waits = [], []
 
     class Wedged(GraphRunner):
         def ready(self, limit=None):
+            rounds.append(limit)
             return Round()
+
+    real_wait = asyncio.Event.wait
+
+    async def wait(self):
+        waits.append(self)
+        return await real_wait(self)
+
+    monkeypatch.setattr(asyncio.Event, "wait", wait)
 
     runner = runner_for(submitter, Chain(x=1))
     runner.__class__ = Wedged
@@ -90,10 +99,11 @@ def test_stuck_is_immediate(submitter):
             audit=submitter.audit,
         )
 
-    start = time.monotonic()
     with pytest.raises(RuntimeError, match="not done"):
         asyncio.run(run())
-    assert time.monotonic() - start < 1
+    # the first round reported it: no second round, no wait for an outcome
+    assert rounds == [None]
+    assert waits == []
 
 
 def test_complete_keeps_committed_attribute(submitter):
