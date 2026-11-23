@@ -15,6 +15,7 @@ from __future__ import annotations
 import collections
 import contextlib
 import hashlib
+import importlib
 import json
 import logging
 import math
@@ -36,7 +37,8 @@ from pydra.utils.general import is_workflow
 from pydra.utils.resources import ComputeResources
 from pydra.workers.pool.classes import WorkerClass
 from pydra.workers.pool.codec import JobCodec, PrivatePickle, write_payload
-from pydra.workers.pool.faults import Classifier, FaultBudgets, default_classifier
+from pydra.workers.pool import faults as _faults
+from pydra.workers.pool.faults import Classifier, FaultBudgets
 from pydra.workers.pool.placement import (
     ClassTried,
     DeclaredFit,
@@ -167,6 +169,57 @@ def _reference(obj: ty.Any) -> str:
     return f"{kind.__module__}:{kind.__qualname__}"
 
 
+def _label(residency: ty.Sequence[dict]) -> str:
+    """A residency's label, as `Ticket.residency_label` computes it."""
+    return hashlib.sha256(jcs(list(residency))).hexdigest()
+
+
+def _classifier_reference(obj: ty.Any) -> str:
+    """The ``module:qualname`` a worker imports the classifier ``obj`` by: a module-level function, or
+    a class it makes with no arguments, or such a reference itself.
+
+    Raises
+    ------
+    ValueError
+        ``obj`` does not round-trip through its reference (a ``functools.partial``, a bound method,
+        a lambda, a nested function, an instance), or the reference does not resolve to a callable.
+    """
+    from pydra.workers.pool.worker import _resolve
+
+    if isinstance(obj, str):
+        reference = obj
+        try:
+            resolved = _resolve(reference)
+        except Exception as err:
+            raise ValueError(
+                f"the classifier {reference!r} cannot be imported: {err!r}"
+            ) from err
+        if not callable(resolved):
+            raise ValueError(f"the classifier {reference!r} is not callable")
+        return reference
+    module = getattr(obj, "__module__", None)
+    qualname = getattr(obj, "__qualname__", None)
+    if not isinstance(module, str) or not isinstance(qualname, str):
+        raise ValueError(
+            f"the classifier {obj!r} has no importable name: workers import it by "
+            "module:qualname; pass a module-level function or class"
+        )
+    reference = f"{module}:{qualname}"
+    try:
+        found: ty.Any = importlib.import_module(module)
+        for part in qualname.split("."):
+            found = getattr(found, part)
+    except Exception:
+        found = None
+    if found is not obj:
+        raise ValueError(
+            f"the classifier {obj!r} does not round-trip through {reference!r} (a partial, a "
+            "bound method, a lambda or a nested function cannot reach a worker); pass a "
+            "module-level function or class"
+        )
+    return reference
+
+
 def _fingerprint(job: "Job") -> str:
     identity = job.store.identity
     if identity is not None:
@@ -194,7 +247,12 @@ class WarmPool:
     providers : sequence of Provider or "module:qualname"
         Providers the workers this pool starts load before the jobs' own.
     faults : FaultBudgets
+        Written into the pool for this coordinator's epoch, where every worker reads them, whoever
+        started it; ``start_failures`` is this coordinator's.
     classify : callable
+        ``classify(exc, phase) -> FaultRecord``, written into the pool as a ``module:qualname``
+        reference (a module-level function, or a class made with no arguments), which every worker
+        imports: it must be importable where the workers run.
     settings : PoolSettings
         Written for the workers this pool starts; its lease settings must equal the pool's.
     codec : JobCodec
@@ -224,28 +282,22 @@ class WarmPool:
         calibration: ty.Any = None,
         providers: ty.Sequence[ty.Any] = (),
         faults: FaultBudgets = FaultBudgets(),
-        classify: Classifier = default_classifier,
+        classify: Classifier = _faults.classify,
         settings: PoolSettings = PoolSettings(),
         codec: JobCodec = PrivatePickle(),
         probe: bool = True,
     ):
         self.batches = True
-        inert = [
-            name
-            for name, given in (
-                ("faults", faults != FaultBudgets()),
-                ("classify", classify is not default_classifier),
-                ("calibration", calibration is not None),
-            )
-            if given
-        ]
-        if inert:
+        if calibration is not None:
             warnings.warn(
-                f"WarmPool does not pass {', '.join(inert)} to its workers yet: workers use the "
-                "default fault budgets and classifier (RFC 0005 W7) and record no calibration (W9)",
+                "WarmPool does not use calibration yet: scaling uses unmeasured_workers and "
+                "workers record no calibration (RFC 0005 W9)",
                 UserWarning,
                 stacklevel=2,
             )
+        classify_ref = (
+            None if classify is _faults.classify else _classifier_reference(classify)
+        )
         self.root = Path(root).absolute()
         self.classes = tuple(classes)
         names = [c.name for c in self.classes]
@@ -279,6 +331,8 @@ class WarmPool:
         self._failed_at: dict[str, float] = {}
         self._cause: dict[str, str] = {}
         self._broken: dict[str, str] = {}
+        # (queue, residency label) a worker held in this epoch, and why
+        self._held: dict[tuple[str, str], str] = {}
         self._idle: dict[str, int] = collections.defaultdict(int)
         self._fenced: str | None = None
         self._closed = False
@@ -313,6 +367,10 @@ class WarmPool:
             self._await_coordinators()
             # the epoch is taken after every fallible step
             self.epoch = self.pool.take_epoch()
+            # every worker reads the budgets and the classifier from the pool, however started
+            self.pool.write_faults(
+                self.epoch, {"budgets": faults.to_json(), "classify": classify_ref}
+            )
             lease = self.pool.coordinator_lease(self.epoch)
             lease.__enter__()
             self._lease = lease
@@ -566,7 +624,9 @@ class WarmPool:
                 reports.append((job, None, Failed(UnplaceableJob(placement))))
                 continue
             j = _Job(job, handle, key, placement.queue, ladder, residency)
-            broken = self._broken.get(placement.worker_class)
+            broken = self._broken.get(placement.worker_class) or self._held.get(
+                (placement.queue, _label(residency))
+            )
             if broken is not None:
                 reports.append((job, j, NotRun(broken, held=True)))
                 continue
@@ -808,7 +868,7 @@ class WarmPool:
             batches = []
             for queue, waiting in self._waiting.items():
                 if _queue_class(queue) in self._broken:
-                    continue  # held by `_hold_broken`
+                    continue  # held by `_hold_broken`, as are jobs of a held residency
                 room = self._max_queued(queue) - self._queued(queue)
                 taken = []
                 while waiting and room > 0:
@@ -959,6 +1019,11 @@ class WarmPool:
                     if self._climb(j, verdict[1], reports):
                         self._enqueue(j)
                     continue
+                if verdict[0] == "held":
+                    # the job's residency is held on its queue for this epoch: its other jobs too
+                    self._held.setdefault(
+                        (t.queue, _label(j.residency)), verdict[1].reason
+                    )
                 self._forget(j)
                 reports.append((j.job, j, verdict[1]))
 
@@ -966,8 +1031,9 @@ class WarmPool:
         self, t: _Ticket, outcome: dict, attempt: str, j: _Job
     ) -> tuple | None:
         """What a job's outcome means, read without the lock: ``("report", outcome)``,
-        ``("climb", refused ticket)``, or None (an ``expired`` attempt waits for its taker; a
-        moved job is followed by its generation)."""
+        ``("held", outcome)`` (its residency held), ``("climb", refused ticket)``, or None (an
+        ``expired`` attempt waits for its taker; a moved job is followed by its generation).
+        """
         kind = outcome.get("outcome")
         if kind == "withdrawn":
             reason = outcome.get("reason")
@@ -982,7 +1048,7 @@ class WarmPool:
             return ("report", NotRun("cancelled", held=False))
         if kind == "held":
             why = outcome.get("reason") or (outcome.get("fault") or {}).get("message")
-            return ("report", NotRun(f"held: {why}", held=True))
+            return ("held", NotRun(f"held: {why}", held=True))
         if kind == "done":
             # a result a taker found already committed is not in this attempt's work directory
             result = self._result(j.job, attempt, settled=not outcome.get("served"))
@@ -1112,7 +1178,7 @@ class WarmPool:
             name = cls.name
             if name in self._broken:
                 continue
-            if self._failures[name] >= self.settings.start_failures:
+            if self._failures[name] >= self.faults.start_failures:
                 self._break(cls)
                 continue
             mine = [h for h in live if h.worker_class == name]
@@ -1153,15 +1219,19 @@ class WarmPool:
         self._hold_broken()
 
     def _hold_broken(self) -> None:
-        """Report every open job placed on a broken class ``NotRun(held=True)``: queued, followed,
-        or re-placed onto it since it broke."""
-        if not self._broken:
+        """Report every open job placed on a broken class, or of a residency a worker held on its
+        queue in this epoch, ``NotRun(held=True)``: queued, followed, or re-placed onto it since.
+        Jobs of other residencies on the same queue (``residency="ignore"``) are not held.
+        """
+        if not self._broken and not self._held:
             return
         with self._lock:
             held = []
             for j in list(self._open.values()):
                 queue = j.queue if j.ticket is None else j.ticket.queue
-                why = self._broken.get(_queue_class(queue))
+                why = self._broken.get(_queue_class(queue)) or self._held.get(
+                    (queue, _label(j.residency))
+                )
                 if why is None:
                     continue
                 self._unwait(j)
