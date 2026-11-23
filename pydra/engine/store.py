@@ -20,6 +20,7 @@ from pydra.utils.retry import Backoff
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
     from pydra.engine.job import Job
+    from pydra.engine.portable.identity import StoreIdentity
 
 Context = ty.Mapping[str, ty.Any]
 """The execution context that produced a result, recorded beside it (see
@@ -375,7 +376,11 @@ class ResultStore(ty.Protocol):
 
     A job is identified by its checksum and the context it runs in. Each pair has
     its own slot, so results recorded in different contexts never overwrite each other.
+    An implementation subclasses it to inherit the defaults of its optional members.
     """
+
+    identity: "StoreIdentity | None" = None
+    """The identity that supplies a job's context; None: `job_context`"""
 
     def cache_dir(self, checksum: str, context: Context) -> Path:
         """The directory the job identified by ``checksum`` runs in under ``context``."""
