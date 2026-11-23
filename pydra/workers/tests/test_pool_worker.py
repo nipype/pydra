@@ -661,6 +661,24 @@ def test_settings_mismatch_any_field_refuses(pool, field):
     assert worker.token is None and not (pool.path / "workers").exists()
 
 
+def test_a_reused_token_refuses_to_start(pool, tasks):
+    """A worker started under a token that an earlier process already made ready (a Slurm job
+    requeued after preemption runs its command again) exits `EXIT_REUSED` before it takes that
+    token's lease or claims anything: the call records stay the earlier process's, never written
+    over from sequence 1, and its jobs wait for a worker of a new token."""
+    from pydra.workers.pool.worker import EXIT_REUSED
+
+    pool.put([pool.job(tasks.Echo(x=1), "e1")])
+    first, code = _run(pool, settings=_settings(idle_polls=1))
+    assert code == 0 and pool.kinds() == ["done"]
+    calls = pool.pool.calls(first.token)
+    assert [seq for seq, _, _ in calls] == [1]
+    pool.put([pool.job(tasks.Echo(x=2), "e2")])
+    again, code = _run(pool, token=first.token, settings=_settings(idle_polls=1))
+    assert code == EXIT_REUSED == 7
+    assert pool.pool.calls(first.token) == calls and pool.kinds() == ["done"]
+
+
 def test_settings_differing_in_max_wait_accepted(pool):
     """``max_wait`` caps a waiter, not staleness: a worker differing only there starts."""
     _, code = _run(pool, settings=_settings(lease=attrs.evolve(LEASE, max_wait=3.0)))
@@ -1818,6 +1836,27 @@ def test_ready_mark_records_uuid_and_index(pool, tmp_path, monkeypatch):
     assert code == 0
     gpu = pool.pool.worker_record(worker.token, "ready.json")["hardware"]["gpus"][0]
     assert (gpu["uuid"], gpu["index"]) == ("GPU-1-aaaa", 1)
+
+
+def test_a_worker_stopped_before_it_started_exits_unclaimed(pool):
+    """A worker whose directory already holds its stop mark when it starts was stopped before it
+    started: it exits 0 without becoming ready or claiming anything."""
+    from pydra.workers.pool.storage import STOP_MARK
+    from pydra.workers.pool.worker import EXIT_OK, Worker
+
+    token = "c" * 32
+    pool.pool.write_worker_record(token, STOP_MARK, {"at": 0})
+    worker = Worker(
+        pool.path,
+        _class(),
+        settings=_settings(idle_polls=10**6, orphan_after_s=10**6),
+        substrate=True,
+        token=token,
+        device_memory=lambda: None,
+    )
+    assert worker.run() == EXIT_OK
+    assert pool.pool.worker_record(token, "ready.json") is None
+    assert worker.claims == []
 
 
 def test_the_stop_mark_watch_outlives_a_storage_error(tmp_path):
