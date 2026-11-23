@@ -225,6 +225,17 @@ def queue_of(tmp_path):
         q.close()
 
 
+def _until(predicate, bound: float = 60.0) -> bool:
+    """Wait at most ``bound`` seconds for ``predicate``; whether it held. A helper thread uses it, so
+    that no wait in these tests is unbounded."""
+    deadline = time.monotonic() + bound
+    while not predicate():
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.02)
+    return True
+
+
 def _never_resolve(monkeypatch):
     """Any resolution fails: the worker must run the references the jobs carry."""
 
@@ -464,8 +475,7 @@ def test_drain_stops_the_warm_command(tmp_path, roots_below, queue_of, monkeypat
     )
 
     def drain():
-        while not fake.execs:
-            time.sleep(0.02)
+        _until(lambda: fake.execs)  # bounded: the worker stops either way
         worker.stop.set()
         worker._wake.set()
 
@@ -612,8 +622,7 @@ def test_lost_claim_stops_the_warm_command(
     )
 
     def lose():
-        while not fake.execs:
-            time.sleep(0.02)
+        _until(lambda: fake.execs)  # bounded: the claim is lost either way
         fake.exec_delay = 0.0  # the commands after this one are quick
         for token_dir in list(worker._held):
             worker._on_lost(token_dir, "taken over")
