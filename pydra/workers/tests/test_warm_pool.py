@@ -1571,15 +1571,24 @@ def test_ticket_write_streak_ends_with_its_waiting_jobs(
         raise OSError("Stale file handle")
 
     monkeypatch.setattr(pool.pool, "put", failing)
+    import time
+    import types
+    from pydra.workers.pool import pool as pool_module
+
+    # the pool's monotonic clock, which the test moves on by an hour
+    now = [time.monotonic()]
+    clock = types.SimpleNamespace(
+        **{n: getattr(time, n) for n in dir(time) if not n.startswith("_")}
+    )
+    clock.monotonic = lambda: now[0]
+    monkeypatch.setattr(pool_module, "time", clock)
     jobs = _round(sub, tasks, [1])
     handle = Handle(pool, tuple(jobs), set(jobs))
     pool._queue_jobs(jobs, handle=handle)
     pool._write()  # failed write 1
     pool.cancel(handle)
     pool._write()  # nothing waits: the streak ends
-    import time
-
-    time.sleep(0.1)
+    now[0] += 3600
     pool._queue_jobs(_round(sub, tasks, [2]), handle=None)
     pool._write()  # failed write 1 of a fresh streak
     assert "cpu" not in pool._broken
