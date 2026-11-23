@@ -1,3 +1,4 @@
+import json
 import os
 import typing as ty
 import logging
@@ -26,9 +27,14 @@ class Docker(base.Container):
     read_only: bool = attrs.field(default=False, kw_only=True)
 
     def _warm_handle(
-        self, ref: base.ResolvedRef, roots: frozenset[Path], device: "Device | None"
+        self,
+        ref: base.ResolvedRef,
+        roots: frozenset[Path],
+        device: "Device | None",
+        writable: frozenset[Path],
+        scratch: Path | None,
     ) -> "WarmDocker":
-        return WarmDocker(self, ref, roots, device)
+        return WarmDocker(self, ref, roots, device, writable, scratch)
 
     def _ref_key(self) -> ty.Hashable:
         repository, digest = images.split_reference(self.image)
@@ -156,24 +162,49 @@ def user_flag() -> list[str]:
     return ["--user", f"{os.getuid()}:{os.getgid()}"]
 
 
+def split_entrypoint(xargs: list[str]) -> tuple[list[str], list[str] | None]:
+    """``xargs`` without an ``--entrypoint`` option, and the entrypoint it names
+    (``[]`` for an empty one), or ``None`` when it names none"""
+    rest, entrypoint, i = [], None, 0
+    while i < len(xargs):
+        arg = xargs[i]
+        if arg == "--entrypoint" and i + 1 < len(xargs):
+            entrypoint, i = xargs[i + 1], i + 2
+            continue
+        if arg.startswith("--entrypoint="):
+            entrypoint = arg.partition("=")[2]
+        else:
+            rest.append(arg)
+        i += 1
+    if entrypoint is None:
+        return rest, None
+    return rest, [entrypoint] if entrypoint else []
+
+
 class WarmDocker(base.WarmContainer):
     """One ``docker run -d`` of the resolved reference, with the roots bound and a
-    sleeper as entrypoint, then a ``docker exec`` per job (RFC 0005 section 3.1)"""
+    sleeper as entrypoint, then a ``docker exec`` per job (RFC 0005 section 3.1). Each
+    exec runs the image's entrypoint (or the one ``xargs`` names) before the
+    command, as a cold ``docker run`` does."""
 
     container_id: str | None = None
+    entrypoint: list[str] = []
 
     def _start(self) -> None:
         env: Docker = self.environment
+        xargs, override = split_entrypoint(env.xargs)
+        host, pid = base.owner()
         cmd = ["docker", "run", "-d", "--rm", "--init", "--name", self.name]
+        cmd.extend(["--label", f"{base.OWNER_LABEL}={host}:{pid}"])
         cmd.extend(user_flag())
         devices = base.visible_devices(self.device)
         if devices is not None:
             cmd.extend(["--gpus", "all" if devices == "all" else f'"device={devices}"'])
         if env.read_only:
-            cmd.extend(["--read-only", "--tmpfs", "/tmp"])
-        for host, mounted in self._binds():
-            cmd.extend(["-v", f"{host}:{mounted}:rw"])
-        cmd.extend(env.xargs)
+            cmd.append("--read-only")
+        for source, mounted, mode in self._mounts():
+            cmd.extend(["-v", f"{source}:{mounted}:{mode}"])
+        cmd.extend(xargs)
         cmd.extend(["--entrypoint", "sleep", self.ref.run, "2147483647"])
         rc, out, err = base.execute(cmd, strip=True)
         if rc or not out:
@@ -181,6 +212,29 @@ class WarmDocker(base.WarmContainer):
                 f"'docker run -d' of {self.ref.run!r} failed ({rc}): {err}{out}"
             )
         self.container_id = out.splitlines()[-1]
+        self.entrypoint = override if override is not None else self._entrypoint()
+
+    def _entrypoint(self) -> list[str]:
+        """The image's ``ENTRYPOINT``, read once the container has pulled it"""
+        rc, out, err = base.execute(
+            [
+                "docker",
+                "image",
+                "inspect",
+                "--format",
+                "{{json .Config.Entrypoint}}",
+                self.ref.run,
+            ],
+            strip=True,
+        )
+        if rc:
+            raise RuntimeError(
+                f"'docker image inspect' of {self.ref.run!r} failed ({rc}): {err}"
+            )
+        value = json.loads(out or "null")
+        if isinstance(value, str):
+            return [value]
+        return list(value or [])
 
     def _exec_command(
         self, job: "Job", env: dict[str, str], args: list[str]
@@ -188,12 +242,34 @@ class WarmDocker(base.WarmContainer):
         cmd = ["docker", "exec", "-w", self.environment.mounted(job.cache_dir)]
         for name, value in env.items():
             cmd.extend(["-e", f"{name}={value}"])
-        return cmd + [self.container_id] + args
+        return cmd + [self.container_id] + self.entrypoint + args
 
     def _stop(self) -> None:
-        if self.container_id is not None:
-            # removes the container after its processes are killed, and waits
-            base.execute(["docker", "rm", "-f", self.container_id])
+        # removes the container after its processes are killed, and waits; by name
+        # after a start that failed before its id was read
+        base.execute(["docker", "rm", "-f", self.container_id or self.name])
+
+    def _reap(self) -> None:
+        rc, out, _ = base.execute(
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                f"label={base.OWNER_LABEL}",
+                "--format",
+                f'{{{{.ID}}}}\t{{{{.Label "{base.OWNER_LABEL}"}}}}',
+            ],
+            strip=True,
+        )
+        if rc:
+            return
+        for line in out.splitlines():
+            container, _, label = line.partition("\t")
+            host, _, pid = label.rpartition(":")
+            if container and pid.isdigit() and base.owner_dead(host, int(pid)):
+                logger.info("Removing the orphaned warm container %s", container)
+                base.execute(["docker", "rm", "-f", container])
 
 
 # Alias so it can be referred to as docker.Environment

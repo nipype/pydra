@@ -52,9 +52,14 @@ class Singularity(base.Container):
     Singularity pulls (``library://``, ``shub://``, ...)."""
 
     def _warm_handle(
-        self, ref: base.ResolvedRef, roots: frozenset[Path], device: "Device | None"
+        self,
+        ref: base.ResolvedRef,
+        roots: frozenset[Path],
+        device: "Device | None",
+        writable: frozenset[Path],
+        scratch: Path | None,
     ) -> "WarmSingularity":
-        return WarmSingularity(self, ref, roots, device)
+        return WarmSingularity(self, ref, roots, device, writable, scratch)
 
     def _ref_key(self) -> ty.Hashable:
         return ("singularity", self.image, self.tag, self.identity)
@@ -160,20 +165,22 @@ class WarmSingularity(base.WarmContainer):
     ``docker://`` digest's local SIF, never the URI), with the roots bound, then an
     ``exec`` in the instance per job (RFC 0005 section 3.1). ``HOME`` and ``TMPDIR``
     are set by ``env`` in the instance, since Apptainer refuses to override ``HOME``
-    through ``--env``."""
+    through ``--env``. The instance's name carries its owner's pid and host."""
 
-    executable: str = "singularity"
     devices: str | None = None
 
-    def _start(self) -> None:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.executable = runtime()
+
+    def _start(self) -> None:
         image = local_image(self.ref)
         cmd = [self.executable, "instance", "start", "-c", "--no-home"]
         self.devices = base.visible_devices(self.device)
         if self.devices is not None:
             cmd.append("--nv")
-        for host, mounted in self._binds():
-            cmd.extend(["-B", f"{host}:{mounted}:rw"])
+        for source, mounted, mode in self._mounts():
+            cmd.extend(["-B", f"{source}:{mounted}:{mode}"])
         cmd.extend(self.environment.xargs)
         cmd.extend([image, self.name])
         rc, out, err = base.execute(cmd)
@@ -202,6 +209,25 @@ class WarmSingularity(base.WarmContainer):
 
     def _stop(self) -> None:
         base.execute([self.executable, "instance", "stop", self.name])
+
+    def _reap(self) -> None:
+        import json
+
+        rc, out, _ = base.execute([self.executable, "instance", "list", "--json"])
+        if rc:
+            return
+        try:
+            instances = json.loads(out or "{}").get("instances") or []
+        except (ValueError, AttributeError):
+            return
+        for instance in instances:
+            name = instance.get("instance", "")
+            parts = name.split("-", 4)
+            if name.startswith("pydra-warm-") and len(parts) == 5:
+                pid, host = parts[2], parts[4]
+                if pid.isdigit() and base.owner_dead(host, int(pid)):
+                    logger.info("Stopping the orphaned warm instance %s", name)
+                    base.execute([self.executable, "instance", "stop", name])
 
 
 # Alias so it can be referred to as singularity.Environment

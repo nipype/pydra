@@ -40,7 +40,12 @@ class Lmod(base.Environment):
         return ("lmod", tuple(self.modules))
 
     def _warm_handle(
-        self, ref: base.ResolvedRef, roots: frozenset[Path], device: ty.Any
+        self,
+        ref: base.ResolvedRef,
+        roots: frozenset[Path],
+        device: ty.Any,
+        writable: frozenset[Path],
+        scratch: Path | None,
     ) -> "WarmLmod":
         return WarmLmod(self, ref, frozenset(), device)
 

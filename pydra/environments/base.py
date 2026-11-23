@@ -1,5 +1,9 @@
 import typing as ty
+import atexit
 import os
+import re
+import signal
+import socket
 import json
 import hashlib
 import shutil
@@ -15,6 +19,7 @@ from fileformats.generic import FileSet
 from pydra.compose import shell
 from pydra.utils.general import get_fields, get_plugin_classes
 from pydra.utils.typing import TypeParser
+from pydra.utils.storage import WARM_PREFIX
 import pydra.environments
 
 logger = logging.getLogger("pydra")
@@ -104,6 +109,9 @@ class Environment:
         roots: ty.Sequence[Path] = (),
         device: "Device | None" = None,
         ref: ResolvedRef | None = None,
+        *,
+        writable: ty.Sequence[Path] = (),
+        scratch: Path | None = None,
     ) -> "WarmEnvironment | None":
         """A started environment that runs many jobs, or ``None`` when the environment
         is not warmable or was not declared ``warm=True``.
@@ -111,30 +119,51 @@ class Environment:
         Parameters
         ----------
         roots : sequence of Path
-            The host directories bound into the environment
+            The host directories bound into the environment, read-only
         device : Device, optional
             The device its jobs use; a ``cuda`` device adds the runtime's GPU flags
         ref : ResolvedRef, optional
             The reference the jobs carry; a worker passes it and never resolves. When
             omitted the environment resolves it here
+        writable : sequence of Path
+            The roots also bound writable (a cache, store or work root); each is also
+            in ``roots``
+        scratch : Path, optional
+            The directory under which the environment keeps its per-job ``HOME`` and
+            its ``/tmp``; it must lie inside a writable root. The system's temporary
+            directory by default
         """
         if not self.warm_requested:
             return None
+        writable = frozenset(Path(r).absolute() for r in writable)
         handle = self._warm_handle(
-            self.resolve() if ref is None else ref, frozenset(roots), device
+            self.resolve() if ref is None else ref,
+            frozenset(Path(r).absolute() for r in roots) | writable,
+            device,
+            writable,
+            scratch,
         )
         if handle is not None:
             handle.start()
         return handle
 
     def _warm_handle(
-        self, ref: ResolvedRef, roots: frozenset[Path], device: "Device | None"
+        self,
+        ref: ResolvedRef,
+        roots: frozenset[Path],
+        device: "Device | None",
+        writable: frozenset[Path],
+        scratch: Path | None,
     ) -> "WarmEnvironment | None":
         """The unstarted handle of a warmable environment, ``None`` if not warmable"""
         return None
 
     def binding_roots(self, job: "Job") -> frozenset[Path]:
         """The top-level host directories a warm environment must bind to run ``job``"""
+        return frozenset()
+
+    def writable_roots(self, job: "Job") -> frozenset[Path]:
+        """Those of `binding_roots` a cold run of ``job`` binds writable"""
         return frozenset()
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
@@ -268,9 +297,30 @@ class Container(Environment):
         mounts, _ = self.get_bindings(job=job, root=self.root)
         return frozenset(top_root(Path(host)) for host in mounts)
 
-    def mounted(self, host: Path) -> str:
-        """Where the host path ``host`` appears inside the container"""
-        return f"{self.root.rstrip('/')}{Path(host).absolute()}"
+    def writable_roots(self, job: "Job") -> frozenset[Path]:
+        """The top-level directories of the paths `get_bindings` binds writable"""
+        mounts, _ = self.get_bindings(job=job, root=self.root)
+        return frozenset(
+            top_root(Path(host)) for host, (_, mode) in mounts.items() if mode == "rw"
+        )
+
+    @property
+    def ro_root(self) -> str:
+        """Where a warm container binds its roots read-only"""
+        return f"{self.root.rstrip('/')}-ro"
+
+    def mounted(self, host: Path, mode: str = "rw") -> str:
+        """Where the host path ``host`` appears inside the container: under `root`, or
+        under `ro_root` for ``mode="ro"`` in a warm container"""
+        prefix = self.ro_root if mode == "ro" else self.root.rstrip("/")
+        return f"{prefix}{Path(host).absolute()}"
+
+    @staticmethod
+    def binding_mode(fld: ty.Any) -> str:
+        """``"rw"`` for a field whose files a job writes (copied in, or an output),
+        ``"ro"`` otherwise"""
+        copy_file = getattr(fld, "copy_mode", None) == FileSet.CopyMode.copy
+        return "rw" if copy_file or isinstance(fld, shell.outarg) else "ro"
 
     def bind(self, loc, mode="ro"):
         loc_abs = Path(loc).absolute()
@@ -306,7 +356,7 @@ class Container(Environment):
                 if not value:
                     continue
 
-                copy_file = fld.copy_mode == FileSet.CopyMode.copy
+                mode = self.binding_mode(fld)
 
                 def map_path(fileset: os.PathLike | FileSet) -> Path:
                     host_path, env_path = fileset.parent, Path(
@@ -314,10 +364,7 @@ class Container(Environment):
                     )
 
                     # Default to mounting paths as read-only, but respect existing modes
-                    bindings[host_path] = (
-                        env_path,
-                        "rw" if copy_file or isinstance(fld, shell.outarg) else "ro",
-                    )
+                    bindings[host_path] = (env_path, mode)
                     return (
                         env_path / fileset.name
                         if isinstance(fileset, os.PathLike)
@@ -430,13 +477,78 @@ def visible_devices(device: "Device | None") -> str | None:
     return "all" if device.index is None else str(device.index)
 
 
+OWNER_LABEL = "pydra.warm.owner"
+"""The label naming the ``<host>:<pid>`` that started a warm container"""
+
+
+def owner() -> tuple[str, int]:
+    """``(host, pid)`` of this process, as a warm container's owner records it; the
+    host has only letters, digits and ``-``"""
+    host = re.sub(r"[^A-Za-z0-9-]", "-", socket.gethostname()) or "host"
+    return host, os.getpid()
+
+
+def owner_dead(host: str, pid: int) -> bool:
+    """Whether the owner ``host``:``pid`` is a process of this host that has ended"""
+    if host != owner()[0]:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except (PermissionError, OSError):
+        return False
+    return False
+
+
+_OPEN: "set[WarmEnvironment]" = set()
+_OPEN_LOCK = threading.Lock()
+_HOOKED = False
+
+
+def close_open_environments() -> None:
+    """Close every warm environment this process has open, logging errors; run at exit
+    and on ``SIGTERM`` (`_hook`)"""
+    with _OPEN_LOCK:
+        handles = list(_OPEN)
+    for handle in handles:
+        try:
+            handle.close()
+        except Exception as e:  # pragma: no cover - logged
+            logger.warning("Closing the warm environment %s failed: %s", handle.key, e)
+
+
+def _on_sigterm(signum, frame) -> None:
+    close_open_environments()
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    os.kill(os.getpid(), signal.SIGTERM)
+
+
+def _hook() -> None:
+    """Close open warm environments at exit, and on ``SIGTERM`` when the process has
+    no handler of its own (a pool worker's handler closes its resident state)"""
+    global _HOOKED
+    if _HOOKED:
+        return
+    _HOOKED = True
+    atexit.register(close_open_environments)
+    if threading.current_thread() is not threading.main_thread():
+        return
+    try:
+        if signal.getsignal(signal.SIGTERM) in (signal.SIG_DFL, None):
+            signal.signal(signal.SIGTERM, _on_sigterm)
+    except (ValueError, OSError, AttributeError):
+        pass
+
+
 class WarmEnvironment:
     """One started environment that runs many jobs (RFC 0005 section 3.1).
 
     A subclass starts the environment in `_start`, runs one job in `_execute` and
     stops it in `_stop`. The environment's ``setup`` and ``teardown`` are called on
     start and close. Warmth is execution detail: a job's checksum, record and context
-    are those of a cold run, and so are its outputs.
+    are those of a cold run, and so are its outputs. Open handles are closed at exit
+    and on ``SIGTERM`` (`close_open_environments`).
 
     Attributes
     ----------
@@ -447,7 +559,9 @@ class WarmEnvironment:
     key : ResidentKey
         ``kind="environment"``, the environment's plugin name and the resolved key
     roots : frozenset[Path]
-        The binding roots it was started with
+        The binding roots it was started with, bound read-only
+    writable : frozenset[Path]
+        Those of `roots` also bound writable
     device : Device, optional
         The device it was started for
     jobs_run : int
@@ -460,51 +574,70 @@ class WarmEnvironment:
         ref: ResolvedRef,
         roots: frozenset[Path] = frozenset(),
         device: "Device | None" = None,
+        writable: frozenset[Path] = frozenset(),
+        scratch: Path | None = None,
     ):
         from pydra.engine.resident import ResidentKey
 
         self.environment = environment
         self.ref = ref
-        self.roots = frozenset(roots)
+        self.writable = frozenset(writable)
+        self.roots = frozenset(roots) | self.writable
         self.device = device
         self.key = ResidentKey("environment", environment.plugin_name(), ref.key)
         self.jobs_run = 0
         self.started = False
         self.closed = False
+        self._lock = threading.Lock()
 
     def start(self) -> None:
-        """Start the environment: `Environment.setup`, then the runtime"""
+        """Start the environment: `Environment.setup`, then the runtime. A start that
+        fails removes what it may have left running"""
         self.environment.setup()
+        with _OPEN_LOCK:
+            _OPEN.add(self)
+        _hook()
         try:
             self._start()
         except BaseException:
             self.closed = True
-            self.environment.teardown()
-            self._cleanup()
+            try:
+                self._stop()
+            except Exception as e:
+                logger.debug("Removing a failed warm start of %s: %s", self.key, e)
+            finally:
+                self._finish()
             raise
         self.started = True
 
     def covers(self, job: "Job") -> bool:
         """Whether ``job`` can run here: the same environment, keyed by the same
-        reference, with its bindings inside `roots`"""
+        reference, with its bindings inside `roots` and its writable bindings inside
+        `writable`"""
         if self.closed or not self.started or job.environment != self.environment:
             return False
         if job.resolves_reference:
             resolved = job.resolved
             if (resolved.key, resolved.run) != (self.ref.key, self.ref.run):
                 return False
-        return self.environment.binding_roots(job) <= self.roots
+        env = self.environment
+        return (
+            env.binding_roots(job) <= self.roots
+            and env.writable_roots(job) <= self.writable
+        )
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
-        """Run ``job`` as `Environment.execute` would; it must be `covers`-ed"""
-        if not self.covers(job):
-            raise ImageResolutionError(
-                f"The warm environment {self.key} cannot run the job {job.name!r}: "
-                "another environment or reference, or a binding outside "
-                f"{sorted(map(str, self.roots))}"
-            )
-        self.jobs_run += 1
-        return self._execute(job)
+        """Run ``job`` as `Environment.execute` would; it must be `covers`-ed. Jobs
+        run one at a time"""
+        with self._lock:
+            if not self.covers(job):
+                raise ImageResolutionError(
+                    f"The warm environment {self.key} cannot run the job "
+                    f"{job.name!r}: another environment or reference, or a binding "
+                    f"outside {sorted(map(str, self.roots))}"
+                )
+            self.jobs_run += 1
+            return self._execute(job)
 
     def close(self) -> None:
         """Stop the environment and wait for it, then `Environment.teardown`"""
@@ -515,10 +648,15 @@ class WarmEnvironment:
             if self.started:
                 self._stop()
         finally:
-            try:
-                self.environment.teardown()
-            finally:
-                self._cleanup()
+            self._finish()
+
+    def _finish(self) -> None:
+        with _OPEN_LOCK:
+            _OPEN.discard(self)
+        try:
+            self.environment.teardown()
+        finally:
+            self._cleanup()
 
     def __enter__(self) -> "WarmEnvironment":
         return self
@@ -540,38 +678,81 @@ class WarmEnvironment:
 
 
 class WarmContainer(WarmEnvironment):
-    """A started container. A scratch directory of its own is bound with `roots`, and
-    each job runs with ``HOME`` and ``TMPDIR`` in a directory of the scratch that is
-    removed when the job ends, so no job sees what another wrote there. Subclasses
-    give the start, exec and stop commands."""
+    """A started container. Every root is bound read-only under the environment's
+    ``ro_root``, and a writable root also writable under its ``root``, so a job's
+    inputs are read-only and its working directory and outputs writable, as a cold
+    run binds them. A scratch directory (under ``scratch``, inside a writable root)
+    holds each job's ``HOME``, removed when the job ends, and the container's
+    ``/tmp``, emptied when each job ends, so no job sees what another wrote there.
+    The container is labelled with its owner (`owner`); containers whose owner has
+    ended on this host are removed at the next start (`_reap`). Subclasses give the
+    start, exec, stop and reap commands."""
 
-    def __init__(self, environment, ref, roots=frozenset(), device=None):
-        super().__init__(environment, ref, roots, device)
-        self.scratch = Path(tempfile.mkdtemp(prefix="pydra-warm-")).absolute()
-        self.roots = self.roots | {top_root(self.scratch)}
-        self.name = f"pydra-warm-{uuid.uuid4().hex[:12]}"
+    def __init__(
+        self,
+        environment,
+        ref,
+        roots=frozenset(),
+        device=None,
+        writable=frozenset(),
+        scratch=None,
+    ):
+        super().__init__(environment, ref, roots, device, writable, scratch)
+        host, pid = owner()
+        token = uuid.uuid4().hex[:12]
+        self.name = f"pydra-warm-{pid}-{token}-{host}"
+        parent = Path(scratch if scratch is not None else tempfile.gettempdir())
+        self.scratch = parent.absolute() / f"{WARM_PREFIX}{token}"
+        self.tmp = self.scratch / "tmp"
+        root = top_root(self.scratch)
+        self.roots = self.roots | {root}
+        self.writable = self.writable | {root}
+
+    def start(self) -> None:
+        self.tmp.mkdir(parents=True, mode=0o700)
+        try:
+            self._reap()
+        except Exception as e:
+            logger.debug("Reaping orphaned warm containers failed: %s", e)
+        super().start()
 
     def _cleanup(self) -> None:
         shutil.rmtree(self.scratch, ignore_errors=True)
 
-    def _binds(self) -> list[tuple[str, str]]:
-        """``(host root, container path)`` of each root, in a stable order"""
-        return [(str(r), self.environment.mounted(r)) for r in sorted(self.roots)]
+    def _mounts(self) -> list[tuple[str, str, str]]:
+        """``(host, container path, mode)`` of each bind, in a stable order: every
+        root read-only, the writable roots writable, and the scratch ``/tmp``"""
+        env = self.environment
+        mounts = [(str(r), env.mounted(r, "ro"), "ro") for r in sorted(self.roots)]
+        mounts += [(str(r), env.mounted(r), "rw") for r in sorted(self.writable)]
+        mounts.append((str(self.tmp), "/tmp", "rw"))
+        return mounts
+
+    def _values(self, job: "Job") -> dict[str, ty.Any]:
+        """The job's inputs with its paths in the container: read-only fields under
+        ``ro_root``, writable ones (outputs, copies) under ``root``"""
+        env = self.environment
+        _, values = env.get_bindings(job=job, root=env.root)
+        _, ro_values = env.get_bindings(job=job, root=env.ro_root)
+        for fld in get_fields(job.task):
+            if fld.name in ro_values and env.binding_mode(fld) == "ro":
+                values[fld.name] = ro_values[fld.name]
+        return values
+
+    def _empty_tmp(self) -> None:
+        for entry in self.tmp.iterdir():
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry, ignore_errors=True)
+            else:
+                entry.unlink(missing_ok=True)
 
     def _execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
-        job_dir = self.scratch / uuid.uuid4().hex
-        home, tmp = job_dir / "home", job_dir / "tmp"
+        home = self.scratch / "jobs" / uuid.uuid4().hex / "home"
         home.mkdir(parents=True, mode=0o700)
-        tmp.mkdir(mode=0o700)
         try:
-            _, values = self.environment.get_bindings(
-                job=job, root=self.environment.root
-            )
+            values = self._values(job)
             job.cache_dir.mkdir(parents=True, exist_ok=True)
-            env = {
-                "HOME": self.environment.mounted(home),
-                "TMPDIR": self.environment.mounted(tmp),
-            }
+            env = {"HOME": self.environment.mounted(home), "TMPDIR": "/tmp"}
             cmd = self._exec_command(job, env, job.task._command_args(values=values))
             output = dict(
                 zip(
@@ -579,7 +760,8 @@ class WarmContainer(WarmEnvironment):
                 )
             )
         finally:
-            shutil.rmtree(job_dir, ignore_errors=True)
+            shutil.rmtree(home.parent, ignore_errors=True)
+            self._empty_tmp()
         if output["return_code"]:
             raise RuntimeError(
                 f"{self.key.name} exited with exit code {output['return_code']}:\n"
@@ -592,14 +774,18 @@ class WarmContainer(WarmEnvironment):
     ) -> list[str]:
         raise NotImplementedError
 
+    def _reap(self) -> None:
+        """Remove the warm containers whose owner has ended on this host"""
+
 
 class WarmSession:
     """One environment's warm handle in a process, with the restart rules of RFC 0005
     section 3.1: start on the first job; restart once when a job needs a binding root
-    the handle lacks, up to the environment's ``max_mount_roots``, and after
-    ``max_jobs`` jobs; otherwise, and for a job keyed by another reference, run the
-    job through the environment's cold `Environment.execute`. Correctness never
-    depends on warmth.
+    the handle lacks (or lacks writable), up to the environment's
+    ``max_mount_roots``, and after ``max_jobs`` jobs; otherwise, and for a job keyed
+    by another reference, run the job through the environment's cold
+    `Environment.execute`. The roots counted include the scratch directory's. A
+    session runs one job at a time. Correctness never depends on warmth.
 
     Parameters
     ----------
@@ -608,8 +794,13 @@ class WarmSession:
     device : Device, optional
         The device the handle starts for; the process's device by default
     roots : sequence of Path
-        Directories bound at every start besides the jobs' (a worker class's mounts,
-        the store root, the work root)
+        Directories bound read-only at every start besides the jobs' (a worker
+        class's mounts)
+    writable : sequence of Path
+        Directories bound writable at every start (the store root, the work root)
+    scratch : Path, optional
+        Where the handle keeps its scratch directory; the first job's cache root by
+        default
 
     Attributes
     ----------
@@ -624,6 +815,8 @@ class WarmSession:
         environment: Environment,
         device: "Device | None" = None,
         roots: ty.Sequence[Path] = (),
+        writable: ty.Sequence[Path] = (),
+        scratch: Path | None = None,
     ):
         if device is None:
             from pydra.engine.resident import process_device
@@ -631,11 +824,15 @@ class WarmSession:
             device = process_device()
         self.environment = environment
         self.device = device
+        self.base_writable = frozenset(top_root(Path(r)) for r in writable)
         self.base_roots = frozenset(top_root(Path(r)) for r in roots)
+        self.base_roots |= self.base_writable
+        self.scratch = scratch
         self.handle: WarmEnvironment | None = None
         self.starts = 0
         self.cold_runs = 0
         self.unwarmable = False
+        self._lock = threading.RLock()
 
     def accepts(self, job: "Job") -> bool:
         """Whether ``job``'s environment is this session's"""
@@ -643,11 +840,13 @@ class WarmSession:
 
     def execute(self, job: "Job[shell.Task]") -> dict[str, ty.Any]:
         """Run ``job`` warm when the rules allow it, otherwise cold"""
-        handle = self._handle_for(job)
-        if handle is None:
-            self.cold_runs += 1
-            return job.environment.execute(job)
-        return handle.execute(job)
+        with self._lock:
+            handle = self._handle_for(job)
+            if handle is None:
+                self.cold_runs += 1
+            else:
+                return handle.execute(job)
+        return job.environment.execute(job)
 
     def _handle_for(self, job: "Job") -> WarmEnvironment | None:
         env = self.environment
@@ -660,14 +859,22 @@ class WarmSession:
             ref.run,
         ):
             return None  # one reference per session
-        needed = env.binding_roots(job)
+        writable = env.writable_roots(job)
+        needed = env.binding_roots(job) | writable
         if handle is None:
-            roots = self.base_roots | needed
+            if self.scratch is None and isinstance(env, Container):
+                self.scratch = Path(job.cache_root).absolute()
+            roots, writable = self.base_roots | needed, self.base_writable | writable
+            if isinstance(env, Container):
+                scratch_root = top_root(
+                    Path(self.scratch or tempfile.gettempdir()).absolute()
+                )
+                roots, writable = roots | {scratch_root}, writable | {scratch_root}
         else:
             spent = env.max_jobs is not None and handle.jobs_run >= env.max_jobs
             if not spent and handle.covers(job):
                 return handle
-            roots = handle.roots | needed
+            roots, writable = handle.roots | needed, handle.writable | writable
         if len(roots) > env.max_mount_roots:
             logger.debug(
                 "%s needs %d binding roots, more than max_mount_roots=%d: runs cold",
@@ -678,7 +885,9 @@ class WarmSession:
             return None
         self.close()
         try:
-            handle = env.warm(roots, self.device, ref=ref)
+            handle = env.warm(
+                roots, self.device, ref=ref, writable=writable, scratch=self.scratch
+            )
         except Exception as e:
             logger.warning(
                 "The warm environment %s did not start, its jobs run cold: %s",
@@ -696,7 +905,8 @@ class WarmSession:
 
     def close(self) -> None:
         """Close the handle, if any"""
-        handle, self.handle = self.handle, None
+        with self._lock:
+            handle, self.handle = self.handle, None
         if handle is not None:
             handle.close()
 
