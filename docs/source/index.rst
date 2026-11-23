@@ -161,6 +161,7 @@ See the full reference documentation for Pydra
    explanation/conditional-lazy
    explanation/environments
    explanation/hashing-caching
+   explanation/stores
    explanation/typing
 
 
