@@ -2041,11 +2041,40 @@ class WarmPool:
                 why = self._held.get((queue, label))
         return why
 
+    def _prune_holds(self) -> None:
+        """Forget each residency or warm-environment hold of this epoch whose ``held-`` mark is no
+        longer on its queue: one listing per queue with a hold, per poll. A listing that fails keeps
+        the holds until the next poll."""
+        with self._lock:
+            queues = {queue for queue, _ in self._held}
+        if not queues:
+            return
+        marks: dict[str, set[str]] = {}
+        for queue in queues:
+            try:
+                marks[queue] = set(self.pool.holds(queue))
+            except Exception as err:
+                logger.debug("listing the holds of %r failed: %r", queue, err)
+        with self._lock:
+            for key in [k for k in self._held if k[0] in marks]:
+                if key[1] not in marks[key[0]]:
+                    reason = self._held.pop(key)
+                    logger.info(
+                        "the hold of %s on %r was lifted: %s",
+                        key[1],
+                        key[0],
+                        reason,
+                        extra={"event": "hold_lifted", "residency": key[1]},
+                    )
+
     def _hold_broken(self) -> None:
         """Report every open job placed on a broken class, or of a residency a worker held on its
         queue in this epoch, ``NotRun(held=True)``: queued, followed, or re-placed onto it since.
-        Jobs of other residencies on the same queue (``residency="ignore"``) are not held.
+        Jobs of other residencies on the same queue (``residency="ignore"``) are not held. A hold
+        whose mark is gone from storage (lifted by ``pydracli pool release-hold``) is forgotten first
+        (`_prune_holds`), so later jobs of it are put again.
         """
+        self._prune_holds()
         if not self._broken and not self._held:
             return
         with self._lock:

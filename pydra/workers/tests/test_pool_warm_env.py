@@ -8,7 +8,7 @@ the worker exits. The worker runs the reference each job carries and never resol
 recorded in the job's pool facts only: the checksum, the slotted context and the stored result are
 those of a cold run.
 
-The runtimes are the fakes of ``test_warm_environments`` (they run each command on the host, mapping
+The runtimes are the fakes of ``warm_fakes`` (they run each command on the host, mapping
 the container paths back); the worker runs in this process, as in ``test_pool_context``. The O5 cases
 (``singularity``, ``lmod``) need a real Apptainer or Lmod and run on a cluster node.
 """
@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+import typing as ty
 from pathlib import Path
 
 import pytest
@@ -768,6 +769,103 @@ def test_plain_python_ticket_runs_beside_a_held_environment(
     assert _outcome(q, dp)["outcome"] == "done"
     assert p.checksum in [c["checksum"] for c in COMMITS]
     assert list(q.pool.holds("cpu")) == [_env_label(a)]
+
+
+def test_coordinator_follows_the_outcomes_hold_label(
+    tmp_path, roots_below, monkeypatch
+):
+    """A `WarmPool` whose worker holds a broken image: the coordinator reads the held outcome's
+    ``hold`` label, so a later job of that image is reported held at submission while a plain job and
+    a job of another image are put and run. After ``release-hold`` the coordinator forgets the hold
+    at its next poll, and the image's next job runs."""
+    from pydra.environments import native
+    from pydra.engine.runner import NotRun
+    from pydra.workers.pool.pool import WarmPool, release_hold
+    from pydra.workers.pool.substrate import ExternalSubstrate
+    from pydra.workers.pool.worker import Worker
+
+    broken = IMAGE
+    fine = f"org/tool@sha256:{'2' * 64}"
+    fake = FakeRuntime(monkeypatch, tmp_path)
+    start = fake._start
+    starts_fail = [True]
+
+    def flaky(cmd, flag):
+        fake.fail_start = starts_fail[0] and broken in cmd
+        try:
+            return start(cmd, flag)
+        finally:
+            fake.fail_start = False
+
+    monkeypatch.setattr(fake, "_start", flaky)
+    store = _store(tmp_path)
+    pool = WarmPool(
+        tmp_path / "pool",
+        [_class()],
+        ExternalSubstrate(),
+        store=store,
+        settings=_settings(),
+    )
+    reported: dict[str, ty.Any] = {}
+    pool.bind(lambda job, outcome: reported.__setitem__(job.name, outcome))
+    sub = Submitter(store=store, worker="debug", telemetry=False)
+    n = [0]
+
+    def jobs(*kinds):
+        made = []
+        for kind in kinds:
+            n[0] += 1
+            name = f"{kind}{n[0]}"
+            if kind == "plain":
+                task, env = Inc(x=n[0]), native.Native()
+            else:
+                src = _input(tmp_path / "inputs" / f"{name}.txt", f"{name}\n")
+                image = broken if kind == "broken" else fine
+                task, env = Cp(in_file=src), docker.Docker(image=image, warm=True)
+            made.append(Job(task=task, submitter=sub, name=name, environment=env))
+        return made
+
+    def work_until(names):
+        deadline = time.monotonic() + 60
+        while not set(names) <= set(reported):
+            missing = set(names) - set(reported)
+            assert time.monotonic() < deadline, f"no outcome for {missing}"
+            Worker(
+                pool.pool.path,
+                _class(),
+                settings=_settings(),
+                faults=_budget(),
+                device_memory=lambda: None,
+            ).run()
+
+    def held(name):
+        return isinstance(reported[name], NotRun) and reported[name].held
+
+    try:
+        first = jobs("broken", "plain", "fine")
+        pool.submit(first)
+        work_until([j.name for j in first])
+        assert held("broken1") and not held("plain2") and not held("fine3")
+
+        later = jobs("broken", "plain", "fine")
+        pool.submit(later)
+        assert held("broken4")  # at submission: the image is held in this epoch
+        work_until(["plain5", "fine6"])
+        assert not held("plain5") and not held("fine6")
+
+        starts_fail[0] = False
+        assert release_hold(pool.pool.path, "cpu", _env_label(first[0])) == 1
+        deadline = time.monotonic() + 30
+        while pool._held:  # forgotten at the coordinator's next poll
+            assert time.monotonic() < deadline, "the coordinator kept a lifted hold"
+            time.sleep(0.05)
+        (again,) = jobs("broken")
+        pool.submit([again])
+        work_until([again.name])
+        assert not held(again.name)
+    finally:
+        pool.close()
+        sub.close()
 
 
 def test_coordinator_holds_only_that_environments_jobs(
