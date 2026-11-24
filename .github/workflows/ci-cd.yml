@@ -581,7 +581,7 @@ jobs:
   deploy:
     needs: gate
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: ${{ !cancelled() && needs.gate.result == 'success' && github.event_name == 'release' }}
     permissions:
       attestations: write
       id-token: write
@@ -597,7 +597,7 @@ jobs:
   deploy-docs:
     needs: gate
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: ${{ !cancelled() && needs.gate.result == 'success' && github.event_name == 'release' }}
     steps:
     - name: Download docs
       uses: actions/download-artifact@v8
