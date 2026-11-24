@@ -1080,3 +1080,27 @@ behaviours named.
 - Should `select` live in pydra or in a downstream package? (`workflow.loop` needs the runner, so it lives in pydra.)
 - Should the deprecated `Submitter` methods be kept for one alpha, or removed in R2, given the 1.0
   alpha status?
+
+
+## Amendment (2026-11-24): absent modes and the loop's per-call bound
+
+**Section 2.3, absent modes (owner decision D2).** An input field's ``absent=`` is one of:
+
+- ``"propagate"`` (the default, for a single and a combined read alike): the element completes
+  absent; the function is not called.
+- ``"accept"`` (opt-in): the value is passed as resolved, ``Absent`` included.
+- ``"drop"``: a combined value is passed without its absent elements.
+- ``"fill"`` with ``fill=<value>``: each ``Absent`` is replaced with the value, and its
+  ``(field, element, cause)`` triple always enters the job's absence suffix, so a filled run is
+  keyed apart from a run that read the same value for real.
+
+An ``Absent`` left inside the value of a field that does not declare ``accept`` (for example a
+single read of a list that holds one) is a resolution error of that element,
+``AbsentNotAccepted``; it never reaches the function. This replaces the earlier default under
+which a combined read accepted ``Absent``.
+
+**Section 2.3(d), ``max_advances``.** ``GraphRunner(max_advances=)`` (default
+``pydra.engine.loop.MAX_ADVANCES`` = 64) bounds the rounds each loop adds during one ``ready``
+call. 64 keeps a store replay of a loop to a few driver round trips while every call still hands
+control back to the driver within a bounded amount of work; a site with very cheap rounds may raise
+it, one whose driver must stay responsive may lower it.
