@@ -1122,3 +1122,22 @@ migrates before them migrates into a root that the next release cannot open (§4
   `PickleStore` kept for one release behind `store="pickle"`?
 - Should `LeaseSettings(holder="anonymous")` become the default for every lease on shared storage,
   including `PickleStore`'s?
+
+
+## Amendment (2026-11-24): lease settings and the visibility timeout (section 5.3)
+
+The derivations below moved here from the ``LeaseSettings`` docstring.
+
+| Setting | Default | Derivation |
+|---|---|---|
+| ``attribute_delay`` | 60 s | The NFS default ``acdirmax``: a client may see a directory's mtime this late. Use 0 for a cache on local disk. |
+| ``stale_after`` | 300 s | With ``renew_fraction`` 0.1 a holder beats every 30 s; ``(1 + missed_beats) * 30 + 60 = 120 < 300`` leaves 180 s for a slow storage server or a clock step. A crashed holder is taken over 5 to 6 minutes after its last beat, at one ``mkdir`` and one ``rmdir`` per running job every 30 s. |
+| ``timeout`` | 600 s | At least ``stale_after + attribute_delay = 360`` (a dead holder is always taken over before a waiter gives up), with room for the poll interval. |
+| ``poll_min``, ``poll_max`` | 0.05 s, 2 s | The first retry of a held lease is quick (a holder that just released); later ones back off to one listing per two seconds per waiter. |
+| ``missed_beats`` | 1 | A live holder may miss one beat (a slow or hung write) without being taken over; it enters the live-holder inequality. |
+| ``release_patience`` | 5 s | A release retries a refused rename for at most ``min(release_patience, missed_beats * renew_interval)``, within which no waiter sees the stopped holder stale. |
+| ``visibility_timeout`` (derived) | ``attribute_delay + poll_max`` = 62 s | A settled reader waits this long for another client's ``_committed.json`` or result before it reports a failure, so it never gives up sooner than the lease assumes a change can take to show. ``PortableStore.visibility_timeout`` and ``WorkerExecutor``'s default follow it. |
+
+A regular file at a lease path is a lock left by a pydra that used ``filelock.SoftFileLock``. It is
+never renewed, so it is taken over once older than ``stale_after`` even if the old process still
+runs: do not run an older pydra and this one on the same cache at the same time.
