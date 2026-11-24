@@ -5,8 +5,8 @@
     <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
         <link rel="prefetch" href="../../../_static/pydra_logo.png" as="image">
 
-    <link rel="shortcut icon" href="../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
-        <title>pydra.engine.submitter - Pydra v1.0a12</title>
+    <link rel="shortcut icon" href="../../../_static/pydra_logo.png"><!-- Generated with Sphinx 9.2.0 and Furo 2025.12.19 -->
+        <title>pydra.engine.submitter - Pydra v1.0a13</title>
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=beddf052" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
@@ -168,7 +168,7 @@
       </label>
     </div>
     <div class="header-center">
-      <a href="../../../index.html"><div class="brand">Pydra v1.0a12</div></a>
+      <a href="../../../index.html"><div class="brand">Pydra v1.0a13</div></a>
     </div>
     <div class="header-right">
       <div class="theme-toggle-container theme-toggle-header">
@@ -192,7 +192,7 @@
     <img class="sidebar-logo" src="../../../_static/pydra_logo.png" alt="Logo"/>
   </div>
   
-  <span class="sidebar-brand-text">Pydra v1.0a12</span>
+  <span class="sidebar-brand-text">Pydra v1.0a13</span>
   
 </a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
   <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
@@ -1145,12 +1145,16 @@
         <span class="c1"># predecessor nodes can't be used until the State class can be partially</span>
         <span class="c1"># initialised with lazy-fields.</span>
         <span class="k">if</span> <span class="kc">True</span><span class="p">:</span>  <span class="c1"># self.node.splitter:</span>
+            <span class="c1"># ``done`` refreshes each predecessor's status, so it is read before</span>
+            <span class="c1"># ``errored`` so that a predecessor that has just failed is not seen as</span>
+            <span class="c1"># done-and-successful, which would try to resolve its missing outputs</span>
+            <span class="n">preds_done</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">done</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">predecessors</span><span class="p">]</span>
             <span class="k">if</span> <span class="n">unrunnable</span> <span class="o">:=</span> <span class="p">[</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">predecessors</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">errored</span> <span class="ow">or</span> <span class="n">p</span><span class="o">.</span><span class="n">unrunnable</span><span class="p">]:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">unrunnable</span> <span class="o">=</span> <span class="p">{</span><span class="kc">None</span><span class="p">:</span> <span class="n">unrunnable</span><span class="p">}</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">blocked</span> <span class="o">=</span> <span class="p">{}</span>
                 <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">done</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">done</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">predecessors</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">all</span><span class="p">(</span><span class="n">preds_done</span><span class="p">):</span>
                     <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">started</span><span class="p">:</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
                     <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">node</span><span class="o">.</span><span class="n">state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1304,7 +1308,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=fb4a28c0"></script>
+</div><script src="../../../_static/documentation_options.js?v=6408bc5a"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
