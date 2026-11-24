@@ -1004,3 +1004,16 @@ Revision 2 answers the review of #932 at `6a4d8f84`. Blocking and important find
 Nits are not addressed in this revision, except two citations corrected while re-checking lines:
 the `executable` field is built at `compose/shell/builder.py:212-219`, and `compose/workflow.py:141-153`
 is cited as the documentation of the constructor's `code_hash`.
+
+
+## Amendment (2026-11-24): classes made by a factory (section 4.2, gap 1; owner decision D1)
+
+``class@1`` also hashes the values of a class's plain attributes whose class-body assignment is
+not a literal: an assignment ``offset = n`` inside ``def make(n): class Made: ...`` puts the same
+code in every class ``make`` returns, so the code alone cannot tell ``make(1)`` from ``make(2)``.
+A plain attribute is one that is not dunder, not callable and not a descriptor (``staticmethod``,
+``classmethod``, ``property``). Each such attribute enters the digest as ``attr:<name>=`` and the
+digest of its value, in name order. A class whose class-body assignments are all literals keeps its
+digest. The names are found from the class's source; a class hashed in one process carries them
+(``__pydra_computed_attributes__``), so a copy unpickled by value where the source cannot be read
+hashes the same attributes.
