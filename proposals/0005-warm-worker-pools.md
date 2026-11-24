@@ -1583,3 +1583,43 @@ Answers the architecture review of revision 1 (`ef0c27d9`).
 ### Revision 1
 
 Initial draft (`ef0c27d9`). No review findings.
+
+
+## Amendment (2026-11-24): settings, preemption, batched keys and batch by probe
+
+**Section 5.3, settings.** Every number a pool reads is a field of `PoolSettings` (or of the
+`LeaseSettings` it holds, RFC 0003 section 5.3), with these defaults:
+
+| Setting | Default | Derivation |
+|---|---|---|
+| ``poll_s`` | 5 s | A claim waits at most one poll; one listing per poll per worker keeps the storage load flat in the number of idle workers. |
+| ``idle_polls`` | 12 | A worker with nothing to claim for a minute exits. |
+| ``orphan_after_s`` | 600 s | The lease ``timeout``: a coordinator unseen that long is not coming back. |
+| ``timeout_grace`` | 60 s | Time a worker has to stop an expired call before its beater kills it. |
+| ``drain_s`` | 20 s | The drain on SIGTERM; with procgroup's ``TERM_TIMEOUT`` and ``KILL_TIMEOUT`` (10 s each) a stop stays within Slurm's default KillWait of 30 s. |
+| ``preemption_budget`` | 3 | See below. |
+| ``max_warm_sessions`` | 4 | An idle container holds no device memory and little host memory: the bound is on processes, mounts and scratch directories (not measured). |
+| ``SEGMENT_ITEMS`` | 1000 | A listing of one segment stays a few tens of kilobytes, so per-claim work does not grow with the queue. |
+| probe ``limit`` | ``attribute_delay + 1`` s | One second for the watching process to start. |
+
+`MeasuredFit` has no ``headroom`` default: the fraction of a grant a residency may use is a site's
+choice. The storage probe's measured delay counts only the watcher's looks that missed a change
+after it was made (`visibility_delay`), so a descheduled watcher is not read as late storage.
+
+**Preemption (owner decision D4).** A call its worker's drain cuts short (SIGTERM from a
+scheduler's preemption or requeue, or a pool's stop) is marked drained. The worker that takes the
+ticket over places the job again under a fresh ``takeover`` attempt, uncharged, while the job's
+drained attempts (``charges()["preemptions"]``) are at most ``preemption_budget``; past it the cut
+is charged as a crash. Three preemptions are routine on a preemptible partition; more suggest that
+the job itself outlives its allocations.
+
+**W10, batched keys (owner decision D3).** When ``batched=`` is declared, the batched callable's
+code joins the task's key (identity record ``task.batched``), so an edit of it invalidates stored
+results as an edit of the function does. ``units=`` and ``batch=`` stay out of the key.
+
+**W10, batch by probe.** `MeasuredFit.batch` picks the batch within the memory bound by probing:
+one job per call while nothing is measured, then twice the largest size measured while that size
+is the fastest per job, then the fastest size measured (`probe_batch`). A declared capability
+overrides the probe, still capped by the memory bound: the task's ``batch=``, else the site's
+``MeasuredFit(batch=)``. ``Placement.batch``, which ``plan()`` reports, is the batch that will run;
+``memory_bound`` is kept beside it.
