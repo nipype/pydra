@@ -579,7 +579,15 @@ jobs:
   deploy:
     needs: [build, build-docs, test, test-singularity, test-slurm, test-lmod]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: >-
+      always() &&
+      github.event_name == 'release' &&
+      needs.build.result == 'success' &&
+      needs.build-docs.result == 'success' &&
+      needs.test.result == 'success' &&
+      needs.test-singularity.result == 'success' &&
+      needs.test-slurm.result == 'success' &&
+      needs.test-lmod.result == 'success'
     permissions:
       attestations: write
       id-token: write
@@ -595,7 +603,11 @@ jobs:
   deploy-docs:
     needs: [build-docs, deploy]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: >-
+      always() &&
+      github.event_name == 'release' &&
+      needs.build-docs.result == 'success' &&
+      needs.deploy.result == 'success'
     steps:
     - name: Download docs
       uses: actions/download-artifact@v8
@@ -607,3 +619,23 @@ jobs:
       with:
         deploy_key: ${{ secrets.GHPAGES_DEPLOY_KEY }}
         publish_dir: docs-build
+
+  release-gate:
+    name: Release deployment gate
+    needs: [deploy, deploy-docs]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'release'
+    steps:
+    - name: Check deployment results
+      env:
+        PACKAGE_DEPLOY: ${{ needs.deploy.result }}
+        DOCS_DEPLOY: ${{ needs.deploy-docs.result }}
+      run: |
+        [ "$PACKAGE_DEPLOY" = success ] || {
+          echo "Package deployment finished with: $PACKAGE_DEPLOY"
+          exit 1
+        }
+        [ "$DOCS_DEPLOY" = success ] || {
+          echo "Documentation deployment finished with: $DOCS_DEPLOY"
+          exit 1
+        }
