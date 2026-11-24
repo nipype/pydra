@@ -577,7 +577,7 @@ jobs:
         path: docs/build/html
 
   deploy:
-    needs: [build, build-docs, test, test-singularity, test-slurm, test-lmod]
+    needs: gate
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     permissions:
@@ -593,7 +593,7 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
 
   deploy-docs:
-    needs: [build-docs, deploy]
+    needs: gate
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     steps:
