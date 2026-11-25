@@ -18,7 +18,7 @@ from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
 from pydra.engine.absent import absence_suffix, absence_triples
-from pydra.engine.context import job_context
+from pydra.engine.context import _nonce, job_context
 from pydra.engine.lease import LeaseLost, LeaseTimeout
 from pydra.engine.store import (
     check_declared_code,
@@ -364,6 +364,10 @@ class Job(ty.Generic[TaskType]):
                 self._context = job_context(self.task, self.environment)
             else:
                 self._context = identity.context(self, "lookup")
+            tool_version = self.record.get("job", {}).get("tool_version")
+            if isinstance(tool_version, dict):
+                # a tool not found here: the result is used by this process only
+                self._context = {**self._context, "unknown": _nonce()}
             self._stored_contexts = check_declared_code(
                 self.store, self.checksum, self._context, self.task
             )

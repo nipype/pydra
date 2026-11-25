@@ -1290,6 +1290,49 @@ def test_type_forms_are_dispatched_to_bytes_repr_type(tp):
     assert hash_module.bytes_repr.dispatch(type(tp)) is hash_module.bytes_repr_type
 
 
+# ---------------------------------------------------------------------------
+# the hash cache memoises by id() and keeps what it memoises alive
+# ---------------------------------------------------------------------------
+
+
+def _versioned_task_classes(n):
+    import types
+
+    module = types.ModuleType("pydra_cache_alive_probe")
+    sys.modules[module.__name__] = module
+    exec(
+        "\n".join(f"def f{i}(a: int) -> int:\n    return a + {i}\n" for i in range(n)),
+        module.__dict__,
+    )
+    classes = []
+    for i in range(n):
+        function = getattr(module, f"f{i}")
+        function.__module__ = module.__name__
+        classes.append(python.define(function, version="1"))
+    return classes
+
+
+def _consume_list(x: list) -> int:
+    return len(x)
+
+
+def test_list_of_task_values_has_one_checksum():
+    classes = _versioned_task_classes(40)
+    consumer = python.define(_consume_list)
+    checksums = {consumer(x=[cls(a=1) for cls in classes])._checksum for _ in range(20)}
+    assert len(checksums) == 1
+
+
+def test_one_cache_gives_every_versioned_task_class_its_digest():
+    from pydra.utils.hash import Cache
+
+    classes = _versioned_task_classes(40)
+    cache = Cache()
+    shared = [type_digest(cls, cache) for cls in classes]
+    assert len(set(shared)) == 40
+    assert shared == [type_digest(cls) for cls in classes]
+
+
 # -- classes made by a factory -----------------------------------------------------------------------
 
 
@@ -1456,46 +1499,3 @@ def make_twice(value, first):
 
 def test_definitions_of_one_name_with_different_attributes_differ():
     assert class_digest(make_twice(1, True)) != class_digest(make_twice(1, False))
-
-
-# ---------------------------------------------------------------------------
-# the hash cache memoises by id() and keeps what it memoises alive
-# ---------------------------------------------------------------------------
-
-
-def _versioned_task_classes(n):
-    import types
-
-    module = types.ModuleType("pydra_cache_alive_probe")
-    sys.modules[module.__name__] = module
-    exec(
-        "\n".join(f"def f{i}(a: int) -> int:\n    return a + {i}\n" for i in range(n)),
-        module.__dict__,
-    )
-    classes = []
-    for i in range(n):
-        function = getattr(module, f"f{i}")
-        function.__module__ = module.__name__
-        classes.append(python.define(function, version="1"))
-    return classes
-
-
-def _consume_list(x: list) -> int:
-    return len(x)
-
-
-def test_list_of_task_values_has_one_checksum():
-    classes = _versioned_task_classes(40)
-    consumer = python.define(_consume_list)
-    checksums = {consumer(x=[cls(a=1) for cls in classes])._checksum for _ in range(20)}
-    assert len(checksums) == 1
-
-
-def test_one_cache_gives_every_versioned_task_class_its_digest():
-    from pydra.utils.hash import Cache
-
-    classes = _versioned_task_classes(40)
-    cache = Cache()
-    shared = [type_digest(cls, cache) for cls in classes]
-    assert len(set(shared)) == 40
-    assert shared == [type_digest(cls) for cls in classes]

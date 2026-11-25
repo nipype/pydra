@@ -242,6 +242,12 @@ class ShellTask(base.Task[ShellOutputsType]):
 
     _executor_name = "executable"
 
+    # The command that reports the tool's version and the pattern that picks it out of
+    # its stdout (see ``shell.define``), unannotated because `get_type_hints` runs on
+    # task classes
+    _version_command = None
+    _version_pattern = None
+
     BASE_ATTRS = ("append_args",)
 
     EXECUTABLE_HELP = (

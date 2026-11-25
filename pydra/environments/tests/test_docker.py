@@ -120,9 +120,15 @@ def test_docker_st_1(run_function, worker, tmp_path):
         environment=docker.Environment(image="busybox"),
         store="pickle",
     )
-    # the working directory in the container is the job's slot, below its checksum
+    # the working directory in the container is the job's slot, below the checksum of
+    # the job, which includes its environment
+    element = Job(
+        name="docky",
+        task=attrs.evolve(docky, executable=cmd[0]),
+        submitter=Submitter(environment=docker.Environment(image="busybox")),
+    )
     assert PurePosixPath(outputs.stdout[0].strip()).parent == PurePosixPath(
-        f"/mnt/pydra{tmp_path}/{attrs.evolve(docky, executable=cmd[0])._checksum}"
+        f"/mnt/pydra{tmp_path}/{element.checksum}"
     )
     assert outputs.stdout[1] == "root\n"
     assert outputs.return_code[0] == outputs.return_code[1] == 0

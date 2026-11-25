@@ -34,6 +34,7 @@ from pydra.utils.typing import (
 )
 from . import field
 from .task import Task, Outputs
+from .version import check_arguments as check_version_arguments
 
 
 @dataclass_transform(
@@ -59,6 +60,9 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    version: str | None = None,
+    version_command: list[str] | None = None,
+    version_pattern: str | None = None,
     resources: "ComputeResources | None" = None,
     checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
@@ -111,6 +115,17 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
+    version: str, optional
+        The declared version of the tool, part of the task's identity. Changing it
+        gives the task another checksum
+    version_command: list[str], optional
+        A command that reports the tool's version, e.g. ``["ffmpeg", "-version"]``,
+        instead of a declared ``version``. It is run natively only, once per process,
+        by the submitting process and again by a worker, which fails the job if the
+        version differs. Needs ``version_pattern``
+    version_pattern: str, optional
+        A regular expression with a capture group; the first group of its first match
+        in the stdout of ``version_command`` is the tool's version
     resources: ComputeResources, optional
         What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
     checksum: callable, optional
@@ -124,6 +139,8 @@ def define(
     Task
         The interface for the shell command
     """
+
+    check_version_arguments(version, version_command, version_pattern)
 
     def make(
         wrapped: ty.Callable | type | None = None,
@@ -247,6 +264,11 @@ def define(
             resources=resources,
             checksum=checksum,
         )
+        if version is not None:
+            defn._version = version
+        if version_command is not None:
+            defn._version_command = list(version_command)
+            defn._version_pattern = version_pattern
         return defn
 
     # If a name is provided (and hence not being used as a decorator), check to see if

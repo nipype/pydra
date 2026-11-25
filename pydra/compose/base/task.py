@@ -512,9 +512,15 @@ class Task(ty.Generic[OutputsType]):
         able to read. Only the fields that hold files are hashed again (see
         `pydra.utils.identity.field_digests`): their content can change between the
         submission and the run."""
+        from pydra.utils.identity import TEMPLATE_PREFIX
+
         if self._hashes:
             self._carried = {
-                name: (None if name == "Outputs" else getattr(self, name, None), digest)
+                name: (
+                    (None, digest)
+                    if name == "Outputs" or name.startswith(TEMPLATE_PREFIX)
+                    else (getattr(self, name, None), digest)
+                )
                 for name, digest in self._hashes.items()
             }
 
@@ -546,7 +552,7 @@ class Task(ty.Generic[OutputsType]):
         if name == self._executor_name:
             if isinstance(value, types.FunctionType):
                 return TaskFunction(value, version=self._version)
-            if self._version is not None:
+            if self._version is not None and self._task_type() != "shell":
                 return (
                     f"version:{value.__module__}.{value.__qualname__}=={self._version}"
                 )
@@ -738,10 +744,14 @@ def bytes_repr_task(obj: Task, cache: Cache) -> ty.Iterator[bytes]:
         keys = obj._element_checksums() if obj._splitter else [obj._checksum]
         yield f"__checksum__={keys},".encode()
     else:
-        for field in get_fields(obj):
-            yield f"{field.name}=".encode()
-            yield hash_single(obj._hashed_value(field.name), cache)
-            yield b","
+        # the task's own checksum: its record without the job's fields, so the command
+        # template and a declared version are in it (RFC 0004 section 3.1)
+        checksum = obj._checksum
+        cache.modules |= obj._code_modules or set()
+        cache.refs |= set(obj._code_refs or ())
+        for name, digests in (obj._declared_code or {}).items():
+            cache.declared.setdefault(name, set()).update(digests.split(","))
+        yield f"_checksum={checksum},".encode()
     yield b"_splitter="
     yield hash_single(obj._splitter, cache)
     yield b",_combiner="
