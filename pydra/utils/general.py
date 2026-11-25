@@ -4,6 +4,8 @@ from pathlib import Path
 import contextlib
 import inspect
 import os
+import threading
+import collections
 import uuid
 import sys
 import typing as ty
@@ -788,3 +790,65 @@ def _make_attrs_class(field_types: dict[str, type]) -> type:
             {n: attrs.field(type=t) for n, t in field_types.items()},
         )
     )
+
+
+_held_dirs: "collections.Counter[str]" = collections.Counter()
+_held_lock = threading.Lock()
+
+
+def hold_dir(path: os.PathLike) -> None:
+    """Record that a running job will change the process working directory back to ``path``
+    (jobs on threads share the one working directory, so one may have captured another
+    job's directory), so that nothing removes it meanwhile (see `dir_held`)."""
+    with _held_lock:
+        _held_dirs[os.path.realpath(path)] += 1
+
+
+def release_dir(path: os.PathLike) -> None:
+    """Undo one `hold_dir` of ``path``."""
+    real = os.path.realpath(path)
+    with _held_lock:
+        _held_dirs[real] -= 1
+        if _held_dirs[real] <= 0:
+            del _held_dirs[real]
+
+
+def capture_cwd() -> str:
+    """The process working directory, held (`hold_dir`) in the same step, so that no
+    `remove_if_unheld` can remove it between the read and the hold."""
+    with _held_lock:
+        cwd = os.getcwd()
+        _held_dirs[os.path.realpath(cwd)] += 1
+    return cwd
+
+
+def _held(real: str) -> bool:
+    try:
+        held = [os.path.realpath(os.getcwd())]
+    except OSError:
+        return True
+    held += list(_held_dirs)
+    return any(h == real or h.startswith(real + os.sep) for h in held)
+
+
+def dir_held(path: os.PathLike) -> bool:
+    """Whether ``path``, or a directory below it, is the process working directory (or the
+    working directory cannot be read) or one a running job will return to."""
+    real = os.path.realpath(path)
+    with _held_lock:
+        return _held(real)
+
+
+def remove_if_unheld(path: os.PathLike) -> bool:
+    """Remove the empty directory ``path`` unless it is held (`dir_held`), checking and
+    removing in one step under the lock that `capture_cwd` takes. Whether it was removed;
+    one that is not empty or cannot be removed stays."""
+    real = os.path.realpath(path)
+    with _held_lock:
+        if _held(real):
+            return False
+        try:
+            os.rmdir(path)
+        except OSError:
+            return False
+    return True
