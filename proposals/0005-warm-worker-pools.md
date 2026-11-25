@@ -560,11 +560,13 @@ class Substrate(Protocol):
   not given), at most `workers_per_device` per device, so a host with four GPUs runs four one-GPU
   workers or two two-GPU workers. senselab's `Local` (`ex/substrates.py:357-420`), with co-tenancy
   added.
-- **`SlurmSubstrate(...)`** submits **one `sbatch` per worker**, never per job: `--gres=gpu:<type>:<n>`,
-  `--cpus-per-task`, `--mem`, `--time` and the class's `substrate_args`, with `--wrap` running the worker
-  command for that class, a job name scoped to the pool, its coordinator epoch and a token, and logs
-  under the pool's private directory. It never passes `--qos`, and a class whose `substrate_args`
-  name it, or an option the substrate sets itself, cannot start. A submission that times out is followed by a lookup of its name;
+- **`SlurmSubstrate(...)`** submits **one `sbatch` per group of up to `workers_per_device` workers**,
+  never per job: `--gres=gpu:<type>:<n>` once, `--cpus-per-task` and `--mem` per worker, `--time` and the
+  class's `substrate_args`, with `--wrap` running each worker command of the group side by side, a job
+  name scoped to the pool, its coordinator epoch and the first worker's token (with `x<n>` for `n`
+  workers), and logs under the pool's private directory. It passes `--qos` only when a class's
+  `substrate_args` give it, and never sets one itself; a class whose `substrate_args` name an option the
+  substrate sets itself cannot start. A submission that times out is followed by a lookup of its name;
   when the name is found, it is not submitted again, and when it is not, it is submitted once more only
   after `attribute_delay`. senselab's version resubmits after a failed lookup and records the duplicate
   worker as an open defect (R-286, `ex/substrates.py:603-641`); this rule narrows it. It does not close
@@ -1467,7 +1469,7 @@ and jobs dropped by a raising ticket write would have hung for ever.
 
 | Item | Change |
 |---|---|
-| `--qos` and owned options | §3.2, §4.5: `SlurmSubstrate` never passes `--qos`; `qos` leaves the `substrate_args` examples. A class whose `substrate_args` set `qos` or an option the substrate derives or sets (`gres`, `gpus`, `gpus-per-node`, `gpus-per-task`, `gpus-per-socket`, `tres-per-task`, `cpus-per-task`, `cpus-per-gpu`, `mem`, `mem-per-cpu`, `mem-per-gpu`, `time`, `job-name`, `comment`, `output`, `error`, `wrap`, `parsable`, `array`, `clusters`, or their one-letter forms) cannot start: `can_start` names the key, so placement skips the class, and `start` raises. |
+| `--qos` and owned options | §3.2, §4.5: `SlurmSubstrate` passes `--qos` only as a class's `substrate_args` give it and never sets one itself. A class whose `substrate_args` set an option the substrate derives or sets (`gres`, `gpus`, `gpus-per-node`, `gpus-per-task`, `gpus-per-socket`, `tres-per-task`, `cpus-per-task`, `cpus-per-gpu`, `mem`, `mem-per-cpu`, `mem-per-gpu`, `time`, `job-name`, `comment`, `output`, `error`, `wrap`, `parsable`, `array`, `clusters`, or their one-letter forms) cannot start: `can_start` names the key, so placement skips the class, and `start` raises. |
 | Resubmission after a timeout | §4.5: the name of a timed-out `sbatch` is looked up at once and again after `attribute_delay`; only when both find nothing is the worker submitted once more, under a new token, so a first submission that lands later is a distinct job of the epoch (listed by `live`, stopped as a surplus) and never a second worker on one token's directory. A lookup that fails leaves the outcome unknown and raises; a second timeout raises. `attribute_delay` and the listing's age default to the pool's `LeaseSettings.attribute_delay` and `poll_s`. |
 | Failed submissions and listings | §4.5 "Failed starts": a `start` that raises (a refused or failed `sbatch`) is a failed start of its class, with the error as the latest cause, so it backs off and breaks the class like a worker that never marks ready. A `live()` that raises skips that poll's scaling instead of counting every started worker gone; after `FaultBudgets.listing_failures` (default 7, pydra's choice) such polls in a row, each class with work is broken and its jobs are `NotRun(held=True)` naming the error; a good listing resets the count. A `can_start` whose listing fails answers `True`, so a transient failure never makes a job unplaceable or moves it to another class (scaling does not start workers on a failed listing). `close` with the listing down stops the workers the coordinator started. |
 | The shared listing | §4.5: one process-wide `squeue -h --user=<uid> -r -o "%i|%T|%j|%k"` (id, state, name, comment) per poll cycle serves `SlurmWorker`'s poller and every `SlurmSubstrate`; a reader takes a listing younger than its own poll interval. A job submitted after a listing was taken counts as live until a later listing, and `SlurmWorker` reads a job as gone only from a listing taken after its submission or after its `scontrol requeue` returned. An event loop's read never waits for another thread's `squeue`: it takes the listing it has. The job's class travels as its `--comment`. |
@@ -1632,16 +1634,20 @@ overrides the probe, still capped by the memory bound: the task's ``batch=``, el
 sets one itself, so a site that requires a QOS names it per class. The other substrate-owned
 options listed in section 4.5 stay refused.
 
-**workers_per_device on Slurm.** One `sbatch` job runs one worker, on devices of its own. A class
-with `workers_per_device` above 1 cannot start under `SlurmSubstrate` (`can_start` names the
-setting), rather than being judged against a share of a device it does not share. Starting
-several workers inside one allocation is open (see section 12).
+**workers_per_device on Slurm.** Up to `workers_per_device` workers of a class share one `sbatch`
+job, which asks the class's GPUs once and its CPUs and memory per worker, so the share the fit and
+the worker judge against is the share they get. `live` lists every worker of such a job and a later
+coordinator adopts them with the same tokens (each derived from the job's first token). `stop`
+cancels a job once all its workers are stopped; a worker whose job still runs others stops on the
+stop mark its pool writes.
 
-**Allocation end.** A worker reads its allocation's end from `SLURM_JOB_END_TIME`. Once the time
-left holds less than the class's `quantum_s`, or less than `PoolSettings.call_timeout` when that
-is set, it stops claiming and recycles (exit `EXIT_RECYCLE`), so the limit cuts no call and no
-crash is charged. A job's own declared `time` is not in its ticket; jobs longer than the time
-left can still be cut, and are then drained marks under D4.
+**Allocation end.** A worker reads its allocation's end from `SLURM_JOB_END_TIME`, else once from
+`squeue -h -j $SLURM_JOB_ID -o %e`; with neither, no end is assumed. Once the time left holds less
+than the class's `quantum_s`, or less than `PoolSettings.call_timeout` when that is set, it stops
+claiming and recycles (exit `EXIT_RECYCLE`), so the limit cuts no call and no crash is charged. A
+ticket carries the longest `time` its jobs declare (`Ticket.time`), and a claim passes over a
+ticket whose time exceeds the time left (`PoolRoot.claim(max_time=)`), leaving it to a worker with
+more.
 
 **Batch by probe, per call.** This refines the 2026-11-24 amendment. The coordinator no longer
 chooses the probed size: under `MeasuredFit` without a declared batch, a placement's `batch` is
@@ -1745,3 +1751,850 @@ stop, so a kill at KillWait loses nothing.
 
 
 probe_samples=3: the median of three calls is the fewest that a single slow call cannot move (unmeasured site choice). probe_gain=0.05: a doubling that saves under 5% per unit is within run-to-run noise on a shared GPU (unmeasured).
+
+
+## Amendment (2026-11-25, round 2): shared Slurm jobs and the ticket's time
+
+The QOS, `workers_per_device` and allocation-end paragraphs of the amendment above and section 4.5
+now state the implemented rules: `--qos` passes through from `substrate_args`; up to
+`workers_per_device` workers share one `sbatch` job; a ticket carries its jobs' longest declared
+`time`, a claim passes over a ticket longer than the time left, and the allocation end falls back
+to `squeue -h -j $SLURM_JOB_ID -o %e`.
+
+### Moved from docstrings (round 2)
+
+The text the cut removed, by module and name, as it stood at the stack top.
+
+- `pydra/engine/_procshim.py` `<module>`:
+
+  Run as a script under ``python -I`` so that nothing in the provider's environment or working
+  directory can shadow the standard library, and importing nothing from pydra, so it costs a few
+  megabytes. The parent passes it the read end of a lifeline pipe (the write end is the parent's, so
+  end of file means the parent is gone) and an anonymous file with the real command's JSON ``{"argv",
+  "env", "cwd"}``.
+  The shim runs the command, then stays until the command, its group and everything below it are gone:
+  on Linux it is a child subreaper (a process-wide setting, unlike ``PR_SET_PDEATHSIG``), so a
+  daemonised descendant is re-parented to it, reaped and stopped by it. On other systems there is no
+  subreaper and a descendant that leaves the group and whose parent dies is re-parented to init and is
+  not found. When the lifeline reaches end of file the shim stops its whole tree, TERM then, after a
+  grace period, KILL, refreshing the tree until it is empty or a bound passes. On SIGTERM it forwards
+  TERM to its tree once and carries on.
+  While the command runs the shim only blocks, on the lifeline and a wakeup pipe fed by SIGCHLD and
+  SIGTERM; the process table is scanned after the command exits, on SIGTERM and during teardown, never
+  continuously.
+
+- `pydra/engine/procgroup.py` `<module>`:
+
+  A provider whose ``load`` starts a child (a model server, a worker in another interpreter) returns a
+  handle over a :class:`ProcessGroup`. ``close`` stops the whole group and every descendant, waits
+  until they are gone, and waits until the device memory they held is free, so a restart does not race
+  the dying process.
+  Only a provider that starts a process imports this module; a plain run does not.
+  On POSIX the leader of the group is a small standalone shim (``_procshim.py``, run under ``python
+  -I`` in a neutral directory, importing nothing from pydra) that starts the real command, with the
+  provider's own environment and working directory, in its own session and group. It holds the read
+  end of a pipe whose write end is the parent's: when the parent dies without running ``close``
+  (SIGKILL, an OOM kill) the pipe reaches end of file and the shim stops its whole tree.
+  (``PR_SET_PDEATHSIG`` is not used: it is scoped to the parent thread, and a provider may be loaded
+  from a thread that ends while the server is still wanted.) On Linux the shim is a child subreaper,
+  so a server that its launcher daemonised (``setsid`` and exit) is adopted by the shim and stopped
+  with the rest. On other POSIX systems there is no subreaper: a daemonised server whose parent has
+  already exited is a known limitation. On Windows the child is created with
+  ``CREATE_NEW_PROCESS_GROUP`` and stopped with ``taskkill /T /F``; there is no lifeline.
+  ``stop`` snapshots the descendants by parent pid before signalling, signals the group and each
+  descendant that left it (``setsid``), waits for all of them, and reaps the leader last, so the pid
+  and group id cannot be reused while they are signalled. Each known descendant carries a start-time
+  token (``/proc`` on Linux, ``ps lstart`` elsewhere) verified before every signal, and exited ones
+  are dropped. Per-provider cgroups are not assumed (often unavailable on clusters).
+  Default timeouts: 10 s SIGTERM wait, 10 s after SIGKILL, 30 s for device memory to settle, so one
+  close is bounded by about 50 s plus the ``nvidia-smi`` calls; Slurm's default ``KillWait`` is 30 s,
+  after which the step's cgroup teardown reaps leftovers.
+
+- `pydra/engine/procgroup.py` `CgroupOomBaseline`:
+
+  The counter is read from cgroup v2 ``memory.events``, or on cgroup v1 from ``memory.oom_control``
+  (kernel 4.13 and later). ``path`` is ``None`` (no accounting; :meth:`take` returns ``None``) when
+  neither file is present: a file is read only when it exists.
+
+- `pydra/engine/procgroup.py` `ProcessGroup.stop`:
+
+  Returns when every member is gone (or, after ``kill_timeout`` past the kill, logs that one is
+  unkillable). A second call does nothing
+
+- `pydra/engine/procgroup.py` `ProcessProvider`:
+
+  Subclasses set ``name`` and implement :meth:`argv` (and optionally :meth:`env`, :meth:`connect`,
+  :meth:`footprint`, :meth:`version`).
+
+- `pydra/engine/resident.py` `<module>`:
+
+  Residency is scheduler metadata. A provided field's value is the spec, which is hashed into the
+  checksum like any input; the loaded object never is. A run that declares no provided field creates
+  no ``ResidentSet`` and loads nothing; the module itself is small (stdlib and attrs) and is imported
+  by every job.
+
+- `pydra/engine/resident.py` `Provider.close`:
+
+  A provider that starts a process subclasses :class:`pydra.engine.procgroup.ProcessProvider`, whose
+  ``close`` stops the process group and waits for its members and device memory
+
+- `pydra/engine/resident.py` `ResidentSet`:
+
+  State in use (taken with :meth:`get` and not yet :meth:`release`-d) is never evicted; eviction calls
+  the entry's ``close``. A budget that busy entries alone exceed is exceeded.
+
+- `pydra/engine/resident.py` `ResidentSet.evict`:
+
+  Returns whether ``key`` was resident
+
+- `pydra/engine/resident.py` `ResidentSet.get`:
+
+  Idle entries are evicted, least recent first, and closed (outside the lock, their errors logged) to
+  make room for ``footprint`` before a load
+
+- `pydra/engine/resident.py` `residency_digest`:
+
+  It is not part of the job's identity
+
+- `pydra/workers/pool/__init__.py` `<module>`:
+
+  Nothing here is imported by ``import pydra``; import the submodules directly.
+
+- `pydra/workers/pool/beater.py` `<module>`:
+
+  A worker beats its worker and claim leases from a `pydra.engine.lease.LeaseBeater` subprocess
+  through a `BeaterClient`. The pool's beater runs `pool_expire` when a call's deadline passes and
+  kills the worker if it does not acknowledge the expiry within ``timeout_grace``.
+
+- `pydra/workers/pool/bisect.py` `<module>`:
+
+  `bisect` runs a list of jobs as one call and settles each. A call that raises as a whole is split
+  only on the two triggers: a resource fault (out of memory, a timeout) and a crash (`WorkerLost`, a
+  protocol error, a fatal raised by a request rather than a load). Each trigger first reloads the
+  residency (``reload``), then the call is halved and each half sent again until the failing job is
+  alone; a half that completed keeps its results. A lone job's resource fault is returned for the
+  caller to move up the ladder; a lone job's crash sends it again, until it has been lost
+  ``crashes_charged`` times in a row, when it is ``JobCrashedWorker``, a content fault of that job. A
+  crash whose jobs all completed afterwards was survived: it is reported (``survived``) as the
+  environment's fault, charged to no job. Any other raise from a whole call fails each of its jobs
+  with that fault. Only `Exception` instances are typed; anything else propagates. A load is never
+  split or retried as a request: a fault whose record says ``load`` is raised out unchanged. An
+  exception element of a batched return is that job's fault and never a trigger: content, or the
+  record attached to it (a job's own run that raised, typed by the caller's classifier).
+
+- `pydra/workers/pool/bisect.py` `bisect`:
+
+  lost: the job is charged when that count or the engine's own count of its lone losses in a row
+  reaches ``crashes_charged``, so the engine terminates whatever the hook returns.
+
+- `pydra/workers/pool/calibration.py` `<module>`:
+
+  A pool's workers record a `Sample` per settled job and an `UnfitRecord` per load that ran out of
+  memory; its coordinator records a `ParityRecord` per sampled cold re-check (section 4.4). A
+  `Calibration` keeps them, keyed by the residency digest (`residency_key`) and, for samples, by the
+  hardware class (`hardware_of`), and gives back the `MemoryFit`, the unfit records and the per-batch
+  times `MeasuredFit` judges by. `DirectoryCalibration` keeps them as JSON files any later run reads.
+
+- `pydra/workers/pool/calibration.py` `DirectoryCalibration`:
+
+  Layout::
+  <root>/<key>/<hardware key>/samples/<worker token>.jsonl   one writer per file, appended
+  <root>/<key>/unfit/<time>-<uuid>.json                       one file per record
+  <root>/<key>/parity/<time>-<uuid>.json                      one file per record
+  A file of one record is written under a temporary name and renamed, so a reader never sees it half
+  written; a samples file has one writer (its worker), and a reader skips a last line that is not yet
+  whole.
+
+- `pydra/workers/pool/calibration.py` `DirectoryCalibration.memory`:
+
+  A sample without a measured peak is not used: with none, there is no fit (the
+  ``device_unmeasured``), never a fit of zero activation memory. The resident bytes are the least
+  seen. ``m1`` is the Theil–Sen slope over the samples whose units are known, None with fewer than two
+  distinct units (``m0`` is then the median excess); a negative slope, or fewer than ``min_samples``
+  samples, gives None.
+
+- `pydra/workers/pool/calibration.py` `MemoryFit`:
+
+  ``m1`` is None when the samples carry fewer than two distinct units: the per-unit memory is then
+  unknown, not zero.
+
+- `pydra/workers/pool/calibration.py` `ParityRecord`:
+
+  equal: None when the re-check could not run (the task, a provider or the device failed in the
+  coordinator), which is no statement about the task.
+
+- `pydra/workers/pool/calibration.py` `UnfitRecord`:
+
+  It binds only the code that wrote it (`binds`): a change to a provider's ``version()`` or to the
+  environment's resolved reference gives a record that no longer binds, as a ``current_unfit`` does.
+
+- `pydra/workers/pool/classes.py` `WorkerClass`:
+
+  Sizes are bytes; they may be written ``"40G"`` and are converted.
+
+- `pydra/workers/pool/classes.py` `WorkerClass.load`:
+
+  ``source`` is a mapping of class name to fields, a list of mappings each with a ``name``, or the
+  path of a TOML, JSON or YAML file holding either (under an optional top-level ``classes`` key). YAML
+  needs PyYAML, which pydra does not depend on. Unknown fields are an error.
+
+- `pydra/workers/pool/codec.py` `<module>`:
+
+  A ticket names each job's payload, never a pickle: either a file ``<pool root>/payloads/<sha256>``,
+  read only after the ownership walk of RFC 0003 section 6.4 passes for that directory and the digest
+  matches, or JSON carried in the ticket by a codec whose jobs are JSON.
+
+- `pydra/workers/pool/codec.py` `JobCodec`:
+
+  ``name`` is recorded in each payload. A codec whose ``encode`` gives ``application/json`` has its
+  jobs carried in the ticket; any other is written to the job's work directory.
+
+- `pydra/workers/pool/codec.py` `read_payload`:
+
+  A file payload is read only when its work directory and the file pass the ownership walk (owned by
+  this user and writable by no one else; on Windows, under the user's local application data) and its
+  sha256 is the payload's.
+
+- `pydra/workers/pool/codec.py` `write_payload`:
+
+  A JSON encoding is returned inline as ``{"codec", "sha256", "json"}``, the digest taken of its JCS
+  form. Any other is written once to ``<root>/payloads/<sha256>`` (``0o600``; the directory made
+  ``0o700`` if absent), and ``{"codec", "path", "sha256"}`` is returned. ``root`` is the pool's root:
+  a payload lives outside every run's work directory (a run writes its own ``_job.pklz`` there and
+  empties it once it publishes), is read by every attempt of the job, and is removed only by the
+  pool's `~pydra.workers.pool.storage.PoolRoot.collect` once no unsettled ticket names it.
+
+- `pydra/workers/pool/faults.py` `<module>`:
+
+  A fault is typed where it happens by a classifier, ``classify(exc, phase) -> FaultRecord``, and each
+  kind has one effect: a content fault is the job's own (retried up to ``content_attempts``); a
+  resource fault moves the job up its ladder (a batched call is bisected first,
+  `pydra.workers.pool.bisect`); an infrastructure fault requeues the job, and holds its residency once
+  the residency has failed ``infrastructure_replacements`` times in the coordinator's epoch; a crash
+  (`WorkerLost`) is retried on a fresh process until the job, alone, has lost ``crashes_charged``.
+  A fault's class survives every wrapper: a record attached to an exception (`attach`), or to any
+  exception it was raised from or during, is the fault, whatever classifier is in use (`fault_of`).
+
+- `pydra/workers/pool/faults.py` `WorkerLost`:
+
+  A process-owning provider's client raises it (or raises from it) when its process ends, or answers
+  out of protocol, during a request.
+
+- `pydra/workers/pool/faults.py` `_oom_kind`:
+
+  A device type is the device's before the generic `MemoryError` rule (cupy's is a `MemoryError`); one
+  of `EITHER_OUT_OF_MEMORY` is the device's too, as the class the call ran on grants a device (its
+  message is never read).
+
+- `pydra/workers/pool/faults.py` `classify`:
+
+  Out of memory (`OUT_OF_MEMORY`, by qualified name, anywhere in the exception's chain) is a resource
+  fault at any phase; a `WorkerLost` in the chain is a crash (an infrastructure fault with reason
+  ``"crash"``). Otherwise an exception from a call (the task's own code) is content, and one from a
+  load or the pool's machinery is an infrastructure fault flagged ``gap``.
+
+- `pydra/workers/pool/faults.py` `fault_of`:
+
+  A load is never a job's: a content record at a load is the residency's, an infrastructure fault.
+
+- `pydra/workers/pool/faults.py` `oom_resource`:
+
+  On a CPU class it is always the host's.
+
+- `pydra/workers/pool/fit.py` `MeasuredFit`:
+
+  `judge`, in order:
+  1. A class whose ``time`` is below the request's is ``"unfit"`` (as under every `Fit`). 2. A class
+  is ``"unfit"`` when a load of the residency ran out of memory, under the code it runs under now, in
+  a grant at least as large as the class's of the same resource (or, when either grant is unknown, on
+  that class): host records against host memory on every class, device records against the device
+  share on a GPU class. This comes before the next step, so an out-of-memory verdict recorded on a
+  class of unknown device memory (with the memory its worker read) holds for that class. 3. A GPU
+  class with ``gpu_mem=None`` is ``"unknown"``. 4. With a memory fit of the residency on the class's
+  hardware, the class is ``"too small"`` when ``resident + m0 > headroom × grant``, otherwise it
+  ``"fits"``. 5. With no fit, the verdict is `DeclaredFit`'s.
+  `batch`: ``max(1, floor((headroom × share − resident − m0) / (m1 × length)))``, ``length`` the
+  longest of ``units``, at most the class's ``quantum_jobs`` (a call takes no more than a ticket
+  holds): the memory bound. The formula has no value without a measured ``m1`` or a known length: 1
+  when ``m1`` is unknown, or when ``m1 > 0`` and no unit is known; ``quantum_jobs`` only when ``m1``
+  was measured as 0. Within the bound the batch is probed (`probe_batch`): one job per call first,
+  then twice the largest size measured while the per-job time keeps falling, then the fastest size
+  measured. A declared batch overrides the probe, capped by the memory bound: the task's
+  (``FitRequest.batch``), else the site's (``batch``); it is the batch while ``m1`` is unknown.
+
+- `pydra/workers/pool/fit.py` `probe_batch`:
+
+  One job per call while nothing is measured.
+
+- `pydra/workers/pool/placement.py` `ClassTried`:
+
+  ``verdict`` is ``None`` when the class was not judged: it did not satisfy the request, or the
+  substrate said it cannot start it (``reason`` says which).
+
+- `pydra/workers/pool/placement.py` `DeclaredFit`:
+
+  No figure to compare gives ``"unknown"``. ``batch`` returns the task's declared batch, else 1.
+
+- `pydra/workers/pool/placement.py` `Placement`:
+
+  ``batch`` is the most jobs of its residency one call takes (what ``plan()`` reports): a declared
+  batch, else, with ``probe``, the ceiling a worker probes under. ``memory_bound`` is the fit's memory
+  bound (1 when not measured).
+
+- `pydra/workers/pool/placement.py` `fit_request`:
+
+  A job whose resident keys cannot be read yet (a stand-in of ``plan()``, its inputs lazy) has none,
+  nor units.
+
+- `pydra/workers/pool/placement.py` `place`:
+
+  Reads the job's resources and resident keys (``request``, default `fit_request`); the job and its
+  checksum are untouched. A routed residency's queue is ``<class>#<residency digest>``.
+
+- `pydra/workers/pool/placement.py` `warm_environment_label`:
+
+  None for any other job, or one whose reference cannot be read here. Warm-start faults are counted,
+  and held, under it, so a broken image holds only the tickets that carry it.
+
+- `pydra/workers/pool/pool.py` `<module>`:
+
+  The pool is the submitting process's side of the protocol of `pydra.workers.pool.storage`:
+  - **Placement and tickets.** Each job is placed on a worker class and a queue at `submit`
+  (`pydra.workers.pool.placement.place`); a job that fits no class is reported ``Failed`` at once.
+  Placed jobs are cut into tickets of at most ``quantum_jobs`` jobs of one node and one queue, in node
+  order, and written by the follower thread, at most ``max_queued_jobs`` unsettled jobs per queue; the
+  rest wait in this process and are written as tickets settle. - **Follow.** A job already held by a
+  live ticket (a predecessor's, on resume) is followed, not put again. A ticket of a class this
+  coordinator does not start (and not under `ExternalSubstrate`) is taken by ``try_take`` and its jobs
+  moved to a class it starts; one under a live claim is followed, and taken only once its settled
+  count has not moved for ``stale_after`` and its claim is stale. - **The follower** lists
+  ``settled/`` of each queue once per ``poll_s``, reads a ticket's outcomes only when its count moved,
+  and for each job reads the outcome in the ticket its newest follow generation names: ``done`` is
+  read back through ``Job.result()`` and reported; ``failed`` is the job's errored result or
+  ``Failed``; ``held`` and a ``cancel`` withdrawal are ``NotRun``; a ``refused`` withdrawal is re-
+  placed one class up the ticket's ladder; a move is followed into the ticket it names; ``expired``
+  waits for the taker. - **One live coordinator per pool.** A new pool waits while another
+  coordinator's lease is live (``coordinator_wait`` bounds it, then `PoolBusy`), then takes the next
+  epoch. A coordinator that sees a newer epoch stops writing and reports its open jobs ``NotRun``
+  (`PoolFenced`). - **Scaling** starts, per class, the workers its queues' waiting jobs want, while
+  the substrate's ``can_start`` allows; a worker that leaves ``live()`` without a ready mark is a
+  failed start, the next start of its class backs off, and after ``start_failures`` consecutive ones,
+  or at a failed start once a streak has ``start_deadline_failures`` failures and ``start_deadline_s``
+  has passed since its first with no worker of the class live, the class is broken and its jobs are
+  held with the latest start error. A streak ends when the class has no waiting jobs. A failed ticket
+  write puts its jobs back to wait, and writes failing by the same rule break the class too; a job
+  that cannot be encoded is ``Failed`` alone. `release_hold`, or a ``retry`` of a held job, lifts the
+  break with a fresh streak. Failed starts, listings, writes and polls, and broken classes, are pool
+  events: ``pydra.pool`` log records with an ``event`` attribute. - **Lifecycle.** `close` writes the
+  coordinator's ``ended`` mark; a coordinator that still holds the newest epoch then stops the workers
+  its substrate lists. A pool outlives the runs driven on it: ``drive`` never closes it, so its
+  workers stay resident from one run to the next; whoever made it closes it (its caller, or the
+  `Submitter` that made it by name). Its workers still exit when idle. - **Pool facts.** Each worker
+  computes ``pool-facts@1`` for each call. They enter the execute context only under a store whose
+  identity lists ``pool`` in ``recorded_only``; under a store with no identity (`PickleStore`) they
+  reach the audit record and ``Result.runtime`` only. A pool refuses any other store
+  (`PoolFactsWouldSplitSlots`). - **The cold re-check** (``PoolSettings.recheck_fraction``, RFC 0005
+  section 4.4). A settled job sampled by its checksum is queued, once its outcome is reported, for
+  this process's re-check thread (a bounded queue: one that is full drops the re-check and counts it
+  in ``rechecks_dropped``): a fresh copy of the job runs alone, in this process, on a resident set of
+  its own, marked to verify against the committed entry, so the store compares it through its reuse
+  hook and its publish loses to the committed entry. A `ParityRecord` is written to the calibration:
+  equal, unequal, or not run (the task, a provider or the device failed here), which is never audited;
+  the first mismatch of a residency is logged and sent through the job's audit, once per coordinator.
+
+- `pydra/workers/pool/pool.py` `WarmPool`:
+
+  calibration: the coordinator writes its re-checks' `ParityRecord`s to it. None:
+  `DirectoryCalibration` at ``root / "calibration"``. Any other `Calibration` receives only the parity
+  records and warns, since workers then write to ``root / "calibration"``. A `MeasuredFit` given as
+  ``fit`` reads the calibration it was made with, and warns when that is not where the workers write.
+  Notes: Several runs may share a pool, one after another or at once (two `Submitter`s on two threads,
+  or two ``drive`` calls on one event loop): each job's outcome goes to the run that submitted it
+  (`bind` is per run, that is per asyncio task or thread, through a context variable), a job another
+  run already has open here settles with it, and a run's ``cancel`` touches only its own jobs. All
+  runs share its workers and their resident state. A twin of a job run with ``rerun=True`` settles
+  with the other run's attempt rather than computing again.
+
+- `pydra/workers/pool/pool.py` `WarmPool._cancel_one`:
+
+  A primary with twins hands its place, ticket and all, to its first twin and is not withdrawn; a twin
+  just leaves its primary.
+
+- `pydra/workers/pool/pool.py` `WarmPool._fresh_run`:
+
+  Return its output digest, the committed entry's, why it did not reach them ("" when it did), and
+  whether the task ran to its outputs (False when the task, a provider's load or the device failed
+  here; a refusal by the store's comparison comes after the task ran).
+
+- `pydra/workers/pool/pool.py` `WarmPool._held_reason`:
+
+  A held environment never holds a job of another environment or of none.
+
+- `pydra/workers/pool/pool.py` `WarmPool._hold_broken`:
+
+  Jobs of other residencies on the same queue (``residency="ignore"``) are not held. A hold is kept
+  for the epoch, also after ``pydracli pool release-hold`` lifts its mark: a later job of it is
+  reported held until a new coordinator (a new epoch) takes the pool.
+
+- `pydra/workers/pool/pool.py` `WarmPool._listing_failed`:
+
+  Once ``listing_failures`` polls in a row have failed and ``stale_after`` has passed since the last
+  good listing, such a class is broken, so its jobs are held rather than left waiting. Everything is
+  read from storage.
+
+- `pydra/workers/pool/pool.py` `WarmPool._move_foreign`:
+
+  Called without the lock: the storage is written outside it.
+
+- `pydra/workers/pool/pool.py` `WarmPool._queue_jobs`:
+
+  Return the reports due now: jobs that cannot be placed, and jobs placed on a broken class.
+
+- `pydra/workers/pool/pool.py` `WarmPool._read`:
+
+  Generations and results are read without the lock; what they say is applied under it, to jobs still
+  followed in ``t``.
+
+- `pydra/workers/pool/pool.py` `WarmPool.bind`:
+
+  A run is the context it binds in (`contextvars`: each asyncio task and each thread has its own), so
+  runs on other tasks or threads keep their own.
+
+- `pydra/workers/pool/pool.py` `WarmPool.cancel`:
+
+  Every cancelled job is reported ``NotRun(held=False)``.
+
+- `pydra/workers/pool/pool.py` `WarmPool.release_hold`:
+
+  A ``retry`` of a job the break held lifts it too. Residency holds on storage are lifted by
+  `release_hold` of this module (``pydracli pool release-hold``). Return the classes released.
+
+- `pydra/workers/pool/probe.py` `<module>`:
+
+  `probe` checks the primitives the pool protocol uses (an exclusive ``O_EXCL`` create, an atomic
+  ``mkdir``, rename, an exclusive link (a rename that refuses an existing name, on Windows), a flush
+  of a directory, a storage clock) in a scratch directory under the root, and measures how late a
+  second process sees a directory's mtime move. `require` refuses a root that lacks a primitive or
+  whose measured delay exceeds ``attribute_delay``.
+
+- `pydra/workers/pool/probe.py` `probe`:
+
+  limit: the pool passes its ``attribute_delay`` and one second for the watcher to start (default: the
+  lease's default ``attribute_delay``).
+
+- `pydra/workers/pool/samples.py` `CallMeter`:
+
+  Host: on Linux, for each of the worker's own processes (itself and its providers' process groups),
+  the resident-set high-water mark is reset before the call (``clear_refs``) and read after it; the
+  peak is the sum of each process's peak above its resident set before the call, None when any of them
+  cannot be reset or read. Device: torch's caching-allocator peak (reserved bytes), reset before the
+  call, when torch is already imported and CUDA initialised in the worker (a provider whose state
+  lives in another process is not measured). `stop` returns each peak above what was held just before
+  the call, None where it is not read.
+
+- `pydra/workers/pool/samples.py` `_visible`:
+
+  An entry beginning ``GPU-`` or ``MIG-`` is a UUID (an unambiguous prefix suffices); any other entry
+  is an ``nvidia-smi`` index. A ``MIG-`` entry is the row of its parent (``mig`` maps it there) with
+  its own UUID and no memory, the parent's total overstating the slice. Under a cgroup that constrains
+  devices Slurm sets local indices ``0..k-1``, which ``nvidia-smi`` lists under the same numbers; host
+  indices that it does not list are not mapped.
+
+- `pydra/workers/pool/samples.py` `read_hardware`:
+
+  A ``CUDA_VISIBLE_DEVICES`` that cannot be mapped to the devices ``nvidia-smi`` lists is logged as a
+  warning and grants no device, never a guessed one.
+
+- `pydra/workers/pool/storage.py` `<module>`:
+
+  A pool is a directory on storage that every worker and the submitting process see::
+  <root>/                                   0o700, owned by the pool's user pool.json
+  "pool@1": pool id, the four LeaseSettings, codec, owner uid, segment size, probe results
+  coordinator/<epoch>/                    one per coordinator, taken by mkdir; lease/, ended
+  queues/<label>/                         label = sha256 of the queue name name
+  the queue name, written once tickets/<digest>.json                 a ticket as JCS; digest = sha256
+  of those bytes segments/<seq>/slot-<n>               the index: a regular file holding a ticket
+  digest segments/<seq>/jobs-<n>-<count>       the job count of slot n's ticket segments/<seq>/res-<n>
+  slot n's ticket has a final outcome for every job segments/<seq>/retired                every slot
+  of the segment is taken and resolved slotted/<digest>                      the ticket's first slot,
+  "<seq>/<n>" claims/<digest>.lease/                the claim's DirectoryLease losses/<digest>/<n>
+  a takeover of the ticket outcome/<digest>/<job>-<attempt>.json one per job and attempt; the first
+  writer wins settled/<digest>-<count>              the ticket's outcome count reached <count>
+  held-<epoch>-<label>                  a hold of a residency on this queue follow/<job>/<g>
+  generation g of a job: the ticket that holds it follow/<job>/<g>.started                attempt
+  <pool id>.<g> was started, by which worker payloads/<sha256>                       a job's payload,
+  read by every attempt of the job
+  ``<job>`` is ``<checksum>-<fingerprint>`` when that is a plain lower-case name of at most 200
+  characters, else ``h-<sha256>`` of the two.
+  Every file is created once and never modified: it is staged under a private name, flushed, linked to
+  its name (renamed, on Windows), and its directory flushed. A create that meets ``EEXIST`` reads the
+  file back and counts it as its own when the bytes, which carry a fresh uuid, are its own (a lost
+  reply to a retransmitted request). ``ESTALE`` on a read is read as absent. No symlink is made and no
+  host-bound lock is taken: every exclusion is a `DirectoryLease`.
+
+- `pydra/workers/pool/storage.py` `Claim`:
+
+  lease: For ``beat="external"`` the holder's beater beats it; release it from the beater before
+  `release`.
+
+- `pydra/workers/pool/storage.py` `Claim._state`:
+
+  ``("open", g, generation)``: its newest generation names this ticket and it has no outcome under
+  that attempt. The outcome's kind with ``(g, outcome record)``: it has one here. When a newer
+  generation names another ticket, the job's outcome here under this ticket's attempt decides; without
+  a final one it is ``"moved"``, and with ``repair`` (a claimant) the move's withdrawal here is
+  written first, naming the new ticket, and its slot if it has none. ``"unknown"``: no generation
+  could be read; never taken as moved.
+
+- `pydra/workers/pool/storage.py` `Claim.move`:
+
+  Step (5), releasing this claim, is the caller's.
+
+- `pydra/workers/pool/storage.py` `Claim.release`:
+
+  Releasing again does nothing. The ticket leaves the queue's judged set, so that this process (which
+  passed over it while holding it) may claim it again at once.
+
+- `pydra/workers/pool/storage.py` `Claim.start`:
+
+  The attempt is read from the newest generation, never from the ticket file. When that attempt's
+  started mark exists, the attempt has run once already, so a ``restart`` generation naming this
+  ticket is written first and its attempt started instead.
+
+- `pydra/workers/pool/storage.py` `PoolRoot._take_slot`:
+
+  A slot is only ever made below ``segment_items``, so a segment whose slots are all taken stays full
+  and can be retired.
+
+- `pydra/workers/pool/storage.py` `PoolRoot.claim`:
+
+  Slots are walked oldest first from the oldest live segment. A ticket under a live claim is passed
+  over (and not judged again for one renewal interval), as is a missing or corrupt one, and one whose
+  residency is held (`holds` for ``epoch``). A stale claim is taken over, and the takeover recorded in
+  ``losses/``. A ticket whose jobs all have a final outcome, or moved, is marked resolved and passed
+  over; a moved job's new ticket gets its slot if it has none.
+  beat: A worker with a beater passes ``"external"`` and hands ``claim.lease`` to its `BeaterClient`
+  at once.
+
+- `pydra/workers/pool/storage.py` `PoolRoot.collect_settled`:
+
+  Its slot stays in the index (a segment is walked by its slot numbers); its jobs' newest generations
+  stay, naming a ticket that is gone, which holds nothing. Return how many tickets went.
+
+- `pydra/workers/pool/storage.py` `PoolRoot.newest`:
+
+  A listing may be stale (an attribute cache) or empty (``ESTALE``), so the generations above the
+  highest listed one, or above ``hint`` (a generation known to exist), are looked up by name until one
+  is absent. None means unknown: nothing was listed or readable.
+
+- `pydra/workers/pool/storage.py` `PoolRoot.outcomes`:
+
+  expect: The directory is listed again, backing off, until that many records are read, so a listing
+  cached behind the mark is not taken for the outcomes.
+
+- `pydra/workers/pool/storage.py` `PoolRoot.put`:
+
+  Each job's attempt is that of its next generation. A put is idempotent: jobs already held by the
+  very ticket this put would write (an earlier put of the same work, or one interrupted) are not
+  placed again, and a missing slot is written.
+
+- `pydra/workers/pool/storage.py` `PoolRoot.settle`:
+
+  On ``EEXIST`` the writer counts again: an unchanged count means the mark it met covers its own
+  outcome; a larger one is marked in turn, so the last count is always written.
+
+- `pydra/workers/pool/storage.py` `PoolRoot.take`:
+
+  A coordinator withdraws a job (cancel, a re-placement on resume) only under such a claim.
+
+- `pydra/workers/pool/storage.py` `TicketJob`:
+
+  attempt: A claimant reads the job's attempt from its newest generation, never from here.
+
+- `pydra/workers/pool/storage.py` `_create`:
+
+  "created", "own", "exists" or None: ``"exists"``: it holds something else, or ``data`` is empty;
+  None: ``guard`` answered False after staging and nothing was linked.
+
+- `pydra/workers/pool/storage.py` `_read`:
+
+  On Windows a record another process is linking into place refuses an open for a moment (a sharing
+  violation): the read is tried again as `SHARING_RETRY` says.
+
+- `pydra/workers/pool/substrate.py` `<module>`:
+
+  A substrate starts workers of a class, lists the ones it started that are pending or running, stops
+  them, and says whether one more may start. `LocalSubstrate` starts worker processes on this host;
+  `SlurmSubstrate` submits one Slurm job per worker; `ExternalSubstrate` starts nothing, for workers
+  started by hand or by another system.
+
+- `pydra/workers/pool/substrate.py` `ExternalSubstrate`:
+
+  Such a worker exits on idle only, and a coordinator's ``close`` never stops it.
+
+- `pydra/workers/pool/substrate.py` `LocalSubstrate`:
+
+  A ``cuda`` class's worker is given ``max(gpus, 1)`` devices through ``CUDA_VISIBLE_DEVICES``, at
+  most ``workers_per_device`` workers per device, so a host with four GPUs runs four one-GPU workers
+  or two two-GPU workers.
+  stop_wait: Default `drain_bound` plus `shutdown_bound`.
+
+- `pydra/workers/pool/substrate.py` `LocalSubstrate.stop`:
+
+  No signal is sent on Windows.
+
+- `pydra/workers/pool/substrate.py` `SlurmSubstrate`:
+
+  A worker of a class is ``sbatch --parsable`` with ``--gres=gpu:<type>:<n>`` (``gpu:<n>`` with no
+  ``gpu_type``; a ``cuda`` class asks for at least one), ``--cpus-per-task``, ``--mem`` and ``--time``
+  from the class's fields where set, then the class's ``substrate_args`` (each ``key: value`` as
+  ``--key=value``, a one-letter key as ``-k value``, an empty value as a bare flag), and ``--wrap``
+  running the worker command. The job is named ``pydra-<pool id>-e<epoch>-<token>``, carries its class
+  as ``--comment``, writes its output to ``<pool>/private/logs/<token>.log`` and is ``--no-requeue``:
+  a worker preempted or on a failed node is lost, its claims taken over once stale. A ``--qos`` is
+  passed only as a class's ``substrate_args`` give it; a class naming an option the substrate sets
+  itself cannot start. Slurm gives a job its GPUs; the substrate does not set
+  ``CUDA_VISIBLE_DEVICES``. Up to ``workers_per_device`` workers share one job: it asks the class's
+  GPUs once and its CPUs and memory per worker, and is named after its first worker's token with
+  ``x<n>`` for ``n`` workers.
+  `live` reads the process's shared queue listing (``squeue --user``, one per poll cycle with any
+  `SlurmWorker` of the process) and lists this pool's jobs of this coordinator epoch and of earlier
+  ones: the ones it submitted, those submitted since the listing was taken, and jobs it did not record
+  (a submission that landed late, or a running worker an earlier coordinator started), which count
+  toward the class's workers and the CPU cap and which scaling may stop. At its first listing it
+  cancels earlier epochs' jobs that never started (pending, held or requeue-held). A submission whose
+  ``sbatch`` times out is looked up by its name; when it is found it is the worker, otherwise the name
+  is looked up again after ``attribute_delay`` and, still not found, submitted once more under a new
+  token. A timed-out ``sbatch`` can still land after that: the job is then a surplus.
+  per_user_cpu_cap: A site with GPU, submit or other caps overrides `can_start`.
+  allow_node_local: Otherwise `check_root` (and `attach`) raises `NodeLocalStorage`, as a worker on
+  another node could reach neither. It skips every check, the memory-filesystem one included: under
+  Slurm's per-job private ``/tmp`` (``job_container/tmpfs``) even a one-node cluster's workers cannot
+  see the coordinator's.
+
+- `pydra/workers/pool/substrate.py` `SlurmSubstrate.live`:
+
+  At the first listing after attaching, earlier epochs' jobs still pending are cancelled; their
+  running ones are adopted as unrecorded workers, so they count and scaling can stop them.
+
+- `pydra/workers/pool/substrate.py` `SlurmSubstrate.stop`:
+
+  A worker sharing its job with one still running stops on the stop mark its pool wrote. A failed
+  ``scancel`` is logged and the workers stay listed. A cancelled job that Slurm still lists while it
+  stops is neither live nor adopted again.
+
+- `pydra/workers/pool/substrate.py` `node_local`:
+
+  The filesystem type decides first: a network or parallel filesystem (`SHARED_FILESYSTEMS`) is shared
+  wherever it is mounted, ``$TMPDIR`` included, and a memory filesystem is local. Any other type, or
+  an unknown one, is local when the path is under ``/tmp``, ``/var/tmp``, ``/dev/shm``, ``$TMPDIR`` or
+  the temp directory. A local disk elsewhere is not detected: a head node may export one to the
+  cluster.
+
+- `pydra/workers/pool/worker.py` `<module>`:
+
+  ``pydracli pool worker --root <pool> --class <name>`` (or ``python -m pydra.workers.pool.worker``)
+  runs one loop:
+  1. **Start.** Open the pool and refuse to start (exit `EXIT_SETTINGS`) when its lease settings
+  differ from the worker's in any of the four staleness fields. Start the beater (a `LeaseBeater`
+  subprocess) before any provider is imported, take the worker lease with ``beat="external"`` and hand
+  it to the beater. Read the hardware and refuse to start (exit `EXIT_HARDWARE`) when it does not
+  match the class's ``gpu_type`` or ``gpus``; fill a ``gpu_mem`` of None from it. Write
+  ``ready.json``. 2. **Claim** tickets of the class's queues, oldest waiting work first, preferring
+  the queue served last while its quantum (``quantum_jobs`` jobs or ``quantum_s`` seconds) lasts. A
+  queue not yet served gets one claim of one ticket; once warm, one-job tickets are gathered up to the
+  quantum. Each claim is handed to the beater before anything runs under it. A claim that took a stale
+  one over places its jobs again under fresh attempts first: a lone open job under a ``takeover``
+  generation, charged as a crash only when it was alone in the dead worker's in-flight call; two or
+  more are split; a job whose attempt expired is looked up in the store, then typed a timeout (a
+  resource fault); two or more expired jobs (a batched call's) are split in halves, uncharged,
+  instead. 3. **Re-judge** the ticket against the hardware read (a class whose ``gpu_mem`` was
+  unknown): a ticket needing more device memory is withdrawn, reason ``refused``, and nothing runs.
+  **Load** its residency through the process's `ResidentSet`, on the granted device (the process
+  device, which a job's own binding uses too); a failure there is a load fault, never a job's. 4.
+  **Run** each job through ``Job.run`` on a thread, with ``chdir=False``, under the attempt of its
+  newest follow generation (a ``restart`` generation first when that attempt already started), with
+  the claim as its de-duplication lease, proved before ``publish``. A shell job whose environment is
+  declared ``warm=True`` runs through the worker's warm session of that environment (`PoolSession`,
+  served process-wide): started on the first such ticket bound to the union of the ticket's binding
+  roots and the class's ``mounts``, restarted once when a ticket needs a root it lacks, run cold
+  beyond ``max_mount_roots``, always with the reference the job carries. One session serves one
+  (environment, reference); at most ``max_warm_sessions`` stay open, the least recently used idle one
+  closed first. A start runs before the call, on this thread, and its failure is a load fault. The
+  call record is written before the call and its deadline sent to the beater; ``done`` is written
+  after it. Each call goes through the bisection engine (`pydra.workers.pool.bisect`): a resource
+  fault or a crash reloads the residency; a lone job out of memory moves up the ladder, and one that
+  crashes is run again under a charged ``restart`` generation until ``crashes_charged``. A ticket
+  whose ``batch`` is above 1 and whose jobs are Python tasks declared ``batched`` runs as calls of at
+  most ``batch`` jobs of one residency, ordered by units: the batched function once, then each job's
+  ``Job.run`` with its element, so each job keeps its checksum, stored result and outcome; a taker
+  splits a lost call's jobs apart from the ticket's other open jobs. An infrastructure fault requeues
+  the job; at ``infrastructure_replacements`` faults of the residency in the coordinator's epoch the
+  residency is held on its queue and the ticket's open jobs are settled ``held``. 5. **Settle** each
+  job as it finishes: its `Sample` (kept too in the pool's calibration directory,
+  ``<root>/calibration``, for a job with resident state), then its outcome record (proved), then the
+  ticket's settled mark. A load that runs out of memory is kept there as an `UnfitRecord` naming the
+  class's grant and the providers' versions (RFC 0005 section 3.3). 6. **Prove** every held claim each
+  renewal interval while a call runs; a lost claim is abandoned (the call in flight stopped when a
+  provider's process runs it, its outcome not written). 7. **Exit** after ``idle_polls`` empty polls;
+  on SIGTERM after settling finished jobs and releasing the rest; for a substrate-started worker after
+  ``orphan_after_s`` without a live coordinator; and, recycling (exit `EXIT_RECYCLE`), after a call's
+  deadline passed or the beater died. Resident state is closed on exit, process groups and warm
+  environments included; a warm container a dead worker left is removed by the next warm start on its
+  host.
+
+- `pydra/workers/pool/worker.py` `PoolSession`:
+
+  The facts are recorded only: they never enter a job's checksum or slotted context. ``used`` orders
+  sessions for the worker's least-recently-used eviction.
+
+- `pydra/workers/pool/worker.py` `Worker`:
+
+  classify: None: the reference the newest coordinator wrote into the pool, else the default.
+
+- `pydra/workers/pool/worker.py` `Worker._batched_call`:
+
+  A content raise of the whole call, or a return of the wrong length, is every job's element; any
+  other raise propagates with its fault attached.
+
+- `pydra/workers/pool/worker.py` `Worker._call`:
+
+  Return the call and its sample, or ``lost``, ``expired`` or ``stopped``.
+
+- `pydra/workers/pool/worker.py` `Worker._count_fault`:
+
+  Below ``infrastructure_replacements`` faults in that epoch, ``requeue``'s jobs are requeued under
+  ``restart`` generations; at it the residency (or the environment) is held on its queue
+  (``held-<epoch>-<label>``), remembered by this worker so that no gathered ticket of it runs, and
+  every open job of the ticket is settled ``held`` with a reason naming the residency and the latest
+  cause, and ``hold`` naming the label (RFC 0005 section 6). A held environment holds only the tickets
+  with a job of it (`_environment_held`).
+
+- `pydra/workers/pool/worker.py` `Worker._decode`:
+
+  A storage error (``ESTALE``, ``EIO``) requeues the job as an infrastructure fault, bounded; any
+  other (a digest mismatch, an untrusted directory, a payload that does not decode) is ``failed``.
+
+- `pydra/workers/pool/worker.py` `Worker._environment_held`:
+
+  A ticket with no job of a held environment runs: a broken image holds only its own tickets, never
+  the class's other work.
+
+- `pydra/workers/pool/worker.py` `Worker._expired_left`:
+
+  A lone expired job is left for `_expired_job`, which looks it up.
+
+- `pydra/workers/pool/worker.py` `Worker._infrastructure`:
+
+  The caller releases the ticket. Return ``"held"`` or ``"stopped"``.
+
+- `pydra/workers/pool/worker.py` `Worker._invoke`:
+
+  Return the call and its sample, or what ended it without a verdict: ``lost``, ``expired`` or
+  ``stopped`` (released unsettled).
+
+- `pydra/workers/pool/worker.py` `Worker._invoke_batch`:
+
+  On the call thread the task's ``batched`` runs once on the jobs' inputs, then each job's ``Job.run``
+  with its element, each job proving the claim before its own publish. ``_Call.result`` is one
+  ``(result, error)`` per job; ``_Call.error`` is set, with its fault attached, when the batched call
+  raised a crash, a resource fault or any fault other than content as a whole (a content raise is
+  every job's element). Return the call and the call's sample (shared by its jobs), or ``lost``,
+  ``expired`` or ``stopped``.
+
+- `pydra/workers/pool/worker.py` `Worker._load_fault`:
+
+  The claim is released.
+
+- `pydra/workers/pool/worker.py` `Worker._refresh`:
+
+  False when the classifier is unusable.
+
+- `pydra/workers/pool/worker.py` `Worker._run_batch`:
+
+  A call starts each job's attempt (a job superseded or withdrawn meanwhile is left out, nothing
+  written), loads the residency, then runs the task's ``batched`` once and each job's ``Job.run`` with
+  its element (`_invoke_batch`), so every job keeps its own checksum, work directory, audit, stored
+  result and outcome. A crash or a resource fault of the whole call is bisected by the engine, a half
+  that completed keeping its results; an exception element is that job's content fault. A call that
+  ended without a verdict (lost, expired, stopped) settles nothing.
+
+- `pydra/workers/pool/worker.py` `Worker._run_call`:
+
+  The beater is pinged every renewal interval, so a hung one is found. While the beater is dead the
+  claim is not proved (a proof renews it, and nothing else beats it), and the call's ``deadline`` is
+  the loop's: once it passes, the call's ``expired`` outcomes are written here (`pool_expire`) and the
+  call is abandoned, so the worker recycles and the claim goes stale.
+
+- `pydra/workers/pool/worker.py` `Worker._run_job`:
+
+  Only the task's own exception and a load's are typed by the classifier. An `Exception` from the
+  pool's machinery around the call (starting the attempt, the call record, the sample) is an
+  infrastructure fault of the residency; a `BaseException` from it propagates. The residency is loaded
+  before the call (`_load`), so a reload after a reload-worthy fault is a load, never a call of one
+  job.
+
+- `pydra/workers/pool/worker.py` `Worker._session_for`:
+
+  An idle session of the same environment under another reference (a moved tag, an Lmod default) is
+  closed first, and so is the least recently used idle session once ``settings.max_warm_sessions`` are
+  open.
+
+- `pydra/workers/pool/worker.py` `Worker._stop_call`:
+
+  An in-process call cannot be stopped. Return whether any provider or warm command was stopped.
+
+- `pydra/workers/pool/worker.py` `Worker._stop_warm_command`:
+
+  Return whether one was closed cleanly: a close that raised (logged) may have left the command
+  running.
+
+- `pydra/workers/pool/worker.py` `Worker._warm_environments`:
+
+  A start that fails raises `WarmStartFailed` naming the environment's hold label: the caller types it
+  a load fault of that label (RFC 0005 section 4.3 step 3), so the ticket is released uncharged, a
+  later claim tries the start again, and a hold at the budget names only that environment.
+
+- `pydra/workers/pool/worker.py` `Worker.pool_facts`:
+
+  The job's `PortableStore` records it in the execute context when its identity lists ``pool`` in
+  ``recorded_only``; the job sends it to its audit and ``Result.runtime`` in any case.
+
+- `pydra/workers/sge.py` `SgeWorker.submit_many`:
+
+  Jobs with the same ``qsub`` arguments go to one ``qsub -t`` array, in chunks of at most
+  ``max_job_array_length`` (fewer when ``max_mem_free`` allows less). Returns, in order, ``True`` for
+  a job that completed and the exception that ended it otherwise.
+
+- `pydra/workers/slurm.py` `QueueListing`:
+
+  A reader asks for a listing no older than ``max_age`` seconds (its own poll interval); the first
+  reader of a cycle runs ``squeue`` and the others read its result. A failed ``squeue`` raises and is
+  not kept.
+
+- `pydra/workers/slurm.py` `SlurmWorker`:
+
+  poll_delay: Each cycle makes one ``squeue --user=<your uid>`` call for every job awaiting a poll,
+  shared with any other reader of the process's queue listing (a warm pool's ``SlurmSubstrate``) that
+  listed it within the cycle.
+  max_array_size: ``0`` turns arrays off, and each job is then its own ``sbatch``. Arrays are also not
+  used when ``sbatch_args`` set ``--output``, ``--error`` or ``--array``, and only the elements of one
+  ``submit_many`` call (one round of the runner) are grouped.
+  squeue_failures: A failed poll is skipped, not read as an empty queue.
+  Notes: An array is submitted, and accepted or refused, as one request. On a partition whose QOS
+  limits the jobs a user may have submitted (``MaxSubmitPU``, which counts every array task), an array
+  larger than the limit is rejected whole (``QOSMaxSubmitJobPerUserLimit``), where separate
+  submissions would have had the first ``MaxSubmitPU`` accepted. Set ``max_array_size`` at or below
+  the site's per-user submit limit, or to ``0``. There is no automatic fallback.
+
+- `pydra/workers/slurm.py` `SlurmWorker._queue_snapshot`:
+
+  Every job awaiting a poll shares the call of the next cycle; cycles are ``poll_delay`` seconds
+  apart.
+
+- `pydra/workers/slurm.py` `SlurmWorker.submit_many`:
+
+  The elements of a split node that share a workflow path, name, resources, cache root and rerun flag
+  go to ``sbatch --array`` in chunks of at most ``max_array_size``; any other job is its own
+  ``sbatch``. Returns, in order, ``True`` for a job that completed and the exception that ended it
+  otherwise.
