@@ -31,6 +31,30 @@ def test_interface_wrap_function(tmp_path):
         SampleDef(a=1.5)
 
 
+def test_interface_wrap_lambda(tmp_path):
+    LambdaDef = python.define(lambda a: a * 2, inputs={"a": int}, outputs={"out": int})
+
+    assert LambdaDef.__name__.isidentifier()
+    assert LambdaDef.Outputs.__name__.isidentifier()
+    outputs = LambdaDef(a=2)(cache_root=tmp_path)
+    assert outputs.out == 4
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [("<lambda>", "_lambda_"), ("my-tool", "my_tool"), ("3d-tool", "_3d_tool")],
+)
+def test_one_class_name_rule_for_every_compose_path(name, expected):
+    """Python and shell tasks are named by one rule: a non-word character becomes ``_``
+    and a leading digit is prefixed, as shell names always were"""
+    from pydra.compose import shell
+    from pydra.compose.base.builder import class_name
+
+    assert class_name(name) == expected
+    if not name.startswith("<"):  # an executable name
+        assert shell.define(f"{name} <x:str>").__name__ == expected
+
+
 def test_function_arg_fail():
 
     with pytest.raises(ValueError, match="The argument 'function' is reserved"):
