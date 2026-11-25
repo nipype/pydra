@@ -21,6 +21,9 @@ from pydra.utils.typing import (
 from .field import Field, Arg, Out
 from .helpers import sanitize_xor
 
+if ty.TYPE_CHECKING:
+    from pydra.utils.resources import ComputeResources
+
 
 def build_task_class(
     spec_type: type["Task"],
@@ -32,6 +35,8 @@ def build_task_class(
     bases: ty.Sequence[type] = (),
     outputs_bases: ty.Sequence[type] = (),
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    resources: "ComputeResources | None" = None,
+    checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ):
     """Create a task class and its outputs class from the
     input and output fields provided to the decorator/function.
@@ -142,6 +147,10 @@ def build_task_class(
         # Store the xor sets for the class
         klass._xor = xor
         klass.__annotations__[arg.name] = field_type
+
+    klass._resources = resources
+    if checksum is not None:
+        klass.__checksum__ = checksum
 
     # Create class using attrs package, will create attributes for all columns and
     # parameters

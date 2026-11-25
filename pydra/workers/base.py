@@ -115,8 +115,8 @@ async def read_and_display_async(*cmd, hide_display=False, strip=False):
             read_stream_and_display(process.stdout, stdout_display),
             read_stream_and_display(process.stderr, stderr_display),
         )
-    except Exception:
-        process.kill()
+    except BaseException:  # including cancellation, e.g. a timeout around the call
+        await _stop_process(process)
         raise
     finally:
         # wait for the process to exit
@@ -125,6 +125,26 @@ async def read_and_display_async(*cmd, hide_display=False, strip=False):
         return rc, stdout.strip(), stderr
     else:
         return rc, stdout, stderr
+
+
+STOP_GRACE = 2.0  # seconds a terminated child has to exit before it is killed
+
+
+async def _stop_process(process, grace: float = None):
+    """Terminate a child process, killing it if it has not exited after ``grace`` s."""
+    if process.returncode is not None:
+        return
+    try:
+        process.terminate()
+    except ProcessLookupError:
+        return
+    try:
+        await asyncio.wait_for(process.wait(), STOP_GRACE if grace is None else grace)
+    except asyncio.TimeoutError:
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
 
 
 async def read_stream_and_display(stream, display):

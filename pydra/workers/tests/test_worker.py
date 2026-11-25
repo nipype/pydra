@@ -18,6 +18,7 @@ from pydra.compose import python
 from pathlib import Path
 from datetime import datetime
 from pydra.engine.result import Result
+from pydra.utils.resources import ComputeResources
 from pydra.engine.tests.utils import (
     need_sge,
     need_slurm,
@@ -240,7 +241,6 @@ def test_wf_in_wf(any_worker, tmpdir):
     assert outputs.out == 7
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf2(any_worker, tmpdir):
     """workflow as a node
     workflow-node with one task and no splitter
@@ -264,7 +264,6 @@ def test_wf2(any_worker, tmpdir):
     assert res.outputs.out == 3
 
 
-@pytest.mark.flaky(reruns=2)  # when dask
 def test_wf_with_state(any_worker, tmpdir):
     @workflow.define
     def Workflow(x):
@@ -341,7 +340,6 @@ def test_slurm_wf_state(tmpdir):
 
 
 @need_slurm
-@pytest.mark.flaky(reruns=3)
 def test_slurm_max_jobs(tmp_path):
     @workflow.define(outputs=["out1", "out2"])
     def Workflow(x, y):
@@ -477,7 +475,6 @@ def Cancel(job_name_part):
 
 
 @pytest.mark.skip(reason="this test is hanging, need to work out why")
-@pytest.mark.flaky(reruns=1)
 @need_slurm
 def test_slurm_cancel_rerun_1(tmpdir):
     """testing that tasks run with slurm is re-queue
@@ -507,7 +504,6 @@ def test_slurm_cancel_rerun_1(tmpdir):
     assert script_dir.exists()
 
 
-@pytest.mark.flaky(reruns=1)
 @need_slurm
 def test_slurm_cancel_rerun_2(tmpdir):
     """testing that tasks run with slurm that has --no-requeue
@@ -828,3 +824,144 @@ def test_bad_byo_worker2():
         match="Worker must be a Worker object, name of a worker or a Worker class",
     ):
         Submitter(worker=BadWorker)
+
+
+def _squeue_job_ids(name):
+    out = sp.run(
+        ["squeue", "-h", "--me", "-n", name, "-o", "%i %t"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    ).stdout.split()
+    return list(zip(out[0::2], out[1::2]))
+
+
+@need_slurm
+@pytest.mark.timeout(300)
+def test_slurm_cancelled_not_requeued(tmp_path):
+    """A cancelled job fails the submission and is not requeued.
+
+    The job is cancelled as soon as it is queued, so the test does not depend on
+    how long it waits to start.
+
+    Only the job id this test submitted is ever cancelled.
+    """
+    import threading
+
+    @python.define
+    def Sleeper(x: int) -> int:
+        time.sleep(120)
+        return x
+
+    name = f"a1-{secrets.token_hex(4)}"
+    seen: list[str] = []
+
+    def cancel_when_running():
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            jobs = _squeue_job_ids(name)
+            if jobs:
+                seen.append(jobs[0][0])
+                sp.run(["scancel", jobs[0][0]], timeout=30)
+                return
+            time.sleep(1)
+
+    thread = threading.Thread(target=cancel_when_running, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(RuntimeError, match="cancelled"):
+            with Submitter(
+                worker="slurm",
+                cache_root=tmp_path,
+                sbatch_args=f"-J {name} --time=00:03:00",
+            ) as sub:
+                sub(Sleeper(x=1))
+    finally:
+        thread.join(timeout=150)
+        try:
+            queued = {j for j, _ in _squeue_job_ids(name)}
+        except Exception:
+            queued = set()
+        for jobid in queued | set(seen):
+            try:
+                sp.run(["scancel", jobid], timeout=30)
+            except Exception:
+                pass
+    assert len(seen) >= 1, "the job was never seen in the queue"
+    jobid = seen[0]
+    records = sp.run(
+        ["sacct", "-j", jobid, "-D", "-X", "-n", "-P", "-o", "State"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    ).stdout.splitlines()
+    assert len(records) == 1, f"job {jobid} was requeued: {records}"
+    assert records[0].startswith("CANCELLED")
+
+
+@need_slurm
+@pytest.mark.timeout(600)
+def test_slurm_allocation_matches_node_resources(tmp_path):
+    """The node's resources, not the definition's, are what Slurm allocates.
+
+    The allocation is read back with ``sacct`` for the one job id this test
+    submitted, and only that id is ever cancelled.
+    """
+
+    @python.define(resources=ComputeResources(cpus=1, mem="64M", time=60))
+    def AddOne(x: int) -> int:
+        return x + 1
+
+    @workflow.define(outputs=["out"])
+    def Wf(x: int):
+        return workflow.add(
+            AddOne(x=x),
+            resources=ComputeResources(cpus=4, mem="128M", time=120),
+        ).out
+
+    name = f"f1-{secrets.token_hex(4)}"
+    jobids: list[str] = []
+    try:
+        with Submitter(
+            worker="slurm",
+            cache_root=tmp_path,
+            sbatch_args=f"-J {name} --time=00:03:00",
+        ) as sub:
+            res = sub(Wf(x=1))
+        assert res.outputs.out == 2
+        jobids = [
+            re.search(r"(?<=slurm-)\d+", f.name).group()
+            for f in (tmp_path / "slurm_scripts").glob("**/slurm-*.out")
+        ]
+        assert len(jobids) == 1, jobids
+        time.sleep(2)  # allow sacct to collect itself
+        (record,) = sp.run(
+            [
+                "sacct",
+                "-j",
+                jobids[0],
+                "-X",
+                "-n",
+                "-P",
+                "-o",
+                "AllocCPUS,ReqMem,Timelimit",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        ).stdout.splitlines()
+        alloc_cpus, req_mem, time_limit = record.split("|")
+        # the definition asked for 1 cpu; hyperthreading can at most double that
+        assert int(alloc_cpus) >= 4
+        assert req_mem.startswith("128M")
+        assert time_limit == "00:02:00"
+    finally:
+        try:
+            queued = {j for j, _ in _squeue_job_ids(name)}
+        except Exception:
+            queued = set()
+        for jobid in queued | set(jobids):
+            try:
+                sp.run(["scancel", jobid], timeout=30)
+            except Exception:
+                pass

@@ -240,7 +240,6 @@ def test_wf_2d_outpasdict(worker: str, tmp_path: Path):
     assert 8 == outputs.out_add2
 
 
-@pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3(worker, tmp_path: Path):
     """testing None value for an input"""
 
@@ -936,7 +935,6 @@ def test_wf_3sernd_ndst_1a(worker: str, tmp_path: Path):
 # workflows with structures A -> C, B -> C
 
 
-@pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3nd_st_1(worker, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the workflow level
@@ -959,7 +957,6 @@ def test_wf_3nd_st_1(worker, tmp_path: Path):
     assert outputs.out[5] == 70
 
 
-@pytest.mark.flaky(reruns=3)  # when dask
 def test_wf_3nd_ndst_1(worker, tmp_path: Path):
     """workflow with three tasks, third one connected to two previous tasks,
     splitter on the tasks levels
@@ -1520,7 +1517,6 @@ def test_wf_ndstinner_4(worker: str, tmp_path: Path):
     assert outputs.out == [12, 22, 32]
 
 
-@pytest.mark.flaky(reruns=3)
 def test_wf_ndstinner_5(worker: str, tmp_path: Path):
     """workflow with 3 tasks,
     the second task has two inputs and inner splitter from one of the input,
@@ -2107,7 +2103,6 @@ def test_wfasnd_wfst_4(worker: str, tmp_path: Path):
 # Testing caching
 
 
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachedir(worker: str, tmp_path: Path):
     """worky with provided cache_root using pytest tmp_path"""
     cache_root = tmp_path / "test_wf_cache_1"
@@ -2128,7 +2123,6 @@ def test_wf_nostate_cachedir(worker: str, tmp_path: Path):
     shutil.rmtree(cache_root)
 
 
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachedir_relativepath(tmp_path, worker):
     """worky with provided cache_root as relative path"""
     cache_root = tmp_path / "test_wf_cache_2"
@@ -2618,7 +2612,6 @@ def test_wf_nostate_cachelocations_taskrerun_wfrerun_propagateFalse(
     assert count_runs(run_log) > runs1
 
 
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
     """
     Two wfs with different input, but the second node has the same input;
@@ -2670,7 +2663,6 @@ def test_wf_nostate_nodecachelocations(worker: str, tmp_path: Path):
     assert len(list(Path(cache_root2).glob("python-*"))) == 1
 
 
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_nodecachelocations_upd(worker: str, tmp_path: Path):
     """
     Two wfs with different input, but the second node has the same input;
@@ -2984,7 +2976,6 @@ def test_wf_nostate_cachelocations_updated(worker: str, tmp_path: Path):
     assert results1.cache_dir != results2.cache_dir
 
 
-@pytest.mark.flaky(reruns=3)
 def test_wf_nostate_cachelocations_recompute(worker: str, tmp_path: Path):
     """
     Two wfs with the same inputs but slightly different graph;
@@ -3480,7 +3471,6 @@ def test_wf_upstream_error2(tmp_path: Path):
     assert "failed with errors" in str(excinfo.value)
 
 
-@pytest.mark.flaky(reruns=2)  # when slurm
 def test_wf_upstream_error3(tmp_path: Path):
     """task2 dependent on task1, task1 errors, task-level split on task 1
     goal - workflow finish running, one output errors but the other doesn't
@@ -4312,7 +4302,6 @@ def test_inner_outer_wf_duplicate(tmp_path: Path):
     assert res.outputs.res2[0] == 23 and res.outputs.res2[1] == 23
 
 
-@pytest.mark.flaky(reruns=3)
 def test_rerun_errored(tmp_path):
     """Test rerunning a workflow containing errors.
     Only the errored tasks and workflow should be rerun"""

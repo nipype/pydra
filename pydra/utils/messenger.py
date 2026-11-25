@@ -3,8 +3,58 @@
 import abc
 import datetime as dt
 import enum
+import functools
+import importlib.resources
+import json
 from pathlib import Path
 import os
+
+
+class ProvenanceContextUnavailable(RuntimeError):
+    """A JSON-LD context referred to by a provenance message could not be loaded."""
+
+
+def pydra_context() -> dict:
+    """The JSON-LD context of pydra's provenance messages, as packaged with pydra."""
+    return json.loads(
+        (importlib.resources.files("pydra") / "schema" / "context.jsonld").read_text()
+    )
+
+
+@functools.cache
+def _packaged_contexts() -> dict:
+    schema = importlib.resources.files("pydra") / "schema"
+    sources = json.loads((schema / "contexts.json").read_text())
+    return {iri: schema / entry["file"] for iri, entry in sources.items()}
+
+
+def document_loader(url, options=None):
+    """A pyld document loader that serves the contexts recorded in
+    ``pydra/schema/contexts.json`` from the package, without the network, and
+    loads any other with pyld's default loader.
+
+    Raises
+    ------
+    ProvenanceContextUnavailable
+        If a context that is not packaged cannot be loaded.
+    """
+    packaged = _packaged_contexts().get(url)
+    if packaged is not None:
+        return {
+            "contentType": "application/ld+json",
+            "contextUrl": None,
+            "documentUrl": url,
+            "document": json.loads(packaged.read_text()),
+        }
+    import pyld as pld
+
+    try:
+        return pld.jsonld.get_document_loader()(url, options or {})
+    except Exception as e:
+        raise ProvenanceContextUnavailable(
+            f"JSON-LD context {url} is not packaged with pydra and could not be "
+            f"loaded: {e}"
+        ) from e
 
 
 def gen_uuid():
@@ -154,7 +204,8 @@ def make_message(obj, context=None):
     obj : :obj:`dict`
         A dictionary containing the non-context information of a message record.
     context : :obj:`dict`, optional
-        Dictionary with the link to the context file or containing a JSON-LD context.
+        Dictionary with the link to the context file or containing a JSON-LD context,
+        by default pydra's packaged context.
 
     Returns
     -------
@@ -162,10 +213,7 @@ def make_message(obj, context=None):
         The message with the context.
     """
     if context is None:
-        context = {
-            "@context": "https://raw.githubusercontent.com/nipype/pydra/"
-            "master/pydra/schema/context.jsonld"
-        }
+        context = pydra_context()
     message = context.copy()
     message.update(**obj)
     return message
@@ -183,6 +231,11 @@ def collect_messages(collected_path, message_path, ld_op="compact"):
         A path with the message file (?TODO)
     ld_op : :obj:`str`, optional
         Option used by pld.jsonld
+
+    Raises
+    ------
+    ProvenanceContextUnavailable
+        If a message refers to a context that is not packaged and cannot be loaded.
     """
 
     import pyld as pld
@@ -195,9 +248,20 @@ def collect_messages(collected_path, message_path, ld_op="compact"):
         with open(f) as fp:
             data.append(json.load(fp))
     if data:
-        records = getattr(pld.jsonld, ld_op)(
-            pld.jsonld.from_rdf(pld.jsonld.to_rdf(data, {})), data[0]
-        )
+        options = {"documentLoader": document_loader}
+        try:
+            records = getattr(pld.jsonld, ld_op)(
+                pld.jsonld.from_rdf(pld.jsonld.to_rdf(data, options)),
+                data[0],
+                options,
+            )
+        except pld.jsonld.JsonLdError as e:
+            cause = e
+            while cause is not None:
+                if isinstance(cause, ProvenanceContextUnavailable):
+                    raise cause from e
+                cause = cause.__cause__ or cause.__context__
+            raise
         records["@id"] = f"uid:{gen_uuid()}"
         with open(collected_path / "messages.jsonld", "w") as fp:
             json.dump(records, fp, ensure_ascii=False, indent=2, sort_keys=False)

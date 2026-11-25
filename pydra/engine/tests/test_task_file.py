@@ -13,7 +13,6 @@ from pydra.engine.tests.utils import (
 )
 
 
-@pytest.mark.flaky(reruns=5)
 def test_input_file_hash_1(tmp_path):
     """input definition with File types, checking when the checksum changes"""
     file = tmp_path / "in_file_1.txt"
@@ -39,7 +38,6 @@ def test_input_file_hash_1(tmp_path):
     assert hash1 != hash3
 
 
-@pytest.mark.flaky(reruns=5)
 def test_input_file_hash_2(tmp_path):
     """input definition with ty.Union[File, ...] type, checking when the checksum changes"""
     file = tmp_path / "in_file_1.txt"
@@ -69,7 +67,6 @@ def test_input_file_hash_2(tmp_path):
     assert hash1 != hash4
 
 
-@pytest.mark.flaky(reruns=5)
 def test_input_file_hash_3(tmp_path):
     """input definition with File types, checking when the hash and file_hash change"""
     file = tmp_path / "in_file_1.txt"
@@ -119,7 +116,6 @@ def test_input_file_hash_3(tmp_path):
     # assert filename in my_inp.files_hash["in_file"]
 
 
-@pytest.mark.flaky(reruns=5)
 def test_input_file_hash_4(tmp_path):
     """input definition with nested list, that contain ints and Files,
     checking changes in checksums
@@ -154,7 +150,6 @@ def test_input_file_hash_4(tmp_path):
     assert hash1 != hash3
 
 
-@pytest.mark.flaky(reruns=5)
 def test_input_file_hash_5(tmp_path):
     """input definition with File in nested containers, checking changes in checksums"""
     file = tmp_path / "in_file_1.txt"

@@ -1,8 +1,10 @@
 import typing as ty
+import warnings
 import inspect
 from typing import dataclass_transform
 import attrs
 from pydra.utils.general import get_fields, asdict
+from pydra.utils.hash import check_code_hash
 from pydra.compose import base
 from pydra.compose.base import (
     ensure_field_objects,
@@ -15,6 +17,7 @@ from pydra.compose.base import (
 
 if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
+    from pydra.utils.resources import ComputeResources
 
 __all__ = ["arg", "out", "define", "Task", "Outputs"]
 
@@ -95,6 +98,10 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    version: str | None = None,
+    resources: "ComputeResources | None" = None,
+    code_hash: str | None = None,
+    checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
     """
     Create an interface for a function or a class.
@@ -115,6 +122,35 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
+    version: str, optional
+        Declared version of the task. When given, the checksum uses the function's
+        module, name and this version in place of the code it reaches (see
+        ``code_hash``), so the version must be changed whenever a change to the code
+        changes its results. The values the code reads (closure cells, globals and
+        the defaults of the functions it calls) are still hashed. The digest of the
+        code (`pydra.utils.hash.code_digest`) is recorded beside each result, and a
+        `pydra.engine.store.DeclaredVersionWarning` is issued when a stored result of
+        the same version was computed from other code, also for workflows and splits
+        reaching the task, which hash it by its version too; ``reuse="exact"`` then
+        recomputes it, other policies reuse it. ``pydracli check-versions`` checks
+        versions against a committed table of digests. Functions defined in ``__main__`` or
+        inside another function are identified only by name, version and the values
+        they read, so a warning is issued for them.
+    resources: ComputeResources, optional
+        What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
+    code_hash: str, optional
+        How far the checksum follows the code the function reaches. ``"function"``
+        hashes its own code and the values it reads (closure cells and globals);
+        ``"module"`` adds the functions and classes it reaches in its own module;
+        ``"user"`` adds all reachable code that is not library code (the standard
+        library, installed distributions and pydra; see ``PYDRA_USER_PACKAGES`` in
+        `pydra.utils.hash`). Library code is identified by its qualified name. By
+        default the ``PYDRA_CODE_HASH`` environment variable, otherwise ``"user"``.
+    checksum: callable, optional
+        A function of the task and its inputs, ``checksum(task, inputs) -> str``, used
+        as the task's ``__checksum__``: its return value is the job checksum and
+        neither the function nor the input values are hashed. It must identify the task as
+        well as its inputs, as jobs with equal checksums share one result and run once
 
     Returns
     -------
@@ -179,9 +215,24 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
             xor=xor,
+            resources=resources,
+            checksum=checksum,
         )
 
         defn.__doc__ = function.__doc__
+        if version is not None and (
+            function.__module__ == "__main__" or "<locals>" in function.__qualname__
+        ):
+            warnings.warn(
+                f"version={version!r} identifies {function.__module__}."
+                f"{function.__qualname__}, which another function of the same name, "
+                "version and values read would share, so their results would be "
+                "reused as one",
+                UserWarning,
+                stacklevel=2,
+            )
+        defn._version = version
+        defn._code_hash = None if code_hash is None else check_code_hash(code_hash)
         return defn
 
     if wrapped is not None:
@@ -193,7 +244,6 @@ def define(
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonOutputs(base.Outputs):
-
     @classmethod
     def _from_job(cls, job: "Job[PythonTask]") -> ty.Self:
         """Collect the outputs of a job from a combination of the provided inputs,
@@ -222,7 +272,6 @@ PythonOutputsType = ty.TypeVar("PythonOutputsType", bound=PythonOutputs)
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class PythonTask(base.Task[PythonOutputsType]):
-
     _executor_name = "function"
 
     def _run(self, job: "Job[PythonTask]", rerun: bool = True) -> None:

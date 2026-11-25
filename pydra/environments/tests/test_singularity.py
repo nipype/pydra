@@ -108,7 +108,7 @@ def test_singularity_st_1(worker, tmp_path):
     )
     assert outputs.stdout[0].strip() == "root"
     assert "/mnt/pydra" in outputs.stdout[1]
-    assert outputs.stdout[2].strip() == "_job.pklz"
+    assert outputs.stdout[2].strip() == ""
     assert outputs.return_code == [0, 0, 0]
 
 
@@ -380,7 +380,7 @@ def test_singularity_cmd_inputspec_copyfile_1(worker, tmp_path):
     assert outputs.stdout == ""
     assert outputs.out_file.fspath.exists()
     # the file is  copied, and than it is changed in place
-    assert outputs.out_file.fspath.parent.parent == tmp_path
+    assert outputs.out_file.fspath.parent.parent.parent == tmp_path
     with open(outputs.out_file) as f:
         assert "hi from pydra\n" == f.read()
     # the original file is unchanged

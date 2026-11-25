@@ -12,6 +12,7 @@ from pydra.compose.base import (
     extract_fields_from_class,
 )
 from pydra.utils.general import attrs_values
+from pydra.utils.hash import check_code_hash
 from pydra.utils.typing import StateArray, is_lazy
 
 if ty.TYPE_CHECKING:
@@ -22,6 +23,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.submitter import NodeExecution
     from pydra.environments.base import Environment
     from pydra.engine.hooks import TaskHooks
+    from pydra.utils.resources import ComputeResources
 
 
 __all__ = ["define", "add", "this", "arg", "out", "Task", "Outputs", "cast"]
@@ -113,6 +115,8 @@ def define(
     auto_attribs: bool = True,
     name: str | None = None,
     xor: ty.Sequence[str | None] | ty.Sequence[ty.Sequence[str | None]] = (),
+    code_hash: str | None = None,
+    checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
     """
     Create an interface for a function or a class. Can be used either as a decorator on
@@ -134,6 +138,19 @@ def define(
         Names of args that are exclusive mutually exclusive, which must include
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
+    code_hash: str, optional
+        How far the checksum follows the code the constructor reaches. ``"function"``
+        hashes its own code and the values it reads (closure cells and globals);
+        ``"module"`` adds the functions and classes it reaches in its own module;
+        ``"user"`` adds all reachable code that is not library code (the standard
+        library, installed distributions and pydra; see ``PYDRA_USER_PACKAGES`` in
+        `pydra.utils.hash`). Library code is identified by its qualified name. By
+        default the ``PYDRA_CODE_HASH`` environment variable, otherwise ``"user"``.
+    checksum: callable, optional
+        A function of the task and its inputs, ``checksum(task, inputs) -> str``, used
+        as the task's ``__checksum__``: its return value is the job checksum and
+        neither the constructor nor the input values are hashed. It must identify the task as
+        well as its inputs, as jobs with equal checksums share one result and run once
 
     Returns
     -------
@@ -204,9 +221,11 @@ def define(
             bases=bases,
             outputs_bases=outputs_bases,
             xor=xor,
+            checksum=checksum,
         )
 
         defn.__doc__ = constructor.__doc__
+        defn._code_hash = None if code_hash is None else check_code_hash(code_hash)
         return defn
 
     if wrapped is not None:
@@ -237,6 +256,7 @@ def add(
     name: str | None = None,
     environment: "Environment | None" = None,
     hooks: "TaskHooks | None" = None,
+    resources: "ComputeResources | None" = None,
 ) -> OutputsType:
     """Add a node to the workflow currently being constructed
 
@@ -252,13 +272,18 @@ def add(
         by default it will be the "native"
     hooks : TaskHooks, optional
         The hooks to run before or after the task, by default no hooks will be run
+    resources : ComputeResources, optional
+        The resources to request for the node, overriding those set when the task was
+        defined
 
     Returns
     -------
     Outputs
         The outputs of the node
     """
-    return this().add(task, name=name, environment=environment, hooks=hooks)
+    return this().add(
+        task, name=name, environment=environment, hooks=hooks, resources=resources
+    )
 
 
 U = ty.TypeVar("U")
@@ -290,7 +315,6 @@ def cast(field: ty.Any, new_type: type[U]) -> U:
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class WorkflowOutputs(base.Outputs):
-
     @classmethod
     def _from_job(cls, job: "Job[WorkflowTask]") -> ty.Self:
         """Collect the outputs of a workflow job from the outputs of the nodes in the
@@ -355,7 +379,6 @@ WorkflowOutputsType = ty.TypeVar("OutputType", bound=WorkflowOutputs)
 
 @attrs.define(kw_only=True, auto_attribs=False, eq=False, repr=False)
 class WorkflowTask(base.Task[WorkflowOutputsType]):
-
     _executor_name = "constructor"
 
     RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("construct",)
