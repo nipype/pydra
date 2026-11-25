@@ -399,6 +399,16 @@ class ResultStore(ty.Protocol):
         `Miss` out; the store check of a workflow job under its lease asks it too."""
         raise NotImplementedError(f"{type(self).__name__} answers through lookup")
 
+    def collect(self) -> ty.Any:
+        """Remove what the store keeps only for a while; its report
+
+        Raises
+        ------
+        TypeError
+            The store keeps nothing to collect.
+        """
+        raise TypeError(f"{type(self).__name__} has no collect")
+
     def present(self, job: "Job") -> bool:
         """Whether the job's own address may hold an entry, one existence check; True by default (read
         to know). A runner without ``lookup_before_dispatch`` calls `find` only for the jobs it

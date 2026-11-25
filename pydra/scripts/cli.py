@@ -137,11 +137,40 @@ def store():
     """Maintain a portable result store."""
 
 
+def _no_work_dir(checksum: str, fingerprint: str, attempt: str) -> Path:
+    raise ValueError("collect does not run jobs, so it names no work directory")
+
+
 def _hook(name: str):
     """The object at the importable dotted ``name``; a class is instantiated with no
     arguments"""
     obj = _import(name)
     return obj() if isinstance(obj, type) else obj
+
+
+@store.command("collect", context_settings=CONTEXT_SETTINGS)
+@click.argument(
+    "root", type=click.Path(exists=True, file_okay=False, resolve_path=True)
+)
+@click.option(
+    "--trust",
+    type=click.Choice(["private", "trusted", "shared"]),
+    default="private",
+    show_default=True,
+    help="What you assert about who can write the root (RFC 0003 section 6.4)",
+)
+def store_collect(root, trust):
+    """Remove what the portable store at ROOT keeps only for a while: staging and
+    quarantined entries, and default work directories, past their ages."""
+    from pydra.engine.portable.store import PortableStore
+
+    kw = {"work_dir": _no_work_dir} if trust == "shared" else {}
+    report = PortableStore(root, trust=trust, **kw).collect()
+    for path in report.removed:
+        click.echo(f"removed {path}")
+    for path, why in report.kept:
+        click.echo(f"kept {path}: {why}")
+    click.echo(f"{len(report.removed)} removed, {len(report.kept)} kept")
 
 
 @store.command("adopt", context_settings=CONTEXT_SETTINGS)
