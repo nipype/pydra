@@ -1623,3 +1623,125 @@ is the fastest per job, then the fastest size measured (`probe_batch`). A declar
 overrides the probe, still capped by the memory bound: the task's ``batch=``, else the site's
 ``MeasuredFit(batch=)``. ``Placement.batch``, which ``plan()`` reports, is the batch that will run;
 ``memory_bound`` is kept beside it.
+
+
+## Amendment (2026-11-25): QOS, allocations, batch probing per call, defaults
+
+**QOS.** This replaces the earlier rule that `SlurmSubstrate` never passes `--qos`. A class's
+`substrate_args` may set `qos` (or `q`); it is passed to `sbatch` as given. The substrate never
+sets one itself, so a site that requires a QOS names it per class. The other substrate-owned
+options listed in section 4.5 stay refused.
+
+**workers_per_device on Slurm.** One `sbatch` job runs one worker, on devices of its own. A class
+with `workers_per_device` above 1 cannot start under `SlurmSubstrate` (`can_start` names the
+setting), rather than being judged against a share of a device it does not share. Starting
+several workers inside one allocation is open (see section 12).
+
+**Allocation end.** A worker reads its allocation's end from `SLURM_JOB_END_TIME`. Once the time
+left holds less than the class's `quantum_s`, or less than `PoolSettings.call_timeout` when that
+is set, it stops claiming and recycles (exit `EXIT_RECYCLE`), so the limit cuts no call and no
+crash is charged. A job's own declared `time` is not in its ticket; jobs longer than the time
+left can still be cut, and are then drained marks under D4.
+
+**Batch by probe, per call.** This refines the 2026-11-24 amendment. The coordinator no longer
+chooses the probed size: under `MeasuredFit` without a declared batch, a placement's `batch` is
+the memory bound and its `probe` is true (`Fit.probing`); the ticket carries both. Each worker
+chooses the size of each call from the calibration as it stands when the call is made
+(`probe_batch`), so one run moves through sizes as its own calls are measured:
+
+- times are seconds per unit (`wall_s / units`), per job where units are unknown;
+- only powers of two up to the ceiling count; a tail call of another size does not;
+- a size measured by fewer than `PoolSettings.probe_samples` calls is asked for again;
+- a doubling is kept while it cuts the time per unit by at least `PoolSettings.probe_gain`;
+  then the fastest measured size;
+- a batched call gives the calibration one sample, not one per job (the per-job copy stays in
+  `samples.jsonl`).
+
+A declared batch (`python.define(batch=)`, else `MeasuredFit(batch=)`) is kept as before,
+capped by the memory bound. `plan()` reports the declared size, or the probe's ceiling with
+`probe` true.
+
+**Defaults and their basis.** Each is a site choice, unmeasured unless stated.
+
+| Setting | Default | Basis |
+|---|---|---|
+| `PoolSettings.probe_samples` | 3 | the median of three calls is the fewest one slow call cannot move |
+| `PoolSettings.probe_gain` | 0.05 | a saving under 5% per unit is within run-to-run noise on a shared GPU |
+| `PoolSettings.target_wall_s` | 600 s | a queue's backlog drains within the 10 min a scheduler typically starts a job in |
+| `PoolSettings.unmeasured_workers` | 1 | without a measured per-job time, one worker measures it before scaling |
+| `PoolSettings.start_deadline_s` | 120 s | Python start-up plus a model import on a loaded node, with margin |
+| `PoolSettings.start_deadline_failures` | 3 | one failure is noise; three in a row is a broken class |
+| `WorkerClass.quantum_jobs` | 64 | a ticket of a few minutes of typical jobs (section 12: unmeasured) |
+| `WorkerClass.quantum_s` | 300 s | a queue is revisited at least every 5 min |
+| `FaultBudgets` | 1/2/3/2/7/7 | the counts section 6 gives per fault kind; a site may raise them |
+| `SlurmSubstrate.submit_timeout`, `squeue_timeout` | 60 s | a slurmctld under load answers within a minute |
+| `nvidia-smi` timeout | 20 s | the first query on a node initialises the driver |
+| `DirectoryCalibration.min_samples` | 3 | as `probe_samples` |
+
+The procgroup stop arithmetic in the earlier table (drain 20 s + TERM 10 s + KILL 10 s, plus
+release patience) is 45 s, not within a 30 s KillWait: claims are released before providers
+stop, so a kill at KillWait loses nothing.
+
+### Moved from docstrings
+
+### 5.3 PoolSettings (docstring before the cut, F16)
+    """How a pool's processes poll, wait and bound calls.
+
+    Attributes
+    ----------
+    lease : LeaseSettings
+        The pool's lease settings; a worker whose four staleness fields differ from ``pool.json``'s
+        refuses to start.
+    poll_s : float
+        Seconds between claim attempts while nothing is claimable.
+    idle_polls : int
+        Polls with nothing claimable after which a worker exits.
+    orphan_after_s : float
+        Seconds without a live coordinator lease after which a worker a substrate started exits.
+    call_timeout : float, optional
+        A call's time bound for a job that declares no ``ComputeResources.time``; None: no deadline.
+    timeout_grace : float
+        Seconds added to a call's deadline, and the time a worker has to stop an expired call before
+        its beater kills it.
+    drain_s : float
+        Seconds a worker given SIGTERM waits for the call in flight before releasing its claims.
+    coordinator_wait : float, optional
+        Seconds a new coordinator waits for another live coordinator of the pool before it raises
+        ``PoolBusy``; None waits without bound.
+    max_queued_jobs : int, optional
+        Jobs written as tickets per queue and not yet settled; the rest wait in the submitting
+        process. None: 4 x ``quantum_jobs`` x ``max_workers`` of the queue's class.
+    target_wall_s : float
+        Seconds the waiting jobs of a queue should take with the workers scaling starts for them,
+        when a per-job time is measured.
+    unmeasured_workers : int
+        Workers wanted per queue when no per-job time is measured.
+    preemption_budget : int
+        Drains (a scheduler's preemption or requeue, a stop) a job's attempts may be cut short by
+        and be placed again uncharged; past it the cut is charged as a crash.
+    recheck_fraction : float
+        The fraction of settled jobs run again alone on a fresh residency and compared with the
+        committed entry (RFC 0005 section 4.4), sampled by checksum; 0: none. The re-check runs in
+        the coordinator's process, on a thread of its own: that process needs the task's
+        providers, its dependencies and, for a GPU task, a device (a re-check it cannot run is
+        recorded as not run).
+    start_deadline_s : float, optional
+        Seconds from the first failure of a streak after which a worker class with waiting jobs is
+        broken, ahead of the ``start_failures`` budget, and its jobs are ``NotRun(held=True)`` with
+        the latest error. A streak is the class's failed starts in a row (with no worker of the
+        class live) or a queue's failed ticket writes in a row; it ends when a worker is ready, a
+        write succeeds, or the class has no waiting jobs. The break is judged only at a failed
+        attempt, never ahead of a due retry. None: only the fault budgets break a class.
+    start_deadline_failures : int
+        Failed attempts a streak needs, as well as ``start_deadline_s``, before it breaks the class.
+    max_warm_sessions : int
+        Warm environments (a started container, Apptainer instance or Lmod resolution, one per
+        environment and resolved reference) a worker keeps open; opening one more closes the least
+        recently used idle one (an idle container holds no device memory and little host memory, so
+        the bound is on processes, mounts and scratch directories).
+
+    Every default and its derivation are in RFC 0005 section 5.3.
+    """
+
+
+probe_samples=3: the median of three calls is the fewest that a single slow call cannot move (unmeasured site choice). probe_gain=0.05: a doubling that saves under 5% per unit is within run-to-run noise on a shared GPU (unmeasured).
