@@ -1,7 +1,7 @@
 import logging
 import inspect
 import typing as ty
-from copy import copy, deepcopy
+from copy import copy
 from collections import defaultdict
 from typing import Self
 import attrs
@@ -84,8 +84,9 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
         """
 
         # Check the previously constructed workflows to see if a workflow has been
-        # constructed for the given set of inputs, or a less-specific set (i.e. with a
-        # super-set of lazy inputs), and use that if it exists
+        # constructed for exactly the given set of non-lazy inputs. A graph built with
+        # more inputs lazy is never reused, as the workflow constructor may branch on
+        # the concrete value of an input
 
         non_lazy_vals = {
             n: v
@@ -107,20 +108,6 @@ class Workflow(ty.Generic[WorkflowOutputsType]):
                 and non_lazy_hash in cached_tasks[non_lazy_keys]
             ):
                 return cached_tasks[non_lazy_keys][non_lazy_hash]
-            # Check for supersets of lazy inputs
-            for key_set, key_set_cache in cached_tasks.items():
-                if key_set.issubset(non_lazy_keys):
-                    subset_vals = {
-                        k: v for k, v in non_lazy_vals.items() if k in key_set
-                    }
-                    subset_hash = hash_function(subset_vals, cache=hash_cache)
-                    if subset_hash in key_set_cache:
-                        wf = deepcopy(key_set_cache[subset_hash])
-                        for key in non_lazy_keys - key_set:
-                            # Set any additional non-lazy inputs that were not in the
-                            # cached workflow.
-                            setattr(wf.inputs, key, non_lazy_vals[key])
-                        return wf
 
         # Initialise the outputs of the workflow
         outputs = task.Outputs(
