@@ -1197,3 +1197,590 @@ more threads than `max_threads`) fails only that group's jobs.
 
 
 index: with index=None the loop iterates a pure body, and a round whose inputs equal an earlier round's is served that round's result. max_rounds is only a stop, which sizes nothing.
+
+
+## Amendment (2026-11-25, round 2): progress as a count, the R7 split
+
+**Progress.** `GraphRunner.ready` repeats its pass until a pass hands out a job or changes nothing.
+It now compares a count of changes (`pydra.engine.progress`), not a snapshot of the graph: the node
+tables (`successful`, `errored`, `unrunnable`, `queued`, `blocked`), a node's mode and partial state,
+a partial node's version and seal, a frame's state, a loop's rounds and stop, and the runner's
+handed, checked and reading sets count each change in the thread that makes it. Reading the count
+walks no node, so a pass costs what `_runnable` costs. A runner is driven from one thread; a change
+made by planning (`plan`'s scratch views) only adds a pass.
+
+**R7 in three PRs.** The driver model, `max_concurrent` inside a batching `WorkerExecutor` (with the
+driver's backlog), and releasing workflow leases off the event loop are separate branches; the
+second and third each add their tests.
+
+### Moved from docstrings (round 2)
+
+The text the cut removed, by module and name, as it stood at the stack top.
+
+- `pydra/engine/absent.py` `<module>`:
+
+  A task may return :class:`Absent` for any output. A reader's input field declares what it does with
+  one through its ``absent`` attribute: ``"propagate"`` (the default: the element completes absent
+  without being looked up, shared, dispatched or committed), ``"accept"`` (the value is passed as
+  resolved), ``"drop"`` (a combined value is passed without its absent elements) or ``"fill"`` (each
+  is replaced with the field's ``fill``). A single value that is an ``Absent`` propagates under
+  ``"drop"``, as there are no elements to drop. An ``Absent`` left inside the value of a field that
+  does not accept it raises :class:`AbsentNotAccepted`. The triple of an ``Absent`` that is a field's
+  whole value has the element index -1 (``WHOLE``).
+  Outside the runner's resolution of an element, an ``Absent`` passes the type coercion of an output
+  field and of an input field whose ``absent`` is ``"accept"`` or ``"drop"``.
+  Every read of a node that is absent as a whole (a splitter input resolved to an ``Absent``, or its
+  state inherits such a node's) is that ``Absent``. A combining reader then applies its mode:
+  ``"accept"`` passes the ``Absent``, ``"drop"`` an empty list, ``"fill"`` the fill, and
+  ``"propagate"`` completes the reader absent.
+  Per element (a partial node), an upstream element whose output is an ``Absent`` gives that element's
+  sub-state no elements. A read of a group all of whose sub-states are absent is the ``Absent``, and
+  the reader applies its mode as above; a read of every element holds only the elements that exist. A
+  partial node downstream forms the group too, from the absent sub-states its sources record. A
+  barrier node, or a barrier reader of a partial node, reads such an element as an empty sub-state. A
+  combine that would keep its group where no chain of partial nodes forms it raises
+  ``AbsentGroupError``.
+  A task whose checksum may not see an accepted or dropped ``Absent`` (a supplied checksum, or a field
+  the checksum skips), or that filled one, has :func:`absence_suffix` of :func:`absence_triples`
+  appended to its job checksum.
+
+- `pydra/engine/absent.py` `Absent`:
+
+  cause: It enters the hash
+
+- `pydra/engine/absent.py` `absence_identity`:
+
+  Different tasks reading the same ``Absent`` differ; the same task reading it at several elements has
+  one identity, as its results are equal.
+
+- `pydra/engine/absent.py` `absence_suffix`:
+
+  The digest is taken over the RFC 8785 canonical JSON of ``[[field, {"$int": "<index>"}, cause],
+  ...]``, the encoding RFC 0004's key record carries the triples in, so a store can recompute the
+  suffix from the record. The suffix holds no path separator, so the checksum stays one path
+  component.
+
+- `pydra/engine/absent.py` `absence_triples`:
+
+  These are the absent values a field filled, and those it accepted or dropped (a field's whole value
+  has index -1, an element of a combined value its position before dropping) restricted to the fields
+  the checksum does not hash: every field of a task with a supplied checksum (``__checksum__`` or
+  ``checksum=``), else the fields with ``container_path``. A task whose checksum pydra computes from
+  hashed values sees an ``Absent`` through its ``cause``, so it has none. Besides those the runner
+  recorded, an ``Absent`` a field holds as a constant (a node of a nested workflow given one through
+  the workflow's input) counts, at index -1 or its position in a list.
+
+- `pydra/engine/drivers.py` `drive`:
+
+  The jobs of each round are grouped by the executor the router names, and handed to it in node order,
+  one call per job unless the executor batches. Outcomes are reported onto this loop. The driver keeps
+  no checksum table: the runner settles twins itself. With ``on_error="fail_fast"`` the first failure
+  stops the run. On the way out, whether complete, failed or interrupted, every open handle is
+  cancelled and the runner's leases are released (off the loop). The executors are never closed:
+  whoever made them closes them, so an executor that holds warm workers (a ``WarmPool``) keeps them
+  from one run to the next. Failures are left on ``runner.errors``.
+  ``max_concurrent`` caps the jobs in flight through ``runner.ready(limit)``, unless an executor
+  batches (``batches = True``): the runner is then asked for every ready job, so a node's elements
+  stay in one array or batch, and the batching executor caps inside itself, each to its own jobs. Jobs
+  routed to the other executors then wait in the driver for the cap, which counts only theirs, so the
+  run as a whole can have more than ``max_concurrent`` jobs in flight. Under ``fail_fast`` an executor
+  whose ``serial`` attribute is true (a synchronous worker) has one job in flight at a time, so none
+  starts after the first failure.
+  router: An exception it raises is the job's failure
+
+- `pydra/engine/drivers.py` `drive_inline`:
+
+  With ``on_error="fail_fast"`` the first failure stops the run and its exception is raised as the
+  task raised it; no job is started after it. Otherwise jobs that do not read a failed job still run,
+  and the failures are left on ``runner.errors``. The driver keeps no checksum table: the runner
+  settles twins itself.
+
+- `pydra/engine/executor.py` `Executor`:
+
+  Every job submitted is reported exactly once through the callable given to :meth:`bind`, as a
+  ``Result``, a :class:`~pydra.engine.runner.Failed` or a :class:`~pydra.engine.runner.NotRun` (a job
+  the worker cancelled). The callable may be invoked from any thread. :meth:`cancel` is called only as
+  the run ends, after ``runner.close()``: the jobs of a cancelled handle are not reported, and are
+  recorded ``"stopped"`` where their workflow failed. Cancelling in the middle of a run is not
+  supported.
+
+- `pydra/engine/executor.py` `InlineExecutor`:
+
+  worker_for: Without it every job runs on ``worker``
+
+- `pydra/engine/executor.py` `WorkerExecutor`:
+
+  ``worker.run(job)`` is scheduled for each job, in one go for the jobs of a ``submit`` call, and the
+  job is reported when it ends. A worker that returns ``True`` instead of a result (slurm, sge) is
+  read back with ``job.result()``, retried with backoff for up to ``visibility_timeout`` seconds, then
+  reported :class:`~pydra.engine.runner.Failed`. A synchronous worker runs on a helper thread. A
+  worker declaring ``batches`` (slurm, sge) is given the jobs of a ``submit`` call together through
+  ``submit_many(jobs)``, so it can place them in arrays. One declaring ``reports_done`` is also passed
+  ``done(job, outcome)``, so a job is reported when it ends rather than when the round does.
+  A batching executor is driven with no limit (RFC 0005 section 7.1) and caps inside itself: it gives
+  the worker at most ``max_concurrent`` jobs at a time, in node order, and holds the rest of a round
+  until jobs end (as each is reported through ``done``, or when its ``submit_many`` call returns). The
+  cap is this executor's own: a run with several batching executors, or one beside executors capped by
+  the driver, can have more than ``max_concurrent`` jobs in flight in all.
+
+- `pydra/engine/job.py` `Job._finish_workflow`:
+
+  Returns the error of the workflow (``error``, or the one raised building its outputs), None if it
+  succeeded. Raises what the commit raises (`LeaseLost`), after which nothing is stored.
+
+- `pydra/engine/job.py` `Job._pickle_to_commit`:
+
+  A store with work directories is always given the job, which names the directory; it never writes
+  the job to an entry.
+
+- `pydra/engine/job.py` `Job._record_pool_facts`:
+
+  They enter the execute context only through the store (a `PortableStore` whose identity lists
+  ``pool`` in ``recorded_only``).
+
+- `pydra/engine/job.py` `Job._reusable`:
+
+  A store with ``find`` answers through its reuse hook (RFC 0003 section 7.1): a `Verify` marks the
+  job to verify against that entry (and the job runs), anything else clears the mark. A job
+  ``looked_up`` before dispatch is not looked up again under a lease that excludes nobody
+  (``exclusive`` False): it keeps the mark that lookup set. An exclusive lease may have been held by a
+  process that published the job since, so it looks again (RFC 0003 section 5.3). A work directory's
+  ``_committed.json`` is the outcome of an earlier run and is never served to a new one. A deferred
+  workflow job (`deferred`) is never served whole.
+
+- `pydra/engine/job.py` `Job._run_task`:
+
+  The state of each provided field is bound for the duration of the run and handed to the task through
+  ``provided_values``; a task with no provided field costs nothing here.
+
+- `pydra/engine/job.py` `Job._start_workflow`:
+
+  Returns the result the workflow's outputs are later put in (see `_finish_workflow`).
+
+- `pydra/engine/job.py` `Job.context`:
+
+  It selects the job's slot in the store, is recorded on its result and is what a later job's context
+  is compared with, so every process uses this one object. Building it reports a declared version
+  whose stored results were computed from other code (see `pydra.engine.store.check_declared_code`). A
+  store with an ``identity`` supplies the context (``identity.context(job, "lookup")``).
+
+- `pydra/engine/job.py` `Job.record`:
+
+  ``Job.record``, ``Job.checksum`` and ``PydraIdentityV2.key`` use the carried record and never
+  rebuild it.
+
+- `pydra/engine/job.py` `Job.resolved`:
+
+  It is resolved again when the job's environment is replaced.
+
+- `pydra/engine/job.py` `Job.resolves_reference`:
+
+  A python task has nothing to resolve, whatever environment it was given.
+
+- `pydra/engine/job.py` `Job.result`:
+
+  settled: Otherwise nothing found is None, a job not yet run.
+
+- `pydra/engine/loop.py` `<module>`:
+
+  A loop is a workflow job whose graph the runner grows one round at a time (see
+  :mod:`pydra.engine.runner`): round ``r<k+1>`` is added only once round ``r<k>`` is done and its
+  ``until`` output is false.
+
+- `pydra/engine/loop.py` `LoopConstructor`:
+
+  It is hashed as the loop's :class:`LoopSpec`, so the loop job's checksum covers the body's
+  definition and the loop's parameters.
+
+- `pydra/engine/loop.py` `decide`:
+
+  The tests are taken in order: an ``Absent`` until, a true until, a round whose checksum an earlier
+  round of the loop had (under ``index=None`` the loop's state repeats from there, so until can never
+  become true; a fixed point is the cycle of length one), and ``max_rounds``
+
+- `pydra/engine/node.py` `Node.gates`:
+
+  A lazy gate is an input of the node, so the node takes its upstream's state as it would a data
+  input's
+
+- `pydra/engine/node.py` `check_gate`:
+
+  A ``bool`` is a workflow input whose value is known when the workflow is constructed. A lazy field
+  typed ``Any`` passes, and its value is checked when it is read: an external driver's predicate port
+  may be typed ``Any`` (RFC 0002 section 3.5).
+
+- `pydra/engine/partial.py` `<module>`:
+
+  A :class:`~pydra.engine.runner.NodeExecution` classifies itself once its upstream nodes have started
+  (:func:`classify`) and, when it is partial, delegates its blocks, element keys, groups and seal to a
+  :class:`PartialExpansion`. The index algebra itself (paths, entries, the RPN evaluation) is in
+  :mod:`pydra.engine.state`.
+  Terms ----- path A tuple naming a splitter field through the prev-state terms that lead to it:
+  ``("_A", "A.x")`` is field ``A.x`` reached through the prev-state term ``_A``. element key
+  (``state_key``) The coordinates of an element, one per path of ``elem_paths``. It never changes; its
+  flat ``state_index`` is assigned when the node is sealed. block One combination of the final keys of
+  the node's sources (its inner sources, and the partial nodes it reads through prev-state terms).
+  settled / sealed Settled: every element the node will have is known. Sealed: settled, with every
+  block expanded and every source sealed.
+
+- `pydra/engine/partial.py` `PartialExpansion._absent_groups`:
+
+  A group that keeps an axis inside the absent sub-state has no such group. A group that keeps an axis
+  of another source cannot be enumerated, so it is refused as a block error (``AbsentGroupError``) and
+  the node never seals
+
+- `pydra/engine/partial.py` `PartialExpansion.expand_ready`:
+
+  Only the blocks that may have changed since the last call are visited (``_candidates``)
+
+- `pydra/engine/partial.py` `PartialExpansion.legacy_prepare`:
+
+  Returns True, or the reason it cannot be (a ragged or combined source, or an order today's ``State``
+  gets wrong)
+
+- `pydra/engine/plan.py` `PlanNode`:
+
+  state: a workflow job whose lease another process holds; not known yet (a workflow job not expanded,
+  a split over an upstream output); or absent as a whole (RFC 0002 section 2.3(a)), with no elements
+  ``looping``: an entered loop (RFC 0002 section 2.3(d)) and its live rounds, whose total is never
+  predicted (``elements`` is None)
+
+- `pydra/engine/plan.py` `_elements`:
+
+  A job is formed only when every upstream element it reads is in the upstream node's ``successful``:
+  a job handed out and not yet reported is never read, and nothing is kept on a live node. ``live`` is
+  the node itself, whose tables say which elements are finished and which jobs exist when ``view`` is
+  a copy of a started partial node.
+
+- `pydra/engine/plan.py` `_hits`:
+
+  A store's own ``expected_hits(jobs)`` answers for all of them, unless it has the finer ``recorded``
+  (``PickleStore``), which names the recorded jobs so the rest can be looked up.
+
+- `pydra/engine/plan.py` `_view`:
+
+  The copy has its own ``State`` and, for a partial node, its own blocks. A copy of a partial node
+  expands every block whose upstream elements are in the upstream nodes' ``successful``, as the next
+  ``ready`` would, including the blocks of a live partial node that ``ready`` has not expanded yet;
+  its element keys are the live node's.
+  No job table of a live node is written (``_tasks``, ``blocked``, ``queued``, ``successful``,
+  ``errored``) and no in-flight result is read. Reading a live partial node (its ``done``, ``settled``
+  or a whole read's seal check) may advance its derived bookkeeping: registering blocks for source
+  keys that exist, closing groups, sealing (which assigns ``state_index`` to its jobs), and recording
+  an inherited failed block in ``unrunnable``. Each step is monotone and a function of tables
+  ``plan()`` does not write, so the next ``ready()`` would make the same change. A barrier copy may
+  also prepare the ``State`` of a sealed partial upstream, as its seal-time check does.
+
+- `pydra/engine/runner.py` `<module>`:
+
+  Drivers (see :class:`~pydra.engine.submitter.Submitter`) loop over a :class:`GraphRunner`, taking
+  the jobs it hands out, running them and reporting each outcome.
+
+- `pydra/engine/runner.py` `AbsentNode`:
+
+  It has no elements, so no job of it is dispatched or settled; this is its record.
+
+- `pydra/engine/runner.py` `GateTypeError`:
+
+  It is raised from :meth:`GraphRunner.ready`, not recorded as the element's resolution error
+
+- `pydra/engine/runner.py` `GraphRunner`:
+
+  A driver calls :meth:`ready` for the jobs to run, runs them however it chooses, reports each with
+  :meth:`complete`, and repeats until :attr:`done`. The runner reads the store, but never runs a leaf
+  job.
+  The runner expands nested workflows itself, so :meth:`ready` returns the leaf jobs of every level.
+  For each workflow job it takes the lease one attempt at a time (a job whose lease another process
+  holds is waited for: :attr:`Round.retry_after`), checks the store, expands the workflow and, when
+  its nodes are done, commits its result. A driver ends with :meth:`close`, which releases the leases
+  of unfinished workflow jobs.
+  Every job the runner completes itself is reported in :attr:`Round.settled`: read from the store,
+  shared with a job of the same checksum (the same-checksum table is the runner's, so a driver never
+  receives a twin to dispatch), or a stored workflow job. Every element marked unrunnable is reported
+  once in :attr:`Round.unrunnable`. An outcome is a ``Result``, a :class:`Failed` or a
+  :class:`NotRun`; a run whose only remaining jobs are ``NotRun`` is :attr:`done`, lists them in
+  :attr:`not_run` and is incomplete, not failed.
+  The runner is not thread-safe: every call is made from one thread, the driver's, and an executor
+  that reports from another thread has its outcomes marshalled to it.
+  submitter: Without it a ``debug`` submitter over ``store`` is created
+
+- `pydra/engine/runner.py` `GraphRunner._name_stopped`:
+
+  An element that completed has its own outcome, and one never handed out (blocked behind an
+  unfinished element, or released but held back by the ``ready`` limit) is not an entry: the driver
+  reports it as unrunnable.
+
+- `pydra/engine/runner.py` `GraphRunner._progress`:
+
+  ``ready`` repeats its pass until a pass hands out a job or leaves the count unchanged.
+
+- `pydra/engine/runner.py` `GraphRunner._read_store`:
+
+  A store that `finds` (`PortableStore`) is asked that instead (RFC 0002 section 3.1): a `Hit` is
+  settled, a `Verify` is dispatched with ``job.verify`` set, a `Miss` is dispatched. Without
+  ``lookup_before_dispatch`` a job whose own address holds no entry (`present`) costs one existence
+  check and is dispatched. A job read once without a result is not read again while the ``ready``
+  limit holds it back.
+
+- `pydra/engine/runner.py` `GraphRunner._read_succeeded_jobs`:
+
+  Each job costs one existence check of its own record (`PickleStore.read_succeeded`). A job read this
+  way is complete: its result is cached on it and it is not dispatched, so it takes no lease. A job
+  without a record (its slot has errored, is running, is in a read-only cache or was written before
+  records existed), or whose result the store's ``lookup`` does not return, returns errored or returns
+  from another context, is dispatched and runs under its lease as before. A store without records
+  dispatches every job.
+
+- `pydra/engine/runner.py` `GraphRunner._release_node`:
+
+  Its predecessors must have been released before it.
+
+- `pydra/engine/runner.py` `GraphRunner.close`:
+
+  Idempotent; a driver calls it however the run ends
+
+- `pydra/engine/runner.py` `GraphRunner.complete`:
+
+  outcome: A :class:`Failed` is recorded as the job's error and the elements that read the job become
+  unrunnable. A ``Result`` is held on the job as given (whatever attributes it carries stay on it), so
+  readers use it without a store read; an errored one is a failure of the run. A :class:`NotRun`
+  leaves the job pending, its readers blocked and no error recorded, until :meth:`retry`. The twins
+  held behind the job take a ``Result`` or ``Failed`` as theirs.
+
+- `pydra/engine/runner.py` `GraphRunner.done`:
+
+  It stays False while a settled job, an unrunnable element or an absent node has not yet been
+  reported by :meth:`ready`, such as a twin shared by the last :meth:`complete`
+
+- `pydra/engine/runner.py` `GraphRunner.plan`:
+
+  No job is released, handed out or settled, no lease is taken and no live node or its ``State`` is
+  written, so a planned run ends as an unplanned one (up to the classification of finished jobs that
+  :attr:`NodeExecution.done` performs). A workflow job waiting for its lease is ``waiting``, one not
+  yet tried is ``deferred``. Nodes that are done are not listed.
+  A job is formed only from upstream elements the runner has already accepted, never from one in
+  flight, so a node behind a running one is counted from its element count and not from stored
+  results. Cost: one checksum per formable element, and for the store's records one
+  ``expected_hits(jobs)`` call (``PickleStore``: a single listing of its record directory) or one
+  existence check per element. The submitter's router is called once per node, with a real job when
+  one can be formed, so a stateful router sees these calls.
+  executors: one with a ``place(jobs)`` method is asked where the node's unfinished elements would
+  run, and its answer is carried as :attr:`PlanNode.placement`
+
+- `pydra/engine/runner.py` `GraphRunner.read_off_thread`:
+
+  A job whose own address holds an entry is not handed out until its read ends; ``notify`` is called
+  (from the helper thread) as each ends, and the next :meth:`ready` settles it or hands it out.
+  :attr:`reading` counts the reads not yet taken up. ``readers`` is how many reads run at once
+  (default `STORE_READERS`).
+
+- `pydra/engine/runner.py` `GraphRunner.ready`:
+
+  Each released element is taken through the store (a success record, then ``lookup`` when
+  ``lookup_before_dispatch``) and the same-checksum table: a twin of a job whose outcome is known is
+  settled at once, a twin of a job handed out and not yet reported is held and settled when that job's
+  outcome is reported, and the rest are handed out, each once, with a fresh ``job.attempt``.
+  limit: A driver of an executor with ``batches = True`` passes none, and the executor caps inside
+  itself; so does an external driver.
+  Round: Each loop adds at most ``max_advances`` rounds per call, so a loop replayed from the store
+  returns to its driver between them; the rounds a loop no longer needs are released at the end of the
+  call
+
+- `pydra/engine/runner.py` `GraphRunner.release_off_thread`:
+
+  The driver then awaits :meth:`released` once it has called :meth:`close`.
+
+- `pydra/engine/runner.py` `GraphRunner.upstream`:
+
+  The index is None for an upstream node without a state and for an input that reads the upstream
+  whole (combined, or the sequence a splitter splits over).
+  It is valid from the job's hand-out until its outcome is reported: a loop releases its older rounds
+  (RFC 0002 section 2.3(d)).
+
+- `pydra/engine/runner.py` `NodeExecution`:
+
+  A node is classified once its upstream nodes have started (``mode``):
+  * ``"static"``: its elements are known when it starts, indexed by int as before; * ``"partial"``: it
+  splits over an upstream output (or reads a partial node through its state), so it is expanded one
+  *block* per upstream element as each succeeds. Its elements are keyed by ``state_key``, a tuple of
+  coordinates that never changes; ``state_index`` is filled in when the node is *sealed* (every block
+  expanded); * ``"barrier"``: a shape that cannot be expanded per block, which waits for every
+  upstream node to be done as before; * ``"error"``: a combiner that cannot apply, reported as a
+  resolution error.
+
+- `pydra/engine/runner.py` `NodeExecution._absent_axes`:
+
+  Each maps to whether a reader combining it forms the absent group (a chain of partial nodes does)
+  and the upstream node whose element was absent
+
+- `pydra/engine/runner.py` `NodeExecution._become_absent`:
+
+  Only called before the node has an element (a partial node that has expanded no block)
+
+- `pydra/engine/runner.py` `NodeExecution._release`:
+
+  An element whose propagating input holds an ``Absent`` completes absent at once: it is never looked
+  up, shared, dispatched or committed.
+
+- `pydra/engine/runner.py` `NodeExecution._resolve`:
+
+  A whole-value ``Absent`` propagates under ``"drop"`` too, as it has no elements to drop.
+  propagated: None if it runs
+
+- `pydra/engine/runner.py` `NodeExecution.settled`:
+
+  A node that is not partial is settled once started
+
+- `pydra/engine/runner.py` `NotRun`:
+
+  The job stays pending and its readers stay blocked until :meth:`GraphRunner.retry` hands it out
+  again; no error is recorded.
+
+- `pydra/engine/runner.py` `Settled`:
+
+  how: A gated or absent job was never looked up, shared or committed
+
+- `pydra/engine/runner.py` `_Frame`:
+
+  The root frame is the runner's own task, with a job only when the runner is given one.
+
+- `pydra/engine/runner.py` `accept_found`:
+
+  ``complete`` says ``found`` is the answer of ``find(job)``: a job it does not serve is marked
+  ``looked_up``.
+
+- `pydra/engine/runner.py` `find_before_dispatch`:
+
+  ``(None, False)`` when there is nothing at the address or the store cannot be read (the job is then
+  looked up under its lease).
+
+- `pydra/engine/runner.py` `result_error`:
+
+  The recorded traceback is kept as ``recorded_traceback``.
+
+- `pydra/engine/state.py` `expand_rpn`:
+
+  ``*`` is an outer product with the left operand outer, ``.`` pairs the entries of its operands,
+  which must be equally many. The result is in the order today's ``State.splits`` enumerates the same
+  splitter.
+
+- `pydra/engine/submitter.py` `RunIncomplete`:
+
+  The run is incomplete, not failed, and a later run resumes it from the store.
+
+- `pydra/engine/submitter.py` `Submitter`:
+
+  cache_root: Under the default ``store="portable"`` it is the root of a
+  :class:`~pydra.engine.portable.store.PortableStore` opened as ``private`` (owned by the current
+  user, writable by no one else) that may hold pickles: it must be empty or such a root, and is by
+  default ``store`` in the user cache directory (see :func:`~pydra.utils.general.default_store_root`).
+  Under ``store="pickle"`` it holds :class:`~pydra.engine.store.PickleStore` slots and is by default
+  ``run-cache`` there; loading from such a cache unpickles its files, so pointing Pydra at it trusts
+  everyone who can write to it with code execution as the reading user: only use caches whose writers
+  you trust. Given a store object (or an executor's store) and no ``cache_root``, it is that store's
+  root when the store has one a job may write to (a ``PickleStore``, or a private or trusted
+  ``PortableStore``), so a job run on another host keeps its run files where the store is; otherwise
+  ``run-cache`` in the user cache directory
+  worker: It runs every job the router does not send elsewhere, and is available to the router under
+  the name ``"default"``. An executor object (:class:`~pydra.engine.executor.Executor`, such as a
+  :class:`~pydra.workers.pool.pool.WarmPool`) is handed each run's jobs itself; it belongs to its
+  caller, who closes it, so its workers stay resident from one call to the next, and its store, if it
+  has one, is the submitter's. ``"pool"`` makes a ``WarmPool`` over the submitter's store from
+  ``**kwargs`` (``root``, ``classes`` and its other parameters; ``substrate`` defaults to a
+  ``LocalSubstrate``), which the submitter closes when it is closed. Several submitters may run on one
+  ``WarmPool`` at once: each run receives its own jobs' outcomes
+  workers: The name ``"default"`` is reserved for ``worker``
+  router: By default every job goes to ``worker``. See :func:`pydra.utils.routing.tag_router`
+  readonly_caches: Under ``store="portable"`` each is a portable root read as ``shared`` (its pickle
+  members are never opened) unless given as a :class:`~pydra.engine.portable.trust.Root` with another
+  trust. Under ``store="pickle"`` they are unpickled like ``cache_root``, so they trust everyone who
+  can write to them with code execution as the reading user: only list caches whose writers you trust
+  max_concurrent: A batching worker (one with ``submit_many``, such as slurm or sge) applies it inside
+  its executor, to its own jobs only; the other workers share the cap the driver applies. A run that
+  routes jobs to several batching workers, or to a batching worker beside other workers, can therefore
+  have more than ``max_concurrent`` jobs in flight in all
+  messenger: Saved in the `audit` attribute. See available flags at
+  :class:`~pydra.utils.messenger.Messenger`.
+  messengers_args: Saved in the `audit` attribu
+  clean_stale_locks: A lease whose holder stopped renewing it is taken over once it is older than
+  ``stale_after`` (see :class:`~pydra.engine.lease.LeaseSettings`), whichever host left it
+  store: ``"pickle"`` a :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
+  ``readonly_caches``; or a store object, which holds its own roots (a portable root on shared storage
+  is passed this way, with ``trust="shared"`` and a ``work_dir``)
+  reuse: A result whose context holds an unknown version is reused by no other process under
+  ``"consistent"`` or ``"exact"``. Set the policy on the store itself when passing ``store``
+  on_error: By default (None), the mode of the loop that expands the workflow: "fail_fast" for a
+  synchronous ``worker`` such as *debug*, otherwise "raise_at_end" (workflows are always expanded by
+  ``worker``, never routed, so the ``on_error`` attribute holds the mode used). Under "fail_fast" jobs
+  that are already running on an asynchronous worker are not stopped (cancelling their futures does
+  not stop the executor's processes), so they finish after the call returns, and their lock files
+  remain until they do or until the pool is torn down with ``shutdown(cancel_futures=True)``
+  telemetry: The ``NO_ET`` environment variable also turns the check off
+  chdir: With ``chdir=False`` Python and workflow tasks run in the caller's working directory and the
+  process directory never changes, so several jobs can share one process. Shell tasks run their
+  command with the cache directory as its working directory, and relative outputs of shell tasks are
+  resolved under it. A relative path a Python function writes lands in the caller's directory, not the
+  job's cache directory, and is not moved: another job can overwrite it, so a cache hit can return a
+  different file's content (a warning is emitted when a ``FileSet`` output lies outside the cache
+  directory). The ``pre_run_task``/``post_run_task`` hooks see the caller's directory, and audit
+  messages without an explicit ``message_dir`` go to ``<cache_dir>/messages``
+  providers: Under ``debug`` the submitter holds one ``ResidentSet`` for its lifetime, so the state a
+  provider loads is reused by later calls; under ``cf`` each process has its own
+
+- `pydra/engine/submitter.py` `Submitter._failed_here`:
+
+  Under a store with work directories that is a failure recorded for this attempt, never what the
+  store holds at the job's address, which an earlier run may have stored; the job is then marked
+  errored so that its result is the errored one.
+
+- `pydra/engine/submitter.py` `Submitter._served`:
+
+  A `Verify` marks the job, which then runs; a job given the answer of ``find(job)`` is marked
+  ``looked_up`` (see `Job.looked_up`).
+
+- `pydra/engine/submitter.py` `Submitter.expand_workflow`:
+
+  Use a :class:`~pydra.engine.runner.GraphRunner` with :func:`~pydra.engine.drivers.drive_inline`
+
+- `pydra/engine/submitter.py` `Submitter.route_name`:
+
+  Only leaf jobs are routed: a workflow job is expanded by the submitter's own ``worker``, whatever
+  its resources, and its nodes are placed individually.
+
+- `pydra/engine/submitter.py` `_make_private_dir`:
+
+  An existing directory is left as it is.
+
+- `pydra/engine/submitter.py` `_portable_store`:
+
+  On Windows, where a shared root is unsupported (RFC 0003 section 9), it is read ``private``, which
+  is accepted only under ``%LOCALAPPDATA%``; elsewhere it is skipped with a warning.
+
+- `pydra/engine/submitter.py` `check_identity_marker`:
+
+  When it names an older scheme, or is missing from a root that holds slots, log one line (their
+  results are recomputed once, as every key changed) and write it. A marker naming a newer or an
+  unknown scheme is left as it is, with one line, so installs sharing a cache never flip it; an empty
+  or garbled one (not ``<name>@<N>``) counts as missing. One read when the marker is current; a root
+  that cannot be written is left as it is. Each root is logged at most once per process.
+
+- `pydra/engine/workflow.py` `Workflow.add`:
+
+  when: A gate that is itself ``Absent`` propagates
+
+- `pydra/utils/reach.py` `<module>`:
+
+  A development tool: it runs a Python task once under `sys.setprofile` and lists the user functions
+  that ran but that the code walk of `pydra.utils.hash` did not reach, which are the places where
+  ``getattr``, ``importlib`` or a registry hides a dependency. It is never used while a workflow runs.
+
+- `pydra/utils/reach.py` `reach_report`:
+
+  Everything runs in this process; code run in a thread is profiled, code run in another process is
+  not.
+  Raises: TypeError: ``task`` is not a Python task class Exception: whatever building the task or the
+  function raises
+
+- `pydra/utils/resources.py` `ComputeResources`:
+
+  The resources are scheduler metadata: they never enter a task's checksum.
