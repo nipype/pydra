@@ -66,6 +66,8 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "exc",
         "recorded_traceback",
     ): "set by result_error on an exception of any class",
+    ("engine/runner.py", "value", "__getitem__"): "an upstream value of any type",
+    ("engine/runner.py", "value", "__len__"): "an upstream value of any type",
     (
         "engine/state.py",
         "self",
