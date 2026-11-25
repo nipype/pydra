@@ -1017,3 +1017,30 @@ digest of its value, in name order. A class whose class-body assignments are all
 digest. The names are found from the class's source; a class hashed in one process carries them
 (``__pydra_computed_attributes__``), so a copy unpickled by value where the source cannot be read
 hashes the same attributes.
+
+
+## Amendment (2026-11-25): computed attributes, documentation, tools, timeouts
+
+**Computed attributes (D1).** Every name a class-body assignment binds through any target
+(tuple, list, starred) and every name an augmented assignment rebinds is a computed attribute,
+hashed by value.
+
+**Documentation is not identity.** attrs digests leave out attributes marked
+`metadata={"pydra.documentation": True}`, which a field's `help` carries. This changes the
+`type@1` digest of classes whose fields carry help and the checksums of tasks whose field
+definitions are digested; it lands as its own PR.
+
+**The hash cache** keeps every object it memoises by `id` alive in one list (`keepalive`).
+
+**Tools under ConsistentReuse.** A recorded tool is compared by `executable`, `found` and
+`sha256`; its `path` and `owner` are recorded only, so an owner lookup cut short on a loaded
+host never refuses a stored result.
+
+**Timeouts.** `version.TIMEOUT = 60 s`: a version command prints and exits; the bound ends one
+that hangs and is large against a container start on a loaded node. `REGISTRY_TIMEOUT = 10 s`
+per registry request: a manifest HEAD answers in well under a second; a slower registry leaves
+the image unresolved (process-local reuse) rather than stalling keying. Both unmeasured.
+
+**Task class names.** One rule names every task class: a non-word character becomes `_` and a
+leading digit is prefixed (`<lambda>` becomes `_lambda_`). A class name does not enter a
+checksum.
