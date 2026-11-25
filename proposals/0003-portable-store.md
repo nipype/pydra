@@ -1141,3 +1141,107 @@ The derivations below moved here from the ``LeaseSettings`` docstring.
 A regular file at a lease path is a lock left by a pydra that used ``filelock.SoftFileLock``. It is
 never renewed, so it is taken over once older than ``stale_after`` even if the old process still
 runs: do not run an older pydra and this one on the same cache at the same time.
+
+
+## Amendment (2026-11-25): records, caps, the store protocol, legacy reads
+
+**One reader per record kind.** `entry.json` and `context.json` are read through
+`read_capped` with `JSON_CAP` (1 GiB: a bound on a hostile file only; at about 170 bytes a
+member record it admits millions of members). Committed and error records are read with
+`RECORD_CAP` (1 MiB: such a record is a few hundred bytes). A kept entry copied across
+filesystems reads its member list through `EntryFormat.member_records`, not a second parser.
+
+**Served hits are recorded when served (section 7.2).** A `Hit` read under the lease writes
+`_committed.json` naming the entry (`record_served`), so a settled reader in another process
+never waits out `visibility_timeout`.
+
+**The store protocol declares its optional members.** `ResultStore` gives defaults for
+`identity` (None), `holds`, `enumerates_contexts`, `declared_code_reuse`, `begin_rerun`,
+`note_attempt`, `forget_committed` and `release_attempts`; an implementation subclasses it. The
+declared-code warning asks the store's own reuse hook what `find` would serve. The store, not
+the submitter, keeps the default work directories of attempts and removes them when empty.
+
+**One store check before dispatch.** Runner (inline and off-thread) and submitter share
+`find_before_dispatch` and `accept_found`. A job read without a result is not read again while
+a cap holds it back. Off-thread reads run `readers` at a time (default `STORE_READERS = 4`, an
+unmeasured choice that overlaps the latency of shared storage without flooding it).
+
+**Lease records.** `DirectoryLease` and `PortableStore` read a holder record through one
+function (`read_holder_record`). `LeaseSettings.to_json`/`from_json` land with the named lease
+(RFC 0005 L0), their only user.
+
+**Legacy roots (section 8.1).** A legacy candidate is offered to the reuse hook's `verdict`
+before it is unpickled: `SKIP` takes the next, `REFUSE` ends the lookup with a `Miss`. A slot
+this store already holds (published earlier and not served) is not read again. An empty or
+garbled `.pydra-identity` marker reads as no marker (a root keyed under `pydra-identity@1`), as
+the submitter reads it; the marker read is capped at `MARKER_CAP` (256 bytes; it names one
+scheme). Which caches a store may read is a property of its identity (`StoreIdentity.scheme`,
+`supplied_key`), never of its name.
+
+**Numbers.** `open_layout` makes at most `_OPEN_PASSES = 8` passes (a pass that does not return
+lost the link to another opener, whose header the next pass reads; the bound ends a loop
+against a process that keeps removing the header). `adopt(sample=)` defaults to 16 entries
+(enough to show a systematic mode or shard fault, few enough to read in seconds on network
+storage).
+
+**Entry codecs (section 6.4).** The encoder and the digest form are one walker
+(`FormWalker`); the encoder writes plain numbers and members, the digest form typed numbers and
+digests. A tuple is written `{"$tuple": [...]}`, which changes the output digest of tuple
+outputs.
+
+### Moved from docstrings
+
+### 6.3 quarantine (from PortableStore._quarantine, B5)
+The entry is renamed to `quarantine/<uuid>` (within its parent as `q-<uuid>` when the user cannot
+move it across directories), the uuid built from the inode found corrupt, so the rename is a
+compare-and-move: a late mover meeting a valid entry renames it onto a target already there and
+moves nothing. An empty directory is removed with rmdir first, which fails on any entry (a rename
+onto an empty directory would succeed). A store needs stable non-zero inode numbers; inode 0 gets
+a random name. The moved copy is re-verified and put back if it verifies (another writer committed
+between check and rename). The owner of an entry sealed without owner write gives itself write
+first, which moving a directory needs.
+
+The copy is stamped as soon as it is moved, so collect ages it from the move and spares it while it is judged (B6).
+
+### 8.2 adopt (from adopt(), B10)
+Make the store at ``root`` a `PortableStore` without rewriting an entry (RFC 0003
+section 8.2). Stop the writers that predate the header first.
+
+The header is checked against ``identity`` and ``entry_format`` (its ``identity``,
+``entries`` and ``entry_format``) and against the tree: the old version directory and the
+shard and checksum directories must have the ``container`` mode, the entry directories the
+``sealed`` mode (or the ``entry`` mode, which a reader that owns them reseals), the
+members the ``file`` mode, the side directories the header names, where they exist, the
+``side`` mode, and each entry's shard must be the one the header's rule gives. The entries
+``check`` covers are checked (``"none"``: the first entry's modes and shard only;
+``"sample"``: the first ``sample`` in name order; ``"all"``), and those are also read back
+through ``entry_format`` and ``identity``: the context must give the fingerprint directory
+and ``identity.check_key`` must accept the key record for the checksum. Verifying the
+checksum, the fingerprint and the key is also the entry format's duty in its ``read``,
+which the store calls for every entry it serves.
+
+``<root>/<old_entries>`` is then renamed to ``header.entries`` in one directory rename,
+and the header written through `open_layout`. No entry is rewritten, moved or resealed;
+an entry that failed the read back is reported in ``misfiled`` and quarantined by the
+store when it reads it. If the header cannot be written, the rename is undone, unless
+the header was published before the error. A process killed between the rename and the
+header leaves ``header.entries`` and no header; ``adopt`` then refuses and says so, and
+renaming ``header.entries`` back to ``old_entries`` lets it run again.
+
+The header's ``dirs`` and ``shard`` pass `check_layout_names`, and ``old_entries`` must
+be a single path component that is none of the directories the header names. A tree in
+which no entry matches the layout's names is refused unless ``allow_empty``.
+
+The header's ``identity`` names ``identity``, and it alone says how the root's entries
+are keyed. A ``.pydra-identity`` marker, which only a `PickleStore` root reads and
+writes (RFC 0004 section 9.1), is neither read nor written here, and a marker already in
+the root is left as it is: no `PortableStore` reads it.
+
+
+
+### 7.4 on_commit (from PortableStore docstring, B10)
+on_commit may run more than once for one entry (a publish stages again if its staging directory was
+collected, and a job that loses a race still ran it), so a record it writes can describe an entry
+that never became visible. Adding members to staged raises CommitHookError. It runs after
+Reuse.compare. A corrupt entry in a readonly root is skipped and logged; such roots are never
+collected or quarantined into.
