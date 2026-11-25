@@ -1044,3 +1044,484 @@ the image unresolved (process-local reuse) rather than stalling keying. Both unm
 **Task class names.** One rule names every task class: a non-word character becomes `_` and a
 leading digit is prefixed (`<lambda>` becomes `_lambda_`). A class name does not enter a
 checksum.
+
+
+## Amendment (2026-11-25, round 2): classes of one qualified name
+
+A class's definition is found by its qualified name (and its first line where Python records it,
+3.13 and later), not by its name, so factory classes of one name in two functions of a file are
+told apart and their computed attributes hashed. Where a qualified name is defined more than once
+and the definitions compute different attributes, `AmbiguousClassSource` is raised instead of
+hashing without them; definitions that compute the same attributes hash them.
+
+### Moved from docstrings (round 2)
+
+The text the cut removed, by module and name, as it stood at the stack top.
+
+- `pydra/compose/base/field.py` `Field`:
+
+  requires: Can be provided as a single name, a collection of names, a collection of collections of
+  names, or a collection of collection of name/allowed values pairs.
+  provided: ``Provided[T, name]`` is the same marker
+
+- `pydra/compose/base/task.py` `Task._carry_digests`:
+
+  Only the fields that hold files are hashed again (see `pydra.utils.identity.field_digests`): their
+  content can change between the submission and the run.
+
+- `pydra/compose/base/task.py` `Task._checksum`:
+
+  A supplied value must identify the task as well as its inputs, as jobs with equal checksums share
+  one result and run only once.
+
+- `pydra/compose/base/task.py` `Task._compute_hashes`:
+
+  Without `exclude` they are kept as ``_hashes``, with the library modules and declared code the walk
+  reaches (see `pydra.utils.identity.field_digests`)
+
+- `pydra/compose/python.py` `define`:
+
+  xor: If this list includes None, then none of the fields need to be set.
+  version: When given, the checksum uses the function's module, name and this version in place of the
+  code it reaches (see ``code_hash``), so the version must be changed whenever a change to the code
+  changes its results. The values the code reads (closure cells, globals and the defaults of the
+  functions it calls) are still hashed. The digest of the code (`pydra.utils.hash.code_digest`) is
+  recorded beside each result, and a `pydra.engine.store.DeclaredVersionWarning` is issued when a
+  stored result of the same version was computed from other code, also for workflows and splits
+  reaching the task, which hash it by its version too; ``reuse="exact"`` then recomputes it, other
+  policies reuse it. ``pydracli check-versions`` checks versions against a committed table of digests.
+  Functions defined in ``__main__`` or inside another function are identified only by name, version
+  and the values they read, so a warning is issued for them.
+  code_hash: ``"function"`` hashes its own code and the values it reads (closure cells and globals);
+  ``"module"`` adds the functions and classes it reaches in its own module; ``"user"`` adds all
+  reachable code that is not library code (the standard library, installed distributions and pydra;
+  see ``PYDRA_USER_PACKAGES`` in `pydra.utils.hash`). Library code is identified by its qualified name
+  and the version of the distribution that owns it. By default the ``PYDRA_CODE_HASH`` environment
+  variable, otherwise ``"user"``.
+  checksum: It must identify the task as well as its inputs, as jobs with equal checksums share one
+  result and run once
+  batched: Each job's result is published under its own checksum. Its results must equal the
+  function's on each job alone; its code joins the task's key, so an edit of it invalidates stored
+  results as an edit of the function does. The function runs wherever jobs are not batched.
+  units: A pool orders the jobs of a batched call by it and fits memory against it. Never part of the
+  checksum.
+  batch: Without it a pool's `MeasuredFit` probes the size call by call; `DeclaredFit` runs one job
+  per call. Never part of the checksum.
+
+- `pydra/compose/select.py` `<module>`:
+
+  ``select(n)`` builds a Python task class with inputs ``when_0 … when_{n-1}`` (``bool``) and
+  ``value_0 … value_{n-1}``, every one of them ``absent="accept"``. It returns ``value_k`` for the
+  first ``k`` whose ``when_k`` is true, whatever that value is (a routed branch's content ``Absent``
+  reaches the reader with its cause), and ``Absent("not-routed")`` if none is. The module is itself
+  callable::
+  from pydra.compose import select
+  merged = workflow.add( select(2)(when_0=pos.out, value_0=up.out, when_1=neg.out, value_1=down.out) )
+
+- `pydra/compose/select.py` `_CallableModule`:
+
+  ``pydra.compose`` is a namespace package that other distributions extend, so it has no ``__init__``
+  that could bind the function there; the module's class is swapped instead. ``from
+  pydra.compose.select import select`` also works.
+
+- `pydra/compose/shell/version.py` `<module>`:
+
+  ``shell.define(version_command=..., version_pattern=...)`` keys a task by the first group of the
+  first match of the pattern in the command's stdout, never the whole output (``ffmpeg -version`` also
+  prints its compiler and install prefix). The submitting process runs the command once per resolved
+  executable path and keeps the answer in memory; a worker running the task natively runs it again,
+  once per process, and fails the job when the answer differs from the key.
+
+- `pydra/compose/shell/version.py` `check_in_worker`:
+
+  A key that is unresolved, or a task without a command, is not checked.
+
+- `pydra/compose/shell/version.py` `run_version_command`:
+
+  The answer is kept in `memo` by the resolved path of the program: not on disk, as a shim keeps its
+  stat while the tool behind it changes, and not when the program is not found.
+
+- `pydra/compose/workflow.py` `define`:
+
+  xor: If this list includes None, then none of the fields need to be set.
+  code_hash: ``"function"`` hashes its own code and the values it reads (closure cells and globals);
+  ``"module"`` adds the functions and classes it reaches in its own module; ``"user"`` adds all
+  reachable code that is not library code (the standard library, installed distributions and pydra;
+  see ``PYDRA_USER_PACKAGES`` in `pydra.utils.hash`). Library code is identified by its qualified name
+  and the version of the distribution that owns it. By default the ``PYDRA_CODE_HASH`` environment
+  variable, otherwise ``"user"``.
+  checksum: It must identify the task as well as its inputs, as jobs with equal checksums share one
+  result and run once
+  version: When given, the checksum uses the constructor's module, name and this version in place of
+  the code it reaches (see ``code_hash``), so the version must be changed whenever a change to the
+  constructor should give new results. It does not stand for the run facts of the nodes (their
+  environments and tool versions), which the job's record keys as ``nodes`` either way (RFC 0004
+  sections 4.3 and 6.1)
+
+- `pydra/compose/workflow.py` `loop`:
+
+  The loop is one node, which can be split, gated and read; round ``r<k+1>`` is added when round ``k``
+  returns a false ``until``, its ``carry`` inputs reading round ``k``'s outputs. The loop stops when
+  ``until`` is an ``Absent`` or true, when a round repeats an earlier round's checksum
+  (``index=None``), or at ``max_rounds``; a failed round fails it. Its outputs are the last round's,
+  plus ``rounds``, ``converged`` and ``stopped``.
+  carry: A pair whose types do not match, a name that matches nothing, and an empty carry without
+  ``index`` are refused
+
+- `pydra/engine/audit.py` `Audit.start_audit`:
+
+  Monitored information is not sent until directory is created, in case message directory is inside
+  job output directory.
+  chdir: If not, messages without an explicit ``message_dir`` are still written under ``odir``.
+
+- `pydra/engine/context.py` `_identify`:
+
+  The identity is its version, followed by the commit or archive hash it was installed from. An
+  install from a local directory, editable or not, has no version in it: it is ``dir:<digest of its
+  files>``, read from the files of its packages for an editable install and from its ``RECORD``
+  entries outside ``*.dist-info`` otherwise. An editable install's packages are read up to
+  `IDENTITY_MAX_FILES` and `IDENTITY_MAX_BYTES`.
+
+- `pydra/engine/context.py` `_record_digest`:
+
+  ``direct_url.json``, ``INSTALLER`` and an installer's own files differ between two installs of the
+  same files
+
+- `pydra/engine/context.py` `job_context`:
+
+  * ``record``: the layout's version (`RECORD`); * ``python``: the interpreter's full version,
+  ``implementation``: its name; * ``platform``: the OS, machine and C library; * ``environment``: the
+  environment's resolved key (`Job.resolved`), or its checksum when none is given; *
+  ``environment_repository``: where a container image is pulled from, when its reference carries one;
+  recorded only (`REPOSITORY_FIELD`), so mirrors share slots; * ``environment_facts``: what the
+  resolution found besides its key, when it found anything (`FACTS_FIELD`); recorded only; *
+  ``packages``: the identities of the distributions that installed the library modules the task
+  reaches (see `reached_modules`), and of those they require, None if the modules cannot be
+  determined; * ``installed``: a digest of all installed distributions, those in ``packages`` by their
+  identities and the others by their versions; * ``code``: present when the checksum reached functions
+  with declared versions (the task's own, those of a workflow's nodes, those of tasks passed as
+  inputs), the `code_digest` of each by ``module.qualname==version``, which the version stands for
+  (see `pydra.engine.store.check_declared_code`); * ``tools``: where the submitting host resolves the
+  tools a native shell task runs, with the file's digest and owning package (`job_tools`); recorded,
+  not keyed; * ``unknown``: present when any of ``packages`` is unknown, or the job's tool version is
+  unresolved (`pydra.engine.job.Job.context`), set to a value unique to this process, so the result is
+  reused by no other process.
+
+- `pydra/environments/base.py` `Environment`:
+
+  Right now it is assumed that the environment, including container images, are available and are not
+  removed at the end. `setup` and `teardown` are called when a warm environment (`warm`) starts and
+  closes.
+  warm: Stored as ``warm_requested``, as ``warm`` is the method
+
+- `pydra/environments/base.py` `Environment.checksum`:
+
+  A job keys the reference its environment resolves (`resolve`), which for a container is not this: a
+  checksum never reaches Docker, a registry or the file system for it.
+
+- `pydra/environments/base.py` `Environment.resolve`:
+
+  The job keys ``key`` and the worker executes ``run``. By default the environment's checksum is the
+  key and there is nothing to run by reference.
+
+- `pydra/environments/base.py` `Environment.warm`:
+
+  ref: When omitted the environment resolves it here
+  scratch: The system's temporary directory by default
+
+- `pydra/environments/base.py` `WarmContainer`:
+
+  Every root is bound read-only under the environment's ``ro_root``, and a writable root also writable
+  under its ``root``, so a job's inputs are read-only and its working directory and outputs writable,
+  as a cold run binds them. A scratch directory (under ``scratch``, inside a writable root) holds each
+  job's ``HOME``, removed when the job ends, and the container's ``/tmp``, emptied when each job ends,
+  so no job sees what another wrote there. The container is labelled with its owner (`owner`);
+  containers whose owner has ended on this host are removed at the next start (`_reap`). Subclasses
+  give the start, exec, stop and reap commands.
+
+- `pydra/environments/base.py` `WarmEnvironment`:
+
+  A subclass starts the environment in `_start`, runs one job in `_execute` and stops it in `_stop`.
+  The environment's ``setup`` and ``teardown`` are called on start and close. Warmth is execution
+  detail: a job's checksum, record and context are those of a cold run, and so are its outputs. Open
+  handles are closed at exit and on ``SIGTERM`` (`close_open_environments`).
+
+- `pydra/environments/base.py` `WarmSession`:
+
+  The roots counted include the scratch directory's. A session runs one job at a time. Correctness
+  never depends on warmth.
+  retry: By default a failed start runs every later job of the session cold
+
+- `pydra/environments/base.py` `WarmSession._handle_for`:
+
+  With ``needed`` (and ``writable``), the roots of a group of jobs (`prepare`): a handle covering them
+  is kept and none is returned. With ``raises``, a failed start raises its error
+
+- `pydra/environments/base.py` `WarmSession.prepare`:
+
+  A handle that already covers them, is open and has jobs left before ``max_jobs`` is kept; a union
+  beyond ``max_mount_roots`` starts nothing, and each job is then judged alone by `execute`. With
+  ``retry``, a failed start raises its error.
+
+- `pydra/environments/base.py` `label_owner_dead`:
+
+  Where the namespace cannot be read (``-``) the host and uid must match only. A label in any other
+  form is never dead.
+
+- `pydra/environments/base.py` `serving`:
+
+  The sessions are closed on exit unless ``close=False``.
+
+- `pydra/environments/docker.py` `Docker.resolve`:
+
+  Output of ``docker image inspect`` that cannot be read raises ``ImageResolutionError`` even under
+  ``resolve_images="best-effort"``: the image is there and its identity is not known, which is not the
+  same as not resolving it.
+  ``identity=`` is the author's assertion and is keyed as written (``docker@1:`` followed by it,
+  whatever it is). A ``docker-local@1:<Id>`` key names an image in this host's image store: it is
+  reused on this host, and on workers that load the same image, and a worker without the image fails.
+
+- `pydra/environments/docker.py` `WarmDocker`:
+
+  Each exec runs the image's entrypoint (or the one ``xargs`` names) before the command, as a cold
+  ``docker run`` does.
+
+- `pydra/environments/images.py` `image_cache`:
+
+  On a cluster, set one of them to project or scratch storage: a SIF is the image's size.
+
+- `pydra/environments/images.py` `local_sif`:
+
+  A cached SIF is trusted as it is, because only an atomic rename of a complete pull creates it.
+  Concurrent first uses pull once where the file system allows a lock, and otherwise each pulls and
+  the last rename wins.
+
+- `pydra/environments/images.py` `registry_manifest`:
+
+  The platform digest is the digest itself when it names a single manifest, and ``None`` when it names
+  an index. ``None`` when the digest cannot be read. Nothing is pulled.
+
+- `pydra/environments/lmod.py` `Lmod.resolve`:
+
+  A loaded name is kept for a requested one when it equals it, its name part (before the last ``/``)
+  equals it, or the requested name, holding a ``/``, is a prefix of it up to a version separator.
+  The key carries the kept full names in the requested order, and the worker purges and loads them.
+  Dependencies, the calling shell's modules, the purged ``MODULEPATH`` and the Lmod tree are recorded,
+  not keyed. Without Lmod, or when a name does not load or map here, the names are keyed as written
+  and unresolved.
+
+- `pydra/environments/lmod.py` `WarmLmod`:
+
+  No process is kept; the saving is the resolution.
+
+- `pydra/environments/singularity.py` `Singularity`:
+
+  ``image`` is a ``docker://`` URI, a path to a ``.sif`` file, or another URI that Singularity pulls
+  (``library://``, ``shub://``, ...).
+
+- `pydra/environments/singularity.py` `Singularity.resolve`:
+
+  * ``docker://``: a digest given or ``identity=`` is keyed with no lookup, otherwise the registry is
+  asked once per tag per run; the key is the Docker key of the same image (``docker@1:<digest>``) and
+  the reference carried is ``docker://<repository>@<digest>``; a worker pulls it once into a local SIF
+  (`images.local_sif`) and runs that, so a run never reaches a registry. A tag in the URI takes the
+  place of ``tag``. * a ``.sif`` path is keyed by the sha256 of its content (``sif@1:sha256:<hex>``)
+  and runs by its absolute path; before ``exec`` a worker compares the digest its own stat cache gives
+  for the file (a stat once read) with the key. The key is exact for that file but not portable: a
+  site that wants to share results names the ``docker://`` digest. * any other URI, a missing file or
+  a directory is unresolved, and runs as before.
+
+- `pydra/environments/singularity.py` `WarmSingularity`:
+
+  ``HOME`` and ``TMPDIR`` are set by ``env`` in the instance, since Apptainer refuses to override
+  ``HOME`` through ``--env``. The instance's name carries its owner's pid and host.
+
+- `pydra/utils/digest.py` `<module>`:
+
+  ``digest(value)`` is one string ``"<tag>@<n>:<hex>"``. ``register_codec``, ``register_fileset_tag``
+  and ``register_digest`` fill one registry of types; the tags are what RFC 0003's store reads back,
+  and a tag is only ever looked up there, never resolved as a module or class name. numpy is optional:
+  without it the numpy rows are inactive.
+
+- `pydra/utils/digest.py` `Codec`:
+
+  ``tag`` is None for a digest-only entry.
+
+- `pydra/utils/digest.py` `_default_fileset_entry`:
+
+  A class with no ``mime_like``, a mock, and a class whose tag ``fileformats`` cannot resolve back to
+  a class (it could not be read) have none, and are ``py@1``. Not entered in the tag registry:
+  `lookup_fileset_tag` resolves a tag.
+
+- `pydra/utils/digest.py` `_resolve_tag`:
+
+  This imports from the ``fileformats`` namespace only. Only ``fileformats``' answer that no class has
+  the tag means None; any other error, such as an installed ``fileformats`` plugin that fails to
+  import, propagates.
+
+- `pydra/utils/digest.py` `canonical_npy`:
+
+  Raises ``TypeError`` unless ``is_canonical_array(arr)``: a subclass such as ``MaskedArray`` would
+  lose its mask.
+
+- `pydra/utils/digest.py` `digest`:
+
+  ``cache`` is a ``pydra.utils.hash.Cache``, shared by the ``py@1`` fallback and the file sets, which
+  are read through its persistent stat-to-digest cache.
+
+- `pydra/utils/digest.py` `digest_form`:
+
+  Raises an ``Exception`` for a value that has none, which ``digest`` turns into ``py@1``. ``cache``
+  is the ``pydra.utils.hash.Cache`` that file sets are hashed through.
+
+- `pydra/utils/digest.py` `is_canonical_array`:
+
+  Any other array is ``py@1`` or, in a store, unencodable.
+
+- `pydra/utils/digest.py` `jcs`:
+
+  Raises ``TypeError`` for a non-string key or a non-JSON value and ``ValueError`` for NaN, infinity,
+  an integer above 2**53 or a string with a lone surrogate.
+
+- `pydra/utils/digest.py` `lookup_fileset_tag`:
+
+  A class is accepted under its ``mime_like`` whatever tag it is registered under now.
+
+- `pydra/utils/digest.py` `register_digest`:
+
+  It applies at any depth, where a digest form holds ``{"$digest": "<digest>"}``. A type that already
+  has one raises ``ValueError`` unless ``replace=True``.
+
+- `pydra/utils/hash.py` `_class_code`:
+
+  A class this process has encoded from its own source file follows that file. Another class (a copy
+  unpickled by value) first takes the encoding carried on it (see `CARRIED_ENCODING_ATTR`) if it was
+  computed for the class it is now (see `_class_stamp`). The source file is not read for a class that
+  was not defined in it (see `_class_source_file`).
+
+- `pydra/utils/hash.py` `_class_members`:
+
+  They are the functions compiled from the class's source file (see `_class_source_file`) and, of the
+  functions unpickled by value (``"<dynamic-code>"``), those whose code is the code compiled from that
+  file at their qualified name and first line. If the class has no source file, they are the functions
+  compiled from a file or a notebook cell, or unpickled by value, in a class body of the class's
+  qualified name, or wrapping (`functools.wraps`) one that was.
+
+- `pydra/utils/hash.py` `_class_source_file`:
+
+  Such a class is a copy unpickled where the file of its module holds another definition (another
+  ``__main__``, an edited file).
+
+- `pydra/utils/hash.py` `_computed_attributes`:
+
+  A copy unpickled by value takes the names carried on it (`CARRIED_ATTRIBUTES_ATTR`).
+
+- `pydra/utils/hash.py` `_encode_function_code`:
+
+  The node is matched by the code's name and first line, and by the source positions of its
+  instructions, so that lambdas sharing a line are told apart.
+
+- `pydra/utils/hash.py` `_fileset_stat_key`:
+
+  The key is None if a file cannot be opened.
+
+- `pydra/utils/hash.py` `_function_code`:
+
+  Code this process has encoded from its own file follows that file, so an edit is hashed. Other code
+  (a copy unpickled by value) first takes the encoding carried on the function (see
+  `CARRIED_ENCODING_ATTR`) if it was computed for the code the function holds, as the encoding of the
+  code that runs, whatever the files on disk hold now. Otherwise the source is the file the code was
+  compiled from; failing that, the file of the loaded module the function's globals name, if the code
+  compiled from it matches (see `_recovered_encoding`).
+
+- `pydra/utils/hash.py` `_module_source`:
+
+  None for other code, such as code generated into another pseudo-file (``<string>``, ``<attrs
+  generated ...>``), or if the module is not loaded.
+
+- `pydra/utils/hash.py` `class_digest`:
+
+  A class pickled by value after it was hashed keeps its encoding where its source cannot be read (see
+  `_class_code`). `code_hash` is the tier of the walk (`code_hash_default` when None).
+
+- `pydra/utils/hash.py` `fileset_members`:
+
+  Files changed within ``TIMESTAMP_RESOLUTION_NS`` are computed and not stored.
+
+- `pydra/utils/hash.py` `is_library`:
+
+  A function whose globals are not those of its module (defined by ``exec`` or in a notebook
+  namespace) is user code unless its file is library code. A function unpickled by value (``"<dynamic-
+  code>"``) is identified by the ``__file__`` its globals keep, or, if they keep none, by its module's
+  name, never by a module of that name loaded here. A class its module here does not hold is
+  identified as its functions unpickled by value are: those of its body first, then those whose
+  globals are its module's (as dataclass generates them). With none, it is user code if it carries an
+  encoding (see `_class_code`).
+
+- `pydra/utils/hash.py` `owner_of`:
+
+  The identity is the public version of an index install, and ``version@commit``, ``version@hash`` or
+  ``dir:digest`` of a local directory or editable one (`pydra.engine.context._Installed.keyed`);
+  ``"?"`` if it cannot be computed. Memoised per module, forgotten by
+  `pydra.engine.context.clear_caches`.
+
+- `pydra/utils/hash.py` `prime_fileset_members`:
+
+  For a store that has checked the files against their recorded digests and holds them sealed read-
+  only (RFC 0004 section 6.2); the persistent cache is not written.
+
+- `pydra/utils/hash.py` `reached_definitions`:
+
+  The code reached is that of the walk of ``func`` and of the walk of each function, and of the class
+  of each user-class instance, among ``inputs``.
+
+- `pydra/utils/hash.py` `type_digest`:
+
+  It is the same on every Python minor pydra supports: a union is the sorted, de-duplicated digests of
+  its flattened members, whatever its spelling, and ``Literal`` is order-free.
+
+- `pydra/utils/identity.py` `<module>`:
+
+  ``task_record(task)`` is a JSON document of strings and lists, and ``record_checksum(record)`` is
+  ``"<kind>-<sha256 of its RFC 8785 form>"``. A supplied checksum (``checksum=``) replaces the record
+  by ``{"scheme", "supplied"}`` and is its own checksum. ``job_record(job)`` is the record of a job:
+  the task's, plus the fields that belong to the job and not to the task.
+  The digest strings of the record are ``code@1`` (the walk of the executor), ``type@1`` (the
+  ``Outputs`` class) and, for each input, its typed digest from ``pydra.utils.digest`` (``json@1``,
+  ``npy@1``, ``file@1``, a registered one, or ``py@1`` for what has no digest form). A job's record is
+  built once, in the submitting process, and carried with the job: ``Job.record``, ``Job.checksum``
+  and the store identity's ``key`` never rebuild it in a worker. ``Task._checksum`` and ``Task._hash``
+  rebuild it on every call in the submitting process. A task unpickled in a worker reads the digests
+  the submitting process computed (see ``Task._carried``, pydra issue #936), because a worker may not
+  be able to read the source of its function, its classes and its input values; it hashes again only
+  the values that can change meanwhile (see ``rehashed_in_worker``).
+
+- `pydra/utils/identity.py` `field_digests`:
+
+  With ``collect`` the library modules and declared code the walk reaches are kept on the task (for
+  its context).
+
+- `pydra/utils/identity.py` `job_record`:
+
+  A python task has no ``job`` field, and a supplied checksum stands for the whole record.
+
+- `pydra/utils/identity.py` `library_values`:
+
+  The walk of the code sees only the library code a function names, so ``def f(x): return x.mean()``
+  would not be re-keyed by an upgrade of the library of ``x`` without them. A type of the standard
+  library or the engine, of user code, or of no single distribution (the context records it as
+  unknown) is left out.
+
+- `pydra/utils/identity.py` `rehashed_in_worker`:
+
+  Functions, classes and instances of user classes are never hashed again, as a worker may not be able
+  to read their source.
+
+- `pydra/utils/identity.py` `workflow_nodes`:
+
+  Python nodes, and any node that is neither shell nor workflow, are left out. A node is `DEFERRED`
+  when its run facts cannot be known at keying: a nested workflow with a lazy input or a splitter, a
+  shell node whose environment or tool version is unresolved, or a node whose facts raise (its
+  construction, version command or reference resolution), so that the error is raised when the node's
+  own job is keyed or run, not here. The whole ``nodes`` is `DEFERRED` when the workflow itself cannot
+  be constructed, so the error is raised when its job is expanded.
