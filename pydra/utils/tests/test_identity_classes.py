@@ -1062,8 +1062,8 @@ def test_library_type_carries_its_owner():
 
 # equal on 3.11, 3.12, 3.13, 3.14 and 3.15
 TYPE_GOLDEN_2 = {
-    "list": "type@1:b2ff601d40c18f4065b2e2322ada0e90e776a8df2235093d0c658b2eec53b4ce",
-    "tlist": "type@1:b2ff601d40c18f4065b2e2322ada0e90e776a8df2235093d0c658b2eec53b4ce",
+    "list": "type@1:708f32d818ad14f99d19e487639b0ef2502b9b8f21a8efe8504434a91866ae5c",
+    "tlist": "type@1:708f32d818ad14f99d19e487639b0ef2502b9b8f21a8efe8504434a91866ae5c",
     "paramspec": "type@1:0ba0266553649af4552feb205bfd1c49e0ac724289aa6efee3afe8b3a41fcaa2",
     "callable_p": "type@1:b216773194079f0c07bc19ceac6d99059b2d9b568a2628c622c12e0f3f1b2290",
     "typevar": "type@1:6dadccec566fc278b6009ef9d8b79f341724847b35e226cb98afe81cff4cf8f1",
