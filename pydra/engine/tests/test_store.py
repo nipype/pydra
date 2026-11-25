@@ -1,3 +1,4 @@
+import attrs
 import asyncio
 import errno
 import os
@@ -324,7 +325,11 @@ def _sharing_violation(name):
 def held_open(monkeypatch):
     """Makes ``os.unlink`` of files with a given name fail as if another process held
     them open, a given number of times; records every refused attempt"""
-    monkeypatch.setattr(store_module, "REMOVE_BACKOFF", 0)
+    monkeypatch.setattr(
+        store_module,
+        "REMOVE_RETRY",
+        attrs.evolve(store_module.REMOVE_RETRY, first=0, cap=0),
+    )
     refused = []
 
     def hold(name, times, error=_ebusy):
@@ -363,10 +368,10 @@ def test_remove_from_cache_retries_a_held_file(tmp_path, held_open, error):
 @pytest.mark.parametrize("error", [_ebusy, _sharing_violation])
 def test_remove_from_cache_raises_cache_busy_when_held(tmp_path, held_open, error):
     slot = _slot_with_result(tmp_path)
-    refused = held_open("_result.pklz", store_module.REMOVE_ATTEMPTS + 1, error)
+    refused = held_open("_result.pklz", store_module.REMOVE_RETRY.attempts + 1, error)
     with pytest.raises(CacheBusyError) as excinfo:
         remove_from_cache(slot)
-    assert len(refused) == store_module.REMOVE_ATTEMPTS
+    assert len(refused) == store_module.REMOVE_RETRY.attempts
     assert excinfo.value.filename == str(slot)
     assert Path(excinfo.value.filename2).name == "_result.pklz"
     assert "_result.pklz held open or pending deletion" in str(excinfo.value)
@@ -399,14 +404,14 @@ def test_remove_from_cache_removes_a_held_lockfile(tmp_path, held_open):
     assert len(refused) == 1
 
 
-@pytest.mark.parametrize("times", [2, store_module.REMOVE_ATTEMPTS])
+@pytest.mark.parametrize("times", [2, store_module.REMOVE_RETRY.attempts])
 def test_rerun_clears_a_held_slot(tmp_path, held_open, times):
     task = FunAddTwo(a=1)
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
         assert sub(task).outputs.out == 3
     refused = held_open("_result.pklz", times)
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
-        if times < store_module.REMOVE_ATTEMPTS:
+        if times < store_module.REMOVE_RETRY.attempts:
             assert sub(task, rerun=True).outputs.out == 3
         else:
             with pytest.raises(CacheBusyError, match="_result.pklz"):
@@ -421,7 +426,11 @@ def _not_empty(name):
 def _rmdir_refusing(monkeypatch, directory, refusals, before_refusal):
     """Make ``os.rmdir`` of ``directory`` raise ENOTEMPTY ``refusals`` times, calling
     ``before_refusal(n)`` before the n-th; records the unlinked names"""
-    monkeypatch.setattr(store_module, "REMOVE_BACKOFF", 0)
+    monkeypatch.setattr(
+        store_module,
+        "REMOVE_RETRY",
+        attrs.evolve(store_module.REMOVE_RETRY, first=0, cap=0),
+    )
     rmdir, unlink = os.rmdir, os.unlink
     refused, unlinked = [], []
 
@@ -486,7 +495,7 @@ def test_remove_from_cache_raises_access_denied_on_a_leftover(tmp_path, monkeypa
     denied = slot / "denied.txt"
     _stat_failing(monkeypatch, denied, 5)  # ERROR_ACCESS_DENIED
     refused, unlinked = _rmdir_refusing(
-        monkeypatch, slot, store_module.REMOVE_ATTEMPTS, lambda n: denied.touch()
+        monkeypatch, slot, store_module.REMOVE_RETRY.attempts, lambda n: denied.touch()
     )
     with pytest.raises(PermissionError) as excinfo:
         remove_from_cache(slot)
@@ -520,11 +529,11 @@ def test_remove_from_cache_raises_cache_busy_on_pending_files(tmp_path, monkeypa
     slot = _slot_with_result(tmp_path)
     pending = _silly_rename(slot)
     refused, unlinked = _rmdir_refusing(
-        monkeypatch, slot, store_module.REMOVE_ATTEMPTS, lambda n: pending.touch()
+        monkeypatch, slot, store_module.REMOVE_RETRY.attempts, lambda n: pending.touch()
     )
     with pytest.raises(CacheBusyError) as excinfo:
         remove_from_cache(slot)
-    assert len(refused) == store_module.REMOVE_ATTEMPTS
+    assert len(refused) == store_module.REMOVE_RETRY.attempts
     assert excinfo.value.filename2 == str(pending)
     assert excinfo.value.held == [str(pending)]
     assert pending.name not in unlinked
@@ -552,11 +561,11 @@ def test_held_info_file_does_not_fail_a_committed_job(
     tmp_path, held_open, caplog, monkeypatch
 ):
     monkeypatch.chdir(tmp_path)
-    refused = held_open(_is_info_file, store_module.REMOVE_ATTEMPTS)
+    refused = held_open(_is_info_file, store_module.REMOVE_RETRY.attempts)
     with caplog.at_level("WARNING", logger="pydra"):
         with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
             assert sub(FunAddTwo(a=1)).outputs.out == 3
-    assert len(refused) == store_module.REMOVE_ATTEMPTS
+    assert len(refused) == store_module.REMOVE_RETRY.attempts
     assert os.getcwd() == str(tmp_path)
     (info_file,) = (tmp_path / "cache").glob("*_info.json")
     assert f"Could not remove {info_file}" in caplog.text
@@ -569,7 +578,7 @@ def RaisesBoom(x: int) -> int:
 
 def test_held_info_file_keeps_the_task_error(tmp_path, held_open, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    held_open(_is_info_file, store_module.REMOVE_ATTEMPTS)
+    held_open(_is_info_file, store_module.REMOVE_RETRY.attempts)
     with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
         with pytest.raises(Exception, match="boom") as excinfo:
             sub(RaisesBoom(x=1), raise_errors=True)

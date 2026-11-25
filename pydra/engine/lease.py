@@ -156,44 +156,20 @@ class Lease(ty.Protocol):
 
 @attrs.frozen
 class LeaseSettings:
-    """How a `DirectoryLease` beats, ages and waits.
+    """How a `DirectoryLease` beats, ages and waits (defaults derived in RFC 0003 section 5.3).
 
-    A holder renews its lease every ``renew_fraction * stale_after`` seconds. Another
-    process takes the lease over once the newest mark the holder left is older than
-    ``stale_after`` on the storage clock.
+    A holder renews its lease every ``renew_fraction * stale_after`` seconds; another process
+    takes it over once the holder's newest mark is older than ``stale_after`` on the storage
+    clock. A waiter behind a holder that keeps renewing waits as long as the holder runs:
+    ``timeout`` counts only time with no renewal seen and no takeover possible (a stale lease
+    the storage refuses to let this process remove, `LeaseUnavailable`, or an undeletable lock
+    file of an earlier pydra), and restarts whenever the newest mark advances. ``max_wait``, if
+    set, caps the whole wait.
 
-    A waiter behind a holder that keeps renewing waits for as long as the holder runs,
-    as it would for any job it needs. ``timeout`` counts only time in which no renewal
-    has been seen and the lease could not be taken over: a stale lease the storage
-    refuses to let this process remove (`LeaseUnavailable`) or a lock file of an
-    earlier pydra that cannot be removed. The clock restarts whenever the newest mark
-    in the lease advances. ``max_wait``, if set, caps the whole wait regardless.
-
-    Two inequalities are checked on construction.
-
-    - A live holder is never taken over. A process judging a lease sees the holder's
-      last heartbeat at most ``attribute_delay`` late, and a holder may miss
-      ``MISSED_BEATS`` heartbeats, so the newest mark it shows is at most
-      ``(1 + MISSED_BEATS) * renew_fraction * stale_after + attribute_delay`` old,
-      which must be less than ``stale_after``.
-    - A dead holder is always taken over before a waiter gives up: its lease is stale
-      ``stale_after`` after its last heartbeat and seen so at most ``attribute_delay``
-      later, so ``timeout >= stale_after + attribute_delay``.
-
-    The defaults: ``attribute_delay`` 60 s is the NFS default ``acdirmax`` (use 0 for a
-    cache on local disk). ``stale_after`` 300 s with ``renew_fraction`` 0.1 beats every
-    30 s, and ``2 * 30 + 60 = 120 < 300`` leaves 180 s for a slow storage server or a
-    step of its clock. A crashed holder is taken over 5 to 6 minutes after its last
-    heartbeat, at the cost of one ``mkdir`` and one ``rmdir`` per running job every
-    30 s. ``timeout`` 600 s is above the required ``300 + 60 = 360`` with room for the
-    poll interval (``POLL_MAX``).
-
-    A regular file at a lease path is a lock left by a pydra that used
-    ``filelock.SoftFileLock``. Such a file is never renewed, so it is taken over once
-    older than ``stale_after`` even if the old process is still running. Do not run
-    an older pydra and this one on the same cache at the same time: an old job that
-    runs longer than ``stale_after`` is run again by the new process, which removes
-    the old job's working directory.
+    Construction raises ``ValueError`` unless a live holder is never taken over,
+    ``(1 + missed_beats) * renew_fraction * stale_after + attribute_delay < stale_after``, and a
+    dead holder is taken over before a waiter gives up, ``timeout >= stale_after +
+    attribute_delay``.
 
     Parameters
     ----------
@@ -209,6 +185,12 @@ class LeaseSettings:
     max_wait : float | None
         Seconds after which any wait ends in `LeaseTimeout`, even behind a holder that
         keeps renewing; None (default) for no cap.
+    poll_min, poll_max : float
+        Seconds before the second attempt to take a held lease, and most seconds between two.
+    missed_beats : int
+        Heartbeats a live holder may miss (a slow or hung write) without being taken over.
+    release_patience : float
+        Most seconds a release retries a refused rename (see `release_patience`).
     """
 
     stale_after: float = STALE_AFTER
@@ -216,6 +198,10 @@ class LeaseSettings:
     renew_fraction: float = RENEW_FRACTION
     attribute_delay: float = ATTRIBUTE_DELAY
     max_wait: float | None = None
+    poll_min: float = attrs.field(default=POLL_MIN, eq=False)
+    poll_max: float = attrs.field(default=POLL_MAX, eq=False)
+    missed_beats: int = attrs.field(default=MISSED_BEATS, eq=False)
+    release_patience: float = attrs.field(default=RELEASE_PATIENCE, eq=False)
 
     def __attrs_post_init__(self):
         if self.max_wait is not None and self.max_wait < 0:
@@ -230,12 +216,17 @@ class LeaseSettings:
             raise ValueError(
                 f"renew_fraction must be between 0 and 1 (got {self.renew_fraction})"
             )
+        if not 0 < self.poll_min <= self.poll_max or self.missed_beats < 0:
+            raise ValueError(
+                f"need 0 < poll_min <= poll_max and missed_beats >= 0 (got {self.poll_min}, "
+                f"{self.poll_max}, {self.missed_beats})"
+            )
         shown = (
-            1 + MISSED_BEATS
+            1 + self.missed_beats
         ) * self.renew_interval + self.attribute_delay  # oldest mark of a live holder
         if shown >= self.stale_after:
             raise ValueError(
-                f"a live holder could be taken over: (1 + {MISSED_BEATS}) * "
+                f"a live holder could be taken over: (1 + {self.missed_beats}) * "
                 f"{self.renew_interval:g} + {self.attribute_delay:g} = {shown:g} is not "
                 f"less than stale_after {self.stale_after:g}"
             )
@@ -251,12 +242,20 @@ class LeaseSettings:
         """Seconds between two heartbeats."""
         return self.renew_fraction * self.stale_after
 
+    @property
+    def visibility_timeout(self) -> float:
+        """Seconds a reader waits for another client's write to show: ``attribute_delay``
+        and one poll, so never less than the delay the lease assumes."""
+        return self.attribute_delay + self.poll_max
+
 
 def release_patience(settings: LeaseSettings) -> float:
     """Most seconds a refusal explained by another process's open handle is retried: a
     release renaming its directory aside, and on Windows a mkdir or listing of a lease
     directory pending deletion."""
-    return min(RELEASE_PATIENCE, MISSED_BEATS * settings.renew_interval)
+    return min(
+        settings.release_patience, settings.missed_beats * settings.renew_interval
+    )
 
 
 def _owner() -> str:
@@ -437,7 +436,8 @@ class DirectoryLease:
         self.lockfile.parent.mkdir(parents=True, exist_ok=True)
         require_lease_storage(self.lockfile.parent)
         self.broke, self.lost, self._last_seen = [], None, (None, None)
-        self._newest_seen, self._refused, self._delay = None, None, POLL_MIN
+        self._newest_seen, self._refused = None, None
+        self._delay = self.settings.poll_min
         self._unreadable_since = None
         self._pending, self._pending_since = None, None
         now = self.monotonic()
@@ -836,7 +836,7 @@ class DirectoryLease:
             raise self._timeout(capped=False)
         bound = self._deadline if self._cap is None else min(self._deadline, self._cap)
         delay = min(self._delay, bound - now)
-        self._delay = min(self._delay * 2, POLL_MAX)
+        self._delay = min(self._delay * 2, self.settings.poll_max)
         return delay
 
     def _held_pending(self, err: PermissionError) -> bool:
@@ -890,12 +890,11 @@ class DirectoryLease:
     def _releasing(self) -> ty.Iterator[float]:
         """Release the lease, yielding the seconds to wait before each retry.
 
-        The holder's directory is renamed aside, then removed. Only a directory that is
-        gone shows the lease taken over. Any other refusal (on Windows, while another
-        process has the directory or a file in it open) is retried for
-        ``min(RELEASE_PATIENCE, MISSED_BEATS * renew_interval)`` seconds, within which
-        no waiter sees the stopped holder stale; a rename still refused then leaves the
-        lease to be taken over once stale."""
+        The holder's directory is renamed aside, then removed; only a directory that is gone shows
+        the lease taken over. A refused rename (on Windows, while another process has the directory
+        or a file in it open) is retried for `release_patience` seconds, within which no waiter sees
+        the stopped holder stale; a rename still refused then leaves the lease to be taken over once
+        stale."""
         heartbeat, self._heartbeat = self._heartbeat, None
         token, self._token = self._token, None
         if heartbeat is not None:
@@ -906,7 +905,7 @@ class DirectoryLease:
         token_dir, gone = self.lockfile / token, self.lockfile / f"gone-{token}"
         patience = release_patience(self.settings)
         give_up = self.monotonic() + patience
-        delay = min(POLL_MIN / 5, patience / 4)
+        delay = min(self.settings.poll_min / 5, patience / 4)
         while True:
             try:
                 os.rename(token_dir, gone)
@@ -927,7 +926,7 @@ class DirectoryLease:
                     return
                 logger.debug("Retrying the release of %s: %s", self.lockfile, err)
             yield delay
-            delay = min(delay * 2, POLL_MAX / 4)
+            delay = min(delay * 2, self.settings.poll_max / 4)
         self._remove(gone)
 
     # Protocol

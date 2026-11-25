@@ -7,7 +7,6 @@ import logging
 import os
 import shutil
 import sys
-import time
 import typing as ty
 import warnings
 from pathlib import Path
@@ -16,6 +15,7 @@ from pydra.engine.lease import DirectoryLease, Lease, LeaseLost, LeaseSettings
 from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX
 from pydra.engine.result import Result, load_result, save
 from pydra.utils.general import CACHE_FILE_MODE, ensure_list, atomic_write
+from pydra.utils.retry import Backoff
 
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
@@ -41,11 +41,9 @@ logger = logging.getLogger("pydra")
 
 _record_exists = os.path.exists
 
-REMOVE_ATTEMPTS = 5
-"""How many times ``remove_from_cache`` tries a removal blocked by held or pending files."""
-
-REMOVE_BACKOFF = 0.1
-"""Seconds ``remove_from_cache`` waits after its first blocked attempt, doubled after each."""
+REMOVE_RETRY = Backoff(first=0.1, cap=0.8, attempts=5)
+"""How ``remove_from_cache`` retries a removal blocked by held or pending files: five tries
+over 1.5 s, the time an antivirus scan or an NFS silly-rename usually holds a file."""
 
 _BUSY_ERRNOS = frozenset({errno.EBUSY})
 _BUSY_WINERRORS = frozenset({32, 33})  # ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION
@@ -132,15 +130,13 @@ def _remove_directories(path: Path) -> None:
     os.rmdir(path)
 
 
-def remove_from_cache(path: Path) -> None:
-    """Remove the file or directory tree at ``path``; a path that is already gone counts
-    as removed.
+def remove_from_cache(path: Path, retry: Backoff | None = None) -> None:
+    """Remove the file or directory tree at ``path``; a path already gone counts as removed.
 
-    A removal blocked by files held open (sharing violation, ``EBUSY``) or pending
-    deletion (NFS ``.nfs*`` silly-renames, Windows delete-pending files) is tried
-    ``REMOVE_ATTEMPTS`` times with exponential backoff from ``REMOVE_BACKOFF``, then
-    raises ``CacheBusyError``. Once only pending files are left, later attempts remove
-    only directories. A directory that is not empty for any other reason raises
+    A removal blocked by files held open (sharing violation, ``EBUSY``) or pending deletion
+    (NFS ``.nfs*`` silly-renames, Windows delete-pending files) is tried as ``retry`` says
+    (default `REMOVE_RETRY`), then raises ``CacheBusyError``; once only pending files are left,
+    later attempts remove only directories. A directory not empty for any other reason raises
     ``CacheWriterError`` at once. Any other error is raised as it is.
     """
     path = Path(path)
@@ -155,8 +151,8 @@ def remove_from_cache(path: Path) -> None:
     else:
         handler = {"onerror": lambda f, p, exc_info: record(f, p, exc_info[1])}
     directories_only = False
-    delay = REMOVE_BACKOFF
-    for attempt in range(1, REMOVE_ATTEMPTS + 1):
+    tries = (retry or REMOVE_RETRY).tries()
+    for attempt in tries:
         failed.clear()
         try:
             if directories_only:
@@ -169,7 +165,7 @@ def remove_from_cache(path: Path) -> None:
         except FileNotFoundError:
             if not os.path.lexists(path):
                 return
-            if attempt == REMOVE_ATTEMPTS:
+            if tries.last:
                 raise
             continue
         except OSError as error:
@@ -193,19 +189,17 @@ def remove_from_cache(path: Path) -> None:
             else:
                 raise
             directories_only = all(_is_pending(entry) for entry in held)
-            if attempt == REMOVE_ATTEMPTS:
+            if tries.last:
                 raise _cache_error(
                     CacheBusyError,
                     error,
-                    f"could not remove {path} after {REMOVE_ATTEMPTS} attempts: "
+                    f"could not remove {path} after {attempt + 1} attempts: "
                     + ", ".join(map(str, held))
                     + " held open or pending deletion",
                     path,
                     held,
                     "held",
                 ) from error
-        time.sleep(delay)
-        delay *= 2
 
 
 @ty.runtime_checkable
