@@ -1104,3 +1104,96 @@ which a combined read accepted ``Absent``.
 call. 64 keeps a store replay of a loop to a few driver round trips while every call still hands
 control back to the driver within a bounded amount of work; a site with very cheap rounds may raise
 it, one whose driver must stay responsive may lower it.
+
+
+## Amendment (2026-11-25): bounded work per call, recorded errors, declared capabilities
+
+**Work per `ready` call.** A pass walks each graph from the first node not done (a cursor
+reset when the node order changes or a job is retried) up to the first node whose
+predecessors include one not started; the progress test reads the same window. A pass walks
+only frames not finished, and a released lease clears only the frames waiting on one. A chain
+of N stored jobs therefore costs O(N) node looks, not O(N^2).
+
+**Recorded errors.** A worker records the qualified type of a failure, and the exception
+itself when it pickles, beside the traceback. The runner reads that exception back; otherwise
+it reports a `RecordedError` carrying the type's name. The traceback text is never parsed.
+
+**Executor capabilities.** A worker declares `batches` and `reports_done`; the executor reads
+them instead of inspecting signatures. A round refused for one group (an SGE job asking for
+more threads than `max_threads`) fails only that group's jobs.
+
+**Absent values.** A `TypeParser` refuses an `Absent` unless built with `accepts_absent=True`
+(a field that accepts one, and output reads).
+
+### Moved from docstrings
+
+### plan() (from PlanNode, C2)
+    """One node of the graph, as the runner would run it now
+
+    Parameters
+    ----------
+    path : str
+        The node's name, with the nested workflows that hold it (``"outer/inner/node"``);
+        a workflow job whose lease is not yet held is named by its own path
+    elements : int, optional
+        How many elements the node releases, whatever a concurrency cap would hand out at
+        once; None if that depends on an upstream output that has not been read
+    resources : ComputeResources, optional
+        What the node asks of its worker
+    worker : str, optional
+        The name of the worker the submitter's router sends the node's first element to.
+        An element whose job cannot be formed yet is routed as a stand-in (name, task with
+        lazy inputs, resources), and the answer is ``provisional``; a stand-in the router
+        fails on gives None. A real job the router fails on raises, as the run would
+    expected_hits : int
+        How many of the node's unfinished elements have a stored result to reuse. The store
+        may answer with an ``expected_hits(jobs)`` method, which then counts everything
+        ``ready`` would settle; otherwise the records are counted, and the results
+        ``lookup`` returns when the runner has ``lookup_before_dispatch``. A store with a
+        ``recorded(jobs)`` method (``PickleStore``) is asked for its recorded jobs and the
+        others are looked up under that option. A store with neither (an adapter) reports 0. Only
+        elements whose inputs are resolvable now have a checksum and are counted.
+    state : "pending" | "waiting" | "deferred"
+        ``pending``: its elements are released or can be. ``waiting``: a workflow job
+        whose lease another process holds. ``deferred``: what it holds is not known yet (a
+        workflow job not yet expanded, a split over an upstream output)
+    gated : int
+        Elements a gate switches off; always 0 until gates exist
+    placement : object, optional
+        What the worker's executor's ``place(jobs)`` returned for the node's elements,
+        when it has one (RFC 0005 section 7.4). Elements whose jobs cannot be formed yet are
+        shown to ``place`` as the same stand-ins the router sees, so the answer is then
+        ``provisional``
+    provisional : bool
+        Whether ``worker`` or ``placement`` was derived from a stand-in rather than from
+        the jobs the run will dispatch, so a later plan may differ
+
+
+### 2.3(d) workflow.loop (from compose.workflow.loop, C6)
+    """The task class of a loop over ``body``, whose rounds are instantiated at run time
+    (RFC 0002 section 2.3(d))
+
+    Added to a workflow, the loop is one node that can be split, gated and read like any
+    other; under a split there is one loop per element. The runner expands it with one
+    round, ``r0``, given the loop's inputs. When round ``k`` is done and its ``until``
+    output is false, it adds ``r<k+1>``, whose ``carry`` inputs read round ``k``'s
+    outputs, whose ``index`` (if named) is ``k+1`` and whose other inputs are the loop's.
+    Nothing is built for a round before the one before it has returned false.
+
+    The loop ends after the first round for which one of these holds, in order: its
+    ``until`` is an ``Absent`` (``stopped="absent"``); it is true (``"until"``); with
+    ``index=None``, the round's checksum equals an earlier round's (``"cycle"``: its
+    state repeats, so ``until`` can never become true); ``max_rounds`` is reached
+    (``"max-rounds"``). A round that fails fails the loop.
+
+    The loop's inputs are ``body``'s without ``index``. Its outputs are ``body``'s, from
+    the last round instantiated, plus ``rounds`` (the rounds instantiated, less a last
+    round that completed absent by propagation), ``converged`` (that round's ``until``
+    as returned: ``True``, ``False`` or the ``Absent``) and ``stopped``.
+
+    Rounds of different elements' loops are dispatched separately, so a loop whose
+    rounds should be batched across elements puts the split inside a workflow ``body``
+    that combines before ``until``.
+
+
+index: with index=None the loop iterates a pure body, and a round whose inputs equal an earlier round's is served that round's result. max_rounds is only a stop, which sizes nothing.
