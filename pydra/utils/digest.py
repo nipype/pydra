@@ -406,7 +406,7 @@ class FormWalker:
         if tp in (datetime.datetime, datetime.date):
             return {"$datetime": self.datetime_(value)}
         if self.is_path(value):
-            return {"$path": os.fspath(value)}
+            return {"$path": self.path_(value)}
         if is_canonical_array(value):
             return {"$array": self.array(value)}
         if (
@@ -454,6 +454,9 @@ class FormWalker:
 
     def is_path(self, value: ty.Any) -> bool:
         return isinstance(value, os.PathLike) and not isinstance(value, FileSet)
+
+    def path_(self, value: ty.Any) -> JSON:
+        return os.fspath(value)
 
     def sort_key(self, form: JSON) -> bytes:
         return jcs(form)
