@@ -75,7 +75,7 @@ async def drive(
     onto this loop. The driver keeps no checksum table: the runner settles twins itself.
     With ``on_error="fail_fast"`` the first failure stops the run. On the way out, whether
     complete, failed or interrupted, every open handle is cancelled, the runner's leases
-    are released and the executors are closed. Failures are left on
+    are released (off the loop) and the executors are closed. Failures are left on
     ``runner.errors``.
 
     The runner is asked for every ready job: the driver sets no cap. A scheduler worker's
@@ -143,6 +143,7 @@ async def drive(
 
     for executor in executors.values():
         executor.bind(report)
+    runner.release_off_thread()
     try:
         while True:
             rnd = runner.ready()
@@ -187,5 +188,8 @@ async def drive(
         runner.close()
         for handle in open_handles:
             handle.executor.cancel(handle)
-        for executor in executors.values():
-            executor.close()
+        try:
+            await runner.released()
+        finally:
+            for executor in executors.values():
+                executor.close()

@@ -719,6 +719,65 @@ class SlowReleaseStore(PickleStore):
         return SlowRelease(lease) if checksum.startswith("workflow-") else lease
 
 
+@pytest.mark.timeout(120, method="thread")
+def test_async_driver_releases_leases_off_the_loop(tmp_path, monkeypatch):
+    """A workflow lease's release (which may wait up to ``RELEASE_PATIENCE`` on a refused
+    rename) runs off the event loop: each release blocks until a coroutine on the loop has
+    run three times while it waits. Released on the loop thread, it would block the loop,
+    the coroutine could not run, and the release would give up after ``PATIENCE``"""
+    monkeypatch.setattr(SlowRelease, "blocked", [])
+    monkeypatch.setattr(SlowRelease, "threads", [])
+    monkeypatch.setattr(SlowRelease, "gave_up", 0)
+    monkeypatch.setattr(SlowRelease, "released", 0)
+    store = SlowReleaseStore(tmp_path / "cache")
+    with Submitter(worker="debug", store=store) as sub:
+        task = Outer(x=1)
+        job = Job(task, submitter=sub, name="main")
+        runner = GraphRunner(
+            task, store, on_error="raise_at_end", submitter=sub, job=job
+        )
+        ex = Batching()
+        loop_thread = []
+
+        async def unblocker(stop):
+            seen: dict = {}
+            while not stop.is_set():
+                await asyncio.sleep(0.01)
+                for go in list(SlowRelease.blocked):
+                    seen[go] = seen.get(go, 0) + 1
+                    if seen[go] >= 3:  # the loop ran while this release waited
+                        SlowRelease.blocked.remove(go)
+                        go.set()
+
+        async def run():
+            loop_thread.append(threading.get_ident())
+            stop = asyncio.Event()
+            unblock = asyncio.ensure_future(unblocker(stop))
+            try:
+                await asyncio.wait_for(
+                    drive(
+                        runner,
+                        {"default": ex},
+                        lambda job: "default",
+                        on_error="raise_at_end",
+                    ),
+                    4 * SlowRelease.PATIENCE,
+                )
+            finally:
+                stop.set()
+                await unblock
+
+        sub.loop.run_until_complete(run())
+    assert runner.done and not runner.failed
+    assert SlowRelease.gave_up == 0  # every release waited while the loop ran
+    assert SlowRelease.released == 2  # inner and outer, both done when drive returns
+    assert loop_thread[0] not in SlowRelease.threads
+    assert job.result().outputs.out == 12
+
+
+# -- under a PortableStore -----------------------------------------------------------------------------
+
+
 def test_submitter_runs_a_workflow_on_a_portable_store(any_worker, tmp_path):
     """Every job handed out has an attempt, so it has a work directory; once the runner
     holds a job's outcome its ``_committed.json`` is forgotten"""
