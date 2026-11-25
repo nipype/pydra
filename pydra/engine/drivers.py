@@ -18,7 +18,6 @@ def drive_inline(
     executor: "InlineExecutor",
     *,
     on_error: OnError,
-    limit: int | None = None,
 ) -> None:
     """Run every job of the runner in the calling thread, one at a time
 
@@ -35,14 +34,12 @@ def drive_inline(
         Runs each job
     on_error : "raise_at_end" | "fail_fast"
         Whether to stop at the first failure
-    limit : int, optional
-        The most jobs to take from the runner per round, None if unlimited
     """
     executor.bind(runner.complete)
     fail_fast = on_error == "fail_fast"
     try:
         while True:
-            rnd = runner.ready(limit)
+            rnd = runner.ready()
             for job in rnd.dispatch:
                 executor.submit([job])
                 if fail_fast and runner.first_error is not None:
@@ -69,7 +66,6 @@ async def drive(
     executors: "ty.Mapping[str, Executor]",
     router: "Router",
     *,
-    max_concurrent: float,
     on_error: OnError,
 ) -> None:
     """Run every job of the runner on the executors, on the running event loop
@@ -82,7 +78,8 @@ async def drive(
     are released and the executors are closed. Failures are left on
     ``runner.errors``.
 
-    ``max_concurrent`` caps the jobs in flight through ``runner.ready(limit)``. Under
+    The runner is asked for every ready job: the driver sets no cap. A scheduler worker's
+    executor bounds its own submissions (``max_concurrent`` of `WorkerExecutor`). Under
     ``fail_fast`` an executor whose ``serial`` attribute is true (a synchronous worker) has
     one job in flight at a time, so none starts after the first failure.
 
@@ -95,8 +92,6 @@ async def drive(
     router : Router
         Called with each job; the name of its executor. An exception it raises is the
         job's failure
-    max_concurrent : float
-        The most jobs in flight at once; a float because ``inf`` means unlimited
     on_error : "raise_at_end" | "fail_fast"
         Whether to stop at the first failure
     """
@@ -111,11 +106,6 @@ async def drive(
     waiting: "dict[str, deque[Job]]" = defaultdict(deque)
     busy: "dict[str, int]" = defaultdict(int)
     sent_to: "dict[Job, str]" = {}
-
-    def limit() -> int | None:
-        if max_concurrent == float("inf"):
-            return None
-        return max(0, int(max_concurrent) - len(in_flight))
 
     def send(name: str, jobs: "list[Job]") -> None:
         executor = executors[name]
@@ -155,7 +145,7 @@ async def drive(
         executor.bind(report)
     try:
         while True:
-            rnd = runner.ready(limit())
+            rnd = runner.ready()
             if fail_fast and runner.failed:
                 break
             by_executor: "dict[str, list[Job]]" = defaultdict(list)

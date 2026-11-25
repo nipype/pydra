@@ -23,38 +23,6 @@ def Fan(x):
     return a.out
 
 
-@python.define
-def Hold(x: int, logdir: str, partners: int = 0, total: int = 0) -> int:
-    """Records when it ran; given ``partners``, first waits (a bound only) until that
-    many of the ``total`` jobs run at once, itself included, or all have started"""
-    t0 = time.time()
-    sync = logdir + "-sync"
-    if partners:
-        os.makedirs(sync, exist_ok=True)
-        open(os.path.join(sync, f"start-{x}"), "w").close()
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline:
-            names = os.listdir(sync)
-            started = sum(n.startswith("start-") for n in names)
-            running = started - sum(n.startswith("end-") for n in names)
-            if running >= partners or started == total:
-                break
-            time.sleep(0.02)
-    if partners:  # before its end is read, so a job that saw it running overlaps it
-        open(os.path.join(sync, f"end-{x}"), "w").close()
-    with open(os.path.join(logdir, f"{x}.txt"), "w") as f:
-        f.write(f"{t0} {time.time()}")
-    return x
-
-
-@workflow.define
-def HoldMany(
-    xs: list[int], logdir: str, partners: int = 0, total: int = 0
-) -> list[int]:
-    h = workflow.add(Hold(logdir=logdir, partners=partners, total=total).split(x=xs))
-    return h.out
-
-
 @pytest.fixture
 def submitter(tmp_path):
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
@@ -153,52 +121,6 @@ def test_runner_without_a_submitter(tmp_path):
     with Submitter(worker="debug", cache_root=tmp_path) as sub:
         runner = GraphRunner(Chain(x=1), sub.store, on_error="raise_at_end")
         assert [j.name for j in runner.ready().dispatch] == ["A"]
-
-
-def count_in_flight(monkeypatch) -> dict[str, int]:
-    """The jobs the runner has handed out and had no outcome reported for, counted in
-    this process: ``now``, and the most at once, ``most``"""
-    counts = {"now": 0, "most": 0}
-    real_ready, real_complete = GraphRunner.ready, GraphRunner.complete
-
-    def ready(self, *args, **kwargs):
-        rnd = real_ready(self, *args, **kwargs)
-        counts["now"] += len(rnd.dispatch)
-        counts["most"] = max(counts["most"], counts["now"])
-        return rnd
-
-    def complete(self, job, outcome):
-        counts["now"] -= 1
-        return real_complete(self, job, outcome)
-
-    monkeypatch.setattr(GraphRunner, "ready", ready)
-    monkeypatch.setattr(GraphRunner, "complete", complete)
-    return counts
-
-
-def test_max_concurrent_caps_running_jobs(any_worker, tmp_path, monkeypatch):
-    """No more than ``max_concurrent`` jobs of a workflow run at once"""
-    in_flight = count_in_flight(monkeypatch)
-    logdir = tmp_path / "log"
-    logdir.mkdir()
-    # on cf each job waits for a second one to run beside it, so the cap is reached
-    # whatever the machine's speed; a serial worker has no second one to wait for
-    # (the cf pool is larger than the cap whatever the host)
-    partners, pool = (2, {"n_procs": 4}) if any_worker == "cf" else (0, {})
-    with Submitter(
-        worker=any_worker, cache_root=tmp_path / "cache", max_concurrent=2, **pool
-    ) as sub:
-        result = sub(
-            HoldMany(xs=list(range(8)), logdir=str(logdir), partners=partners, total=8)
-        )
-    assert not result.errored
-    spans = [tuple(map(float, f.read_text().split())) for f in logdir.iterdir()]
-    assert len(spans) == 8
-    # the cap: never more than two handed out without an outcome
-    assert in_flight["most"] <= 2 and in_flight["now"] == 0
-    if any_worker == "cf":  # and the cap is reached: two ran at once
-        peak = max(sum(a2 <= a < b2 for a2, b2 in spans) for a, _ in spans)
-        assert peak >= 2
 
 
 def test_deprecated_submitter_wrappers(submitter):

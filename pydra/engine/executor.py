@@ -1,6 +1,7 @@
 """Executors: where the jobs a :class:`~pydra.engine.runner.GraphRunner` releases run"""
 
 import asyncio
+from collections import deque
 import typing as ty
 import attrs
 from pydra.engine.lease import LeaseSettings
@@ -143,6 +144,14 @@ def no_result_diagnosis(job: "Job") -> str:
     return f"Job {job} has no result in {str(job.cache_dir)!r}"
 
 
+def _loop_running() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return False
+    return True
+
+
 class WorkerExecutor:
     """Runs jobs on a :class:`~pydra.workers.base.Worker`, on the driver's event loop
 
@@ -156,6 +165,12 @@ class WorkerExecutor:
     ``reports_done`` is also passed ``done(job, outcome)``, so a job is reported when it
     ends rather than when the round does.
 
+    Over a batching worker, which submits to a scheduler, the executor gives the worker
+    at most ``max_concurrent`` jobs at a time, in node order, and holds the rest of a
+    round until jobs end (as each is reported through ``done``, or when its
+    ``submit_many`` call returns). Each job given counts once, as the scheduler counts
+    it: one job, or one task of an array. A worker that does not batch is not capped.
+
     Parameters
     ----------
     worker : Worker
@@ -166,6 +181,9 @@ class WorkerExecutor:
     blocking : Callable[[Worker, Job, bool], Awaitable], optional
         Runs a job of a synchronous worker off the loop; by default the loop's own
         thread pool, the submitter passes its single helper thread
+    max_concurrent : float
+        The most jobs a batching worker has submitted or queued at once; ``inf`` for no
+        cap
     """
 
     batches = False
@@ -184,8 +202,10 @@ class WorkerExecutor:
         *,
         visibility_timeout: float | None = None,
         blocking: "ty.Callable[..., ty.Awaitable] | None" = None,
+        max_concurrent: float = float("inf"),
     ):
         self.worker = worker
+        self.max_concurrent = max_concurrent
         self.visibility_timeout = (
             LeaseSettings().visibility_timeout
             if visibility_timeout is None
@@ -196,8 +216,11 @@ class WorkerExecutor:
         self._reports_done = worker.reports_done
         self._report: "ty.Callable[[Job, Outcome], None] | None" = None
         self._tasks: "dict[Job, asyncio.Task]" = {}
-        # the submit_many calls of each handle
+        # the submit_many calls of each handle, the jobs waiting for a slot under
+        # max_concurrent, and the jobs given to the worker that have not ended
         self._submissions: "dict[Handle, set[asyncio.Task]]" = {}
+        self._queue: "deque[tuple[Job, Handle]]" = deque()
+        self._given: "set[Job]" = set()
         self._pending: "dict[Job, asyncio.Future]" = {}
 
     def bind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
@@ -214,18 +237,44 @@ class WorkerExecutor:
             placed = [j for j in handle.jobs if not is_workflow(j.task)]
             for job in placed:
                 self._pending[job] = loop.create_future()
-            if placed:
-                task = loop.create_task(self._submit_many(placed, handle))
-                self._submissions.setdefault(handle, set()).add(task)
+                self._queue.append((job, handle))
+            self._launch()
         for job in handle.jobs:
             task = loop.create_task(self._run(job, handle), name=job.checksum)
             self._tasks[job] = task
         return handle
 
+    def _launch(self) -> None:
+        """Give the worker the queued jobs that fit under ``max_concurrent``, one
+        ``submit_many`` call per handle"""
+        if not self._queue:
+            return
+        room = self.max_concurrent - len(self._given)
+        chunks: "dict[Handle, list[Job]]" = {}
+        while self._queue and room >= 1:
+            job, handle = self._queue.popleft()
+            if job not in self._pending:  # cancelled while it waited
+                continue
+            chunks.setdefault(handle, []).append(job)
+            self._given.add(job)
+            room -= 1
+        loop = asyncio.get_running_loop()
+        for handle, jobs in chunks.items():
+            task = loop.create_task(self._submit_many(jobs, handle))
+            self._submissions.setdefault(handle, set()).add(task)
+
+    def _ended(self, job: "Job") -> None:
+        """Free the slot of a job the worker has finished with"""
+        if job in self._given:
+            self._given.discard(job)
+            self._launch()
+
     async def _submit_many(self, jobs: "list[Job]", handle: Handle) -> None:
-        """Give the worker a round; each job's future is set as the job ends"""
+        """Give the worker a round, or the part of it that fits under
+        ``max_concurrent``; each job's future is set as the job ends"""
 
         def ended(job: "Job", outcome: "bool | BaseException") -> None:
+            self._ended(job)
             future = self._pending.get(job)
             if future is not None and not future.done():
                 if isinstance(outcome, asyncio.CancelledError):
@@ -272,12 +321,16 @@ class WorkerExecutor:
         (the driver cancels only as the run ends)"""
         for submission in self._submissions.pop(handle, ()):
             submission.cancel()
+        self._queue = deque((j, h) for j, h in self._queue if h is not handle)
         for job in list(handle.open):
+            self._given.discard(job)
             task = self._tasks.pop(job, None)
             if task is not None:
                 task.cancel()
             self._pending.pop(job, None)
         handle.open.clear()
+        if self._queue and _loop_running():
+            self._launch()  # the freed slots go to the other handles' waiting jobs
 
     def close(self) -> None:
         """Nothing to release: the worker belongs to the submitter"""

@@ -22,7 +22,6 @@ from pydra.engine.lease import LeaseSettings
 from pydra.engine.runner import GraphRunner
 from pydra.engine.store import PickleStore
 from pydra.engine.submitter import Submitter, WorkflowError
-from pydra.engine.tests.test_runner import count_in_flight
 
 # a holder is taken over after one second without a renewal
 SETTINGS = LeaseSettings(stale_after=1, timeout=30, attribute_delay=0)
@@ -31,87 +30,32 @@ FOREVER = LeaseSettings(stale_after=10, timeout=15, attribute_delay=0, max_wait=
 
 
 @python.define
-def Span(
-    x: int, logdir: str, hold: float = 0.4, partners: int = 0, total: int = 0
-) -> int:
-    """Runs for ``hold`` seconds and records when; given ``partners``, first waits (a
-    bound only) until that many of the ``total`` jobs run at once, itself included, or
-    all have started"""
+def Span(x: int, logdir: str, hold: float = 0.4) -> int:
+    """Runs for ``hold`` seconds and records when"""
     start = time.time()
-    sync = Path(logdir + "-sync")
-    if partners:
-        sync.mkdir(exist_ok=True)
-        (sync / f"start-{x}").touch()
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline:
-            names = os.listdir(sync)
-            started = sum(n.startswith("start-") for n in names)
-            running = started - sum(n.startswith("end-") for n in names)
-            if running >= partners or started == total:
-                break
-            time.sleep(0.02)
     time.sleep(hold)
-    if partners:  # before its end is read, so a job that saw it running overlaps it
-        (sync / f"end-{x}").touch()
     (Path(logdir) / f"{os.getpid()}-{x}.span").write_text(f"{start} {time.time()}")
     return x
 
 
 @workflow.define
-def Inner(tag: int, logdir: str, partners: int = 0, total: int = 0) -> list[int]:
-    s = workflow.add(
-        Span(logdir=logdir, partners=partners, total=total).split(
-            x=[tag * 10 + i for i in range(4)]
-        )
-    )
+def Inner(tag: int, logdir: str) -> list[int]:
+    s = workflow.add(Span(logdir=logdir).split(x=[tag * 10 + i for i in range(4)]))
     return s.out
 
 
-def make_outer(nested: int, partners: int = 0):
-    """``nested`` inner workflows of four jobs each; ``partners`` as for `Span`"""
-    total = 4 * nested if partners else 0
+def make_outer(nested: int):
+    """``nested`` inner workflows of four jobs each"""
 
     @workflow.define
     def Outer(logdir: str) -> list[int]:
         outs = [
-            workflow.add(
-                Inner(tag=t, logdir=logdir, partners=partners, total=total),
-                name=f"in{t}",
-            ).out
+            workflow.add(Inner(tag=t, logdir=logdir), name=f"in{t}").out
             for t in range(nested)
         ]
         return outs[0]
 
     return Outer
-
-
-def peak_overlap(logdir: Path) -> int:
-    spans = [
-        tuple(float(v) for v in p.read_text().split()) for p in logdir.glob("*.span")
-    ]
-    events = sorted([(a, 1) for a, _ in spans] + [(b, -1) for _, b in spans])
-    peak = running = 0
-    for _, step in events:
-        running += step
-        peak = max(peak, running)
-    return peak
-
-
-def test_max_concurrent_caps_whole_run(tmp_path, monkeypatch):
-    in_flight = count_in_flight(monkeypatch)
-    logdir = tmp_path / "spans"
-    logdir.mkdir()
-    # the pool is larger than the cap whatever the host, so the cap is the bound; each
-    # job waits for four to run at once, so the cap is reached whatever the host's speed
-    with Submitter(
-        worker="cf", cache_root=tmp_path / "cache", max_concurrent=4, n_procs=8
-    ) as sub:
-        sub(make_outer(8, partners=4)(logdir=str(logdir)))
-    assert len(list(logdir.glob("*.span"))) == 32
-    # the cap: never more than four handed out without an outcome, across the nested
-    # workflows; and the cap is reached: four ran at once
-    assert in_flight["most"] <= 4 and in_flight["now"] == 0
-    assert peak_overlap(logdir) >= 4
 
 
 @python.define
@@ -976,28 +920,26 @@ def FailAlongsideSplit(xs: list[int], gate: str) -> list[int]:
 
 
 def test_stopped_entries_only_for_elements_handed_out(tmp_path):
-    """Under ``max_concurrent`` released elements held back by the cap were never handed
-    out, so they get no "stopped" entry; only those handed out and unfinished do"""
-    gate = tmp_path / "release"  # the elements of s run until the test opens it
-    try:
-        with Submitter(
-            worker="cf",
-            cache_root=tmp_path / "cache",
+    """Released elements a driver's ``ready(limit)`` held back were never handed out, so
+    they get no "stopped" entry; only those handed out and unfinished do"""
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        task = FailAlongsideSplit(xs=[10, 11, 12, 13, 14, 15], gate="")
+        runner = GraphRunner(
+            task,
+            sub.store,
             on_error="fail_fast",
-            max_concurrent=2,
-            n_procs=4,
-        ) as sub:
-            with pytest.raises(WorkflowError) as raised:
-                sub(
-                    FailAlongsideSplit(xs=[10, 11, 12, 13, 14, 15], gate=str(gate)),
-                    raise_errors=True,
-                )
-            gate.touch()  # s0 is still running; let it end so the pool closes
-    finally:
-        gate.touch()
-    entries = raised.value.entries
+            submitter=sub,
+            job=Job(task, submitter=sub, name="main", environment=sub.environment),
+        )
+        handed = runner.ready(2).dispatch
+        # the limit of two leaves room for one element of ``s`` beside ``f``
+        assert [(j.name, j.state_index) for j in handed] == [("f", None), ("s", 0)]
+        executor = InlineExecutor(sub.worker)
+        executor.bind(runner.complete)
+        executor.submit([handed[0]])  # f fails; s0 is never reported
+        runner.close()
+    entries = runner.entries
     stopped = [(e.job_name, e.state_index) for e in entries if e.phase == "stopped"]
-    # the cap of two leaves room for one element of ``s`` beside ``f``
     assert stopped == [("s", 0)]
     (entry,) = [e for e in entries if e.phase == "stopped"]
     assert entry.exception_type is None

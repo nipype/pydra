@@ -639,6 +639,46 @@ def Split6(xs: list[int]) -> list[int]:
     return a.out
 
 
+class OneAtATime(Batching):
+    """An executor given one job per call"""
+
+    batches = False
+
+
+@pytest.mark.parametrize("executor", [Batching, OneAtATime])
+def test_drive_hands_out_every_ready_job(submitter, executor):
+    """The driver passes the runner no limit, whatever the executor"""
+    runner = runner_for(submitter, Split6(xs=list(range(6))))
+    limits = []
+    ready = runner.ready
+
+    def spy(limit=None):
+        limits.append(limit)
+        return ready(limit)
+
+    runner.ready = spy
+    ex = executor()
+
+    async def run():
+        await asyncio.wait_for(
+            drive(
+                runner, {"default": ex}, lambda job: "default", on_error="raise_at_end"
+            ),
+            30,
+        )
+
+    submitter.loop.run_until_complete(run())
+    assert runner.done and not runner.failed
+    assert limits and all(limit is None for limit in limits)
+    if executor.batches:
+        assert ex.calls[0] == [("A", i) for i in range(6)]  # one batch, the whole node
+    else:
+        assert ex.calls == [[("A", i)] for i in range(6)]
+
+
+# -- workflow leases released off the event loop -----------------------------------------------------
+
+
 class SlowRelease:
     """Wraps a workflow job's lease; its release blocks until the test has seen the event
     loop run while the release waits, or gives up after ``PATIENCE`` seconds"""
@@ -761,6 +801,62 @@ class ArrayWorker(base.Worker):
         return list(await asyncio.gather(*(one(j) for j in jobs)))
 
 
+@pytest.mark.timeout(60, method="thread")
+def test_batching_executor_caps_max_concurrent_itself(tmp_path):
+    """A batching executor is driven without a limit (RFC 0005 section 7.1) and holds
+    ``max_concurrent`` itself: a round larger than the cap is given to the worker in
+    chunks as jobs end"""
+    worker = ArrayWorker()
+    with Submitter(worker=worker, cache_root=tmp_path, max_concurrent=2) as sub:
+        result = sub(Split6(xs=list(range(6))))
+    assert not result.errored and result.outputs.out == [1, 2, 3, 4, 5, 6]
+    assert worker.peak <= 2
+    assert sum(worker.calls) == 6 and worker.calls[0] == 2
+
+
+@workflow.define
+def TwoSplit6(xs: list[int], ys: list[int]) -> list[int]:
+    workflow.add(Split6(xs=xs), name="I")
+    j = workflow.add(Split6(xs=ys), name="J")
+    return j.out
+
+
+@pytest.mark.timeout(60, method="thread")
+def test_the_cap_of_a_batching_executor_spans_nested_workflows(tmp_path):
+    """The elements of two nested workflows go to one executor, under one cap"""
+    worker = ArrayWorker()
+    with Submitter(worker=worker, cache_root=tmp_path, max_concurrent=2) as sub:
+        result = sub(TwoSplit6(xs=list(range(6)), ys=list(range(6, 12))))
+    assert not result.errored
+    assert worker.peak <= 2 and sum(worker.calls) == 12
+
+
+@pytest.mark.parametrize("worker", ["debug", "cf"])
+def test_max_concurrent_leaves_a_worker_without_a_scheduler_uncapped(
+    tmp_path, monkeypatch, worker
+):
+    """``max_concurrent`` bounds a scheduler worker's submissions only: a local worker is
+    handed every ready job at once"""
+    limits, handed = [], []
+    real = GraphRunner.ready
+
+    def ready(self, limit=None):
+        limits.append(limit)
+        rnd = real(self, limit)
+        handed.append(len(rnd.dispatch))
+        return rnd
+
+    monkeypatch.setattr(GraphRunner, "ready", ready)
+    extra = {"n_procs": 2} if worker == "cf" else {}
+    with Submitter(
+        worker=worker, cache_root=tmp_path, max_concurrent=1, **extra
+    ) as sub:
+        result = sub(Split6(xs=list(range(6))))
+    assert not result.errored
+    assert limits and set(limits) == {None}
+    assert max(handed) == 6
+
+
 class HoldsJobs(base.Worker):
     """A batching worker that keeps every job it is given until the test lets go"""
 
@@ -778,6 +874,43 @@ class HoldsJobs(base.Worker):
     async def submit_many(self, jobs, done=None):
         self.given.extend(j.state_index for j in jobs)
         await asyncio.Event().wait()
+
+
+@pytest.mark.timeout(30, method="thread")
+def test_cancel_frees_the_slots_of_a_capped_batching_executor(submitter):
+    from pydra.engine.executor import WorkerExecutor
+
+    runner = runner_for(submitter, Split6(xs=[0, 1, 2]))
+    first, second, third = runner.ready().dispatch
+    worker = HoldsJobs()
+    ex = WorkerExecutor(worker, max_concurrent=1)
+    ex.bind(lambda job, outcome: None)
+
+    async def given(n):  # the loop runs the submissions; bounded by the test's timeout
+        while len(worker.given) < n:
+            await asyncio.sleep(0)
+
+    async def run():
+        held = ex.submit([first, third])  # ``third`` waits for a slot
+        ex.submit([second])  # and so does ``second``
+        await given(1)
+        for _ in range(10):  # let any wrongly freed slot be taken
+            await asyncio.sleep(0)
+        assert worker.given == [0]
+        ex.cancel(held)
+        await given(2)
+        # the other handle's job has the slot now; the cancelled handle's queued job
+        # left the queue
+        assert worker.given == [0, 1]
+        assert not any(handle is held for _, handle in ex._queue)
+        for task in list(ex._tasks.values()):
+            task.cancel()
+        for tasks in list(ex._submissions.values()):
+            for task in tasks:
+                task.cancel()
+        await asyncio.sleep(0)
+
+    submitter.loop.run_until_complete(asyncio.wait_for(run(), 10))
 
 
 class CountingReads(PickleStore):

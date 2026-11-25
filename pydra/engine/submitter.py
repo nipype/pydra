@@ -141,7 +141,12 @@ class Submitter:
         to them with code execution as the reading user: only list caches whose
         writers you trust
     max_concurrent: int | float, optional
-        Maximum number of concurrent tasks to run, by default float("inf") (unlimited)
+        The most jobs each scheduler worker (slurm, sge) has submitted or queued at once,
+        to stay within the scheduler's job limits; by default float("inf") (no cap). A
+        scheduler job counts once, and each task of an array counts once, as the
+        scheduler counts it. It does not limit other workers, warm pools or the jobs of
+        a batched call: their concurrency is the worker's own (``n_procs``, a pool's
+        workers per device and batch size)
     audit_flags : AuditFlag, optional
         Configure provenance tracking. available flags: :class:`~pydra.utils.messenger.AuditFlag`
         Default is no provenance tracking.
@@ -548,13 +553,6 @@ class Submitter:
         for worker in self.workers.values():
             worker.loop = self.loop
 
-    def _limit(self, in_flight: int = 0) -> int | None:
-        """The most jobs to hand out in one round given those already running, None if
-        unlimited"""
-        if self.max_concurrent == float("inf"):
-            return None
-        return max(0, int(self.max_concurrent) - in_flight)
-
     def _run_workflow(self, job: "Job[workflow.Task]", rerun: bool) -> None:
         """Run the outer workflow job: the runner takes its lease, expands it with every
         nested workflow and commits its result"""
@@ -573,7 +571,6 @@ class Submitter:
                 runner,
                 InlineExecutor(self.worker, self.worker_for),
                 on_error=runner.on_error,
-                limit=self._limit(),
             )
         else:  # some job may run on a worker that is not inline
             self.loop.run_until_complete(self._drive(runner))
@@ -668,6 +665,7 @@ class Submitter:
             name: WorkerExecutor(
                 worker,
                 blocking=None if worker.is_async else self._run_blocking,
+                max_concurrent=self.max_concurrent,
             )
             for name, worker in self.workers.items()
         }
@@ -675,7 +673,6 @@ class Submitter:
             runner,
             executors,
             self.route_name,
-            max_concurrent=self.max_concurrent,
             on_error=runner.on_error,
         )
 
