@@ -1,5 +1,6 @@
 import shutil
 import os
+import sys
 import pytest
 import typing as ty
 from click.testing import CliRunner, Result as CliResult
@@ -26,6 +27,68 @@ def isolated_user_cache(tmp_path_factory, monkeypatch):
     monkeypatch.setenv(CACHE_ROOT_ENV_VAR, str(root))
     monkeypatch.delenv(PersistentCache.LOCATION_ENV_VAR, raising=False)
     return root
+
+
+def kill_descendants() -> list[int]:
+    """SIGKILL every process below this one (POSIX); the pids killed"""
+    import signal
+    import subprocess
+
+    table = subprocess.run(
+        ["ps", "-A", "-o", "pid=,ppid="], capture_output=True, text=True
+    ).stdout
+    children: dict[int, list[int]] = {}
+    for line in table.splitlines():
+        pid, ppid = (int(f) for f in line.split())
+        children.setdefault(ppid, []).append(pid)
+    found, todo = [], [os.getpid()]
+    while todo:
+        for child in children.get(todo.pop(), ()):
+            found.append(child)
+            todo.append(child)
+    for pid in found:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    return found
+
+
+def pytest_configure(config):
+    """A test that pytest-timeout ends with ``os._exit`` first takes down what it started:
+    a process pool's forkserver and workers would otherwise outlive the test process,
+    holding the run's output pipe open until they end"""
+    if sys.platform == "win32":
+        return
+    try:
+        import pytest_timeout
+    except ImportError:
+        return
+    exit_on_timeout = getattr(pytest_timeout, "timeout_timer", None)
+    if (
+        exit_on_timeout is None
+    ):  # a pytest-timeout without the thread method's exit hook
+        return
+
+    def guarded(item, settings):
+        kill_descendants()
+        exit_on_timeout(item, settings)
+
+    pytest_timeout.timeout_timer = guarded
+
+
+IMAGE_CACHE_VARS = ("SINGULARITY_CACHEDIR", "APPTAINER_CACHEDIR")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def private_image_cache(tmp_path_factory):
+    """Give each test process its own Singularity/Apptainer cache: pulls running in
+    parallel into one cache corrupt its shared blobs"""
+    cache = tmp_path_factory.mktemp("image-cache")
+    with pytest.MonkeyPatch.context() as mp:
+        for var in IMAGE_CACHE_VARS:
+            mp.setenv(var, str(cache))
+        yield cache
 
 
 def _is_loopback(host) -> bool:
