@@ -1703,6 +1703,7 @@ class GraphRunner:
             # the outer job has its attempt from its creation (`Submitter.__call__`); a
             # job that can resume keeps its stable work directory under a fresh attempt
             job.attempt = uuid4().hex
+            self.store.note_attempt(job)
         try:
             frame.result = job._start_workflow(frame.lease)
             self._expand(frame, job.task)
@@ -2104,6 +2105,7 @@ class GraphRunner:
             self._in_flight.add(job)
             job.rerun = self._inner_rerun
             job.attempt = uuid4().hex
+            self.store.note_attempt(job)
         self._collect_resolution_errors()
         settled, self._settled = self._settled, []
         loops, self._closed_loops = self._closed_loops, []
