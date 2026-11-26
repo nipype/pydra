@@ -18,6 +18,7 @@ import cloudpickle as cp
 from pydra.engine.graph import DiGraph
 from pydra.engine.progress import (
     UNSET,
+    TrackedDict,
     TrackedSet,
     changed,
     changes,
@@ -1150,6 +1151,11 @@ class NodeExecution(ty.Generic[TaskType]):
         return errors
 
 
+STORE_READERS = 4
+"""Store reads a runner runs at once off its driver's thread: enough to overlap the latency
+of reads on shared storage without flooding it; an unmeasured default."""
+
+
 def find_before_dispatch(store: "ResultStore", job: Job, complete: bool) -> ty.Any:
     """What ``store.find`` answers for ``job`` before it is leased: ``find(job)`` when
     ``complete``, else ``find(job, probe=True)``, one existence check of the job's own
@@ -1590,6 +1596,10 @@ class GraphRunner:
         self._quiescent = False
         # releases of workflow leases run off the driver's thread (`release_off_thread`)
         self._release_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        # store reads off the driver's thread (`read_off_thread`), by job
+        self._read_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        self._read_notify: "ty.Callable[[], None] | None" = None
+        self._reading: "dict[Job, concurrent.futures.Future]" = TrackedDict()
         self._releases: list[concurrent.futures.Future] = []
         self._failed = False
         self._first_error: BaseException | None = None
@@ -1954,6 +1964,9 @@ class GraphRunner:
         committed as errored, any other that is not finished gives up its lease and
         stores nothing (its unfinished nodes did not run, so no result is built).
         Idempotent; a driver calls it however the run ends"""
+        pool, self._read_pool = self._read_pool, None
+        if pool is not None:  # reads not taken up are dropped with their jobs
+            pool.shutdown(wait=False, cancel_futures=True)
         self._collect_resolution_errors()
         for frame in reversed(list(self._frames)):
             if frame.state == "finished" or not frame.owned:
@@ -2006,7 +2019,7 @@ class GraphRunner:
 
     def _progress(self) -> int:
         """The count of changes to the state a pass of :meth:`ready` reads: the jobs
-        handed out or checked, the frames' states, the loops' rounds,
+        handed out, read off the thread or checked, the frames' states, the loops' rounds,
         the nodes' tables and modes, and a partial node's blocks, groups and seal
         (`~pydra.engine.progress.changed`). ``ready`` repeats its pass until a pass hands
         out a job or leaves the count unchanged."""
@@ -2096,7 +2109,11 @@ class GraphRunner:
         while True:
             before = self._progress()
             self._settle_frames()
-            candidates = [j for j in self._runnable() if j not in self._handed]
+            candidates = [
+                j
+                for j in self._runnable()
+                if j not in self._handed and j not in self._reading
+            ]
             candidates = self._serve(candidates)
             if candidates or self._progress() == before:
                 break
@@ -2144,6 +2161,7 @@ class GraphRunner:
             not (dispatch or settled or unrunnable or absent_nodes or loops)
             and retry_after is None
             and not self._in_flight
+            and not self._reading
         )
         return Round(
             dispatch=dispatch,
@@ -2156,9 +2174,12 @@ class GraphRunner:
 
     def _serve(self, jobs: list[Job]) -> list[Job]:
         """Settle the released jobs the store holds and the twins of jobs whose outcome is
-        known; return the others"""
+        known; return the others, and the jobs whose read off the thread has ended without a
+        result to serve"""
+        read = self._harvest()
         if jobs and not self._inner_rerun:
             jobs = self._read_store(jobs)
+        jobs = read + jobs
         rest = []
         for job in jobs:
             outcome = self._finished.get(job.checksum)
@@ -2184,6 +2205,19 @@ class GraphRunner:
                 job in self._checked
             ):  # read, nothing to serve: handed out when there is room
                 rest.append(job)
+                continue
+            if self.store.finds and self._read_pool is not None:
+                # a hit reads and verifies every member: off the driver's thread
+                if not self.lookup_before_dispatch and not self.store.present(job):
+                    self._checked.add(job)
+                    rest.append(job)
+                    continue
+                future = self._read_pool.submit(
+                    find_before_dispatch, self.store, job, self.lookup_before_dispatch
+                )
+                self._reading[job] = future
+                if self._read_notify is not None:
+                    future.add_done_callback(self._notify_read)
                 continue
             if self.store.finds:
                 found = find_before_dispatch(
@@ -2214,6 +2248,54 @@ class GraphRunner:
         job.hooks.pre_run(job)
         job._cached_result = result
         job._awaiting_run = False
+
+    def _harvest(self) -> list[Job]:
+        """Settle the jobs whose read off the thread found a result to serve; return those
+        whose read found none (a `Verify` marks the job), to be handed out"""
+        rest = []
+        for job, future in list(self._reading.items()):
+            if not future.done():
+                continue
+            del self._reading[job]
+            result = job.accept_found(future.result())
+            if result is None:
+                self._checked.add(job)  # not read again if a cap holds it back
+                rest.append(job)
+            else:
+                self._settle_stored(job, result)
+        return rest
+
+    def read_off_thread(
+        self, notify: "ty.Callable[[], None] | None" = None, readers: int | None = None
+    ) -> None:
+        """Read the entries a store's ``find`` serves on helper threads from here on: a hit
+        reads and verifies every member, which on shared storage takes long enough to hold
+        an event loop. A job whose own address holds an entry is not handed out until its
+        read ends; ``notify`` is called (from the helper thread) as each ends, and the
+        next :meth:`ready` settles it or hands it out. :attr:`reading` counts the reads
+        not yet taken up. ``readers`` is how many reads run at once (default
+        `STORE_READERS`)."""
+        readers = STORE_READERS if readers is None else readers
+        if self._read_pool is None:
+            self._read_pool = concurrent.futures.ThreadPoolExecutor(
+                max_workers=readers, thread_name_prefix="pydra-store-read"
+            )
+        self._read_notify = notify
+
+    def _notify_read(self, _future: concurrent.futures.Future) -> None:
+        notify = self._read_notify
+        if notify is None:
+            return
+        try:
+            notify()
+        except RuntimeError:  # the driver's loop has closed: nobody waits for it
+            pass
+
+    @property
+    def reading(self) -> int:
+        """The store reads begun off the thread whose jobs are not yet settled or handed
+        out (see :meth:`read_off_thread`)"""
+        return len(self._reading)
 
     def _lookup(self, job: Job) -> "Result | None":
         try:
