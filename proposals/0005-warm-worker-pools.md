@@ -227,6 +227,29 @@ class WarmEnvironment(Protocol):
 environment has `warm=True`, then one key per provided field. Its **residency digest** is the sha256 of
 the canonical list of their digests, or none for a job with no resident state.
 
+**Decided in implementation.**
+
+- `warm(roots, device, ref=None, *, writable=(), scratch=None)`: a worker passes the reference its
+  jobs carry and never resolves; `writable` names the roots bound writable.
+- A warm container keeps the cold run's modes: every root is bound read-only under `<root>-ro`, and
+  a root holding a writable binding (cache, store, work, scratch) also writable under `<root>`, so a
+  job that edits an input in place fails warm as it fails cold. A ticket needing a root writable
+  that the start bound read-only restarts it. `max_mount_roots` counts the scratch root.
+- A per-start scratch directory `<cache root>/.pydra-warm-<token>` holds each job's `HOME`
+  (removed after the job) and the container's `/tmp` (emptied after each job); under
+  `Docker(read_only=True)` it replaces `--tmpfs /tmp`. Apptainer gets `HOME` and `TMPDIR` through
+  `env` inside the instance, so the image needs `env`.
+- Each `docker exec` runs the image's `ENTRYPOINT` before the command, as `docker run` does; an
+  `--entrypoint` in `xargs` takes its place.
+- A warm container is labelled `pydra.warm.owner=<host>:<uid>:<pidns>:<pid>` and `pydra.warm.uid`;
+  a start removes only its own uid's containers whose owner has ended on this host and pid
+  namespace (host and uid only where the namespace cannot be read). A failed start removes what it
+  left. Open warm environments close at exit and on `SIGTERM`.
+- Only the warm start passes GPU flags (`--gpus`, `--nv`, `CUDA_VISIBLE_DEVICES`); a warm
+  environment's job run cold beyond `max_mount_roots` on a `cuda` class runs without a GPU.
+- Container processes belong to dockerd or the Apptainer starter, so no shell job's memory is
+  attributed to its worker.
+
 ### 3.2 Resource requests and worker classes
 
 `ComputeResources` (`utils/resources.py:37-63`) gains two optional fields:
@@ -365,6 +388,34 @@ class Calibration(Protocol):
   never blocks and never refuses a placeable job. `plan()` (RFC 0002 R8) shows each node's placement
   (§7.4).
 
+**Decided in implementation.**
+
+- `MeasuredFit.judge` reads unfit records before the `"unknown"` of a class with `gpu_mem=None`. A
+  record binds a class whose grant of the same resource is no larger than the recorded one, and by
+  class name only when either grant is unknown; a GPU class reads host and device records.
+  `version()` must give the same string in the coordinator and the workers. A worker that cannot
+  read its providers' versions writes no record.
+- An `UnfitRecord`'s resource is what the first out-of-memory link of the exception's chain says: a
+  device type (torch's, cupy's) before the generic `MemoryError`, jax's `ResourceExhaustedError`
+  only when its message names a device, a `MemoryError` the host's.
+- The hardware class a calibration is kept under comes from the worker class (`hardware_of`), so a
+  coordinator and a worker name it alike.
+- With no measured peak there is no `MemoryFit` (never one of zero activation memory); `m1` is None
+  with fewer than two distinct units. `MeasuredFit.batch` is 1 when `m1` is unknown, or when
+  `m1 > 0` and no unit is known, and `quantum_jobs` only when `m1` was measured as 0. `headroom`
+  has no default.
+- `units` is called with the inputs its signature names, in the submitting process; it travels as
+  `TicketJob.units` and `FitRequest.units`, and one that raises fails its job at submission and in
+  `plan()`.
+- A declared batch (`python.define(batch=)`, else `MeasuredFit(batch=)`) overrides the probe, capped
+  by the memory bound. Otherwise a placement's `batch` is the memory bound with `probe` true, and
+  each worker sizes each call from the calibration as it stands (`probe_batch`): times are seconds
+  per unit (per job where units are unknown); only powers of two up to the bound count; a size with
+  fewer than `probe_samples` calls is asked again; a doubling is kept while it cuts the time per
+  unit by at least `probe_gain`; then the fastest size. A batched call gives the calibration one
+  sample. Samples carry their task's code identity (`task_key`), and timings and fits are read per
+  task and residency. `plan()` reports the declared size, or the bound with `probe` true.
+
 ## 4. The executor
 
 ### 4.1 `WarmPool`
@@ -405,6 +456,22 @@ class WarmPool:                                   # an RFC 0002 §3.2 Executor
   workers serve the newer one. `pydracli pool collect` removes ended coordinators' directories, settled
   tickets, and the payloads no unsettled ticket names (§5.2); the work directories of attempts that were
   taken over or withdrawn are the store's `collect`'s (RFC 0003 §9). It never removes a job's highest follow generation (§5.1).
+
+**Decided in implementation.**
+
+- Whoever made an executor closes it: `drive` and `drive_inline` never close the executors they are
+  handed. A `WarmPool` passed as `Submitter(worker=pool)` is its caller's; one made by name
+  (`Submitter(worker="pool", ...)`) is closed with the `Submitter`. Substrate workers still exit when
+  idle or orphaned.
+- An executor given as a worker is wrapped as `ExecutorWorker`: a run's driver is handed the
+  executor, a lone task is submitted to it alone, and the `Submitter` uses the executor's store and
+  refuses another.
+- Several runs may share a pool at once: `bind` is per run (a context variable owned by the
+  asyncio task or thread that set it), each outcome goes to the run that submitted the job, a job
+  another run has open settles with it, and a run's `cancel` touches only its own jobs. A submit from
+  a context that never bound goes to the one bound run, and is refused when several are.
+- Payloads live at `<root>/payloads/<sha256>`, read by every attempt and removed only by the pool's
+  `collect`.
 
 ### 4.2 Queues, tickets and routing
 
@@ -502,6 +569,28 @@ load seconds, whether this job's residency was cold or warm (`since_load`), and 
 These go to the `Calibration` and to the job's execute context (§8). The fields are senselab's `Sample`
 (`rt/sizing.py:362-382`) without the audio ones.
 
+**Decided in implementation.**
+
+- A warm shell job runs through a `PoolSession`, one per (environment, resolved reference), at most
+  `max_warm_sessions` open (least recently used idle one closed first); the worker passes the
+  class's `mounts` as roots. The start runs before the call, outside any call deadline; a failed
+  start is a load fault (requeued uncharged), counted and held under the environment's own label
+  (`warm_environment_label`), so a broken image holds only the tickets that carry it. On a lost
+  claim, an expired call or the end of a drain, the warm container running the call's command is
+  closed. The environment key is not in a warm job's residency digest: shell jobs of every image
+  share the class's queue.
+- A start reads a job's roots from its declared input values.
+- Memory is attributed to a residency: a worker's own processes are itself and its providers'
+  process groups; `resident_bytes` is the baseline plus the growth across this residency's load,
+  `device_bytes` the device growth across it, and each call's peaks are read above what was held
+  just before it (`CallMeter`). Samples taken beside another residency, cold or reloaded ones and
+  ones without a measured peak are not fitted.
+- A worker reads its allocation's end from `SLURM_JOB_END_TIME`, else once from `squeue` (bounded by
+  `squeue_timeout`). Before each job, or batched call, it compares the time left with the job's
+  `time`, else `call_timeout`; the first that does not fit recycles the worker. A ticket carries the
+  longest `time` of its jobs, and `PoolRoot.claim(max_time=)` passes over one that does not fit.
+- A worker writes `exit.json` as it exits; a still-listed worker that wrote it is not live.
+
 ### 4.4 Whole-round batching
 
 Two levels, both opt-in:
@@ -540,6 +629,22 @@ Two levels, both opt-in:
   `ParityRecord`, so a batched implementation's or a warm environment's equality claim is measured over
   time; a mismatch is also a content fault of the *task*, reported once per residency through the audit.
   senselab turns it on in calibration runs.
+
+**Decided in implementation.**
+
+- `batched=` code joins the task's key (identity record `task.batched`); `units=` and `batch=` do
+  not. A job of a batched call records `batch` as `{"size", "index", "batched": true,
+  "function"}` in its pool facts; a job run alone records `{"size": 1, "index": 0}`.
+- Calls are made within one ticket, of one task class and residency, ordered by units (unknown
+  last). Before a batched call each job the store already serves settles `done` and is left out.
+- On the call thread `batched` runs once on the values the function would receive, provided fields
+  bound once; then each job's `Job.run` runs with its element, so lookup, work directory, audit,
+  pool facts, proof and commit are a lone job's. The element is never pickled. A `LeaseLost` ends
+  the call.
+- Only an exception that is a job's own element is its content fault; any other exception a job's
+  run raises is typed by the classifier. A whole-call raise typed content, or a return of the wrong
+  length, becomes every job's element; a crash or resource fault is bisected; any other fault fails
+  each job.
 
 ### 4.5 Substrates and scaling
 
@@ -607,6 +712,29 @@ class Substrate(Protocol):
     see. The filesystem type decides first: a network or parallel filesystem is shared, a memory
     filesystem is local. Only for another or unknown type do the `/tmp`, `/var/tmp`, `/dev/shm` and
     `$TMPDIR` prefixes decide. `allow_node_local=True` accepts one on a cluster of one node.
+
+**Decided in implementation.**
+
+- `SlurmSubstrate` passes `--qos` only as a class's `substrate_args` give it. A class whose
+  `substrate_args` set an option the substrate sets (`gres`, the `gpus*`, `cpus-per-*`, `mem*`,
+  `time`, `job-name`, `comment`, `output`, `error`, `wrap`, `parsable`, `array`, `clusters`, or their
+  one-letter forms) cannot start. Worker jobs are `--no-requeue`.
+- A timed-out `sbatch` is looked up by name at once and after `attribute_delay`; only when both find
+  nothing is the worker submitted again, under a new token.
+- A `start` that raises is a failed start of its class. A `live()` that raises skips that poll's
+  scaling; after `FaultBudgets.listing_failures` failed polls in a row each class with work is broken
+  and its jobs held. `close` with the listing down stops the workers this coordinator started.
+- One process-wide `squeue --user` per poll cycle serves `SlurmWorker` and every `SlurmSubstrate`.
+  `live()` lists this pool's jobs of this epoch and earlier ones; a coordinator's first listing
+  cancels earlier epochs' pending jobs and adopts their running ones. A job `stop` cancelled is
+  neither live nor adopted again.
+- Up to `workers_per_device` workers of a class share one `sbatch` job; `stop` cancels it once all
+  its workers are stopped.
+- A class with waiting work breaks after `start_deadline_s` of a failure streak and
+  `start_deadline_failures` attempts; `WarmPool.release_hold`, or a `retry` of a held job, lifts the
+  break. A failed ticket write puts its jobs back at the head of their queue. Failed starts,
+  listings, writes and polls are `pydra.pool` log records carrying `event`. `check_root` refuses a
+  pool on node-local storage.
 
 ## 5. The worker protocol over shared storage
 
@@ -831,6 +959,40 @@ waited until its 6 h limit (T24-9, §9). A test (W4) fails if a pool module take
   renewal interval plus `attribute_delay` late (senselab ADR-003 amendment 2026-11-06, "Not
   guaranteed"). §5.5 makes that lateness harmless.
 
+**Settings.** Every number a pool reads is a field of `PoolSettings` (or of its
+`LeaseSettings`), `FaultBudgets`, `WorkerClass` or the substrate; each default is a site choice,
+unmeasured unless stated.
+
+| Setting | Default | Basis |
+|---|---|---|
+| `poll_s` | 5 s | a claim waits at most one poll; one listing per poll per worker |
+| `idle_polls` | 12 | a worker with nothing to claim for a minute exits |
+| `orphan_after_s` | 600 s | the lease `timeout`: a coordinator unseen that long is gone |
+| `timeout_grace` | 60 s | time to stop an expired call before the beater kills it |
+| `drain_s` | 20 s | the drain on SIGTERM; claims are released before providers stop, so a kill at Slurm's `KillWait` loses nothing |
+| `preemption_budget` | 3 | routine preemptions on a preemptible partition |
+| `max_warm_sessions` | 4 | bounds processes, mounts and scratch directories |
+| `probe_samples` | 3 | the fewest calls one slow call cannot move the median of |
+| `probe_gain` | 0.05 | a smaller saving per unit is within run-to-run noise |
+| `target_wall_s` | 600 s | a backlog drains within a typical scheduler start time |
+| `unmeasured_workers` | 1 | one worker measures before scaling |
+| `start_deadline_s`, `start_deadline_failures` | 120 s, 3 | Python start-up and a model import on a loaded node; three failures in a row |
+| `SEGMENT_ITEMS` | 1000 | a segment listing stays a few tens of kilobytes |
+| `WorkerClass.quantum_jobs`, `quantum_s` | 64, 300 s | a ticket of a few minutes; a queue revisited every 5 min |
+| `FaultBudgets` | 1/2/3/2/7/7 | the counts §6 gives per fault kind |
+| `submit_timeout`, `squeue_timeout` | 60 s | a loaded slurmctld answers within a minute |
+| `nvidia-smi` timeout | 20 s | the first query on a node initialises the driver |
+| `DirectoryCalibration.min_samples` | 3 | as `probe_samples` |
+| probe `limit` | `attribute_delay + 1` s | one second for the watcher to start |
+| `BeaterClient.startup_timeout` | 60 s | a Python process that imports pydra starts within seconds even on a loaded node |
+
+The storage probe's measured delay counts only the watcher's looks that missed a change after it
+was made, so a descheduled watcher is not read as late storage. A proof renews a claim, so a worker
+pings its beater every renewal interval while a call runs, proves only while the beater answers,
+and with a dead beater writes the call's `expired` outcomes itself past the deadline and recycles.
+A call's record lists every job of the call; its deadline is the sum of the jobs' `time`
+(`call_timeout` for a job that declares none), none when no job has either.
+
 ### 5.4 Results through the store
 
 The pool directory never holds a result.
@@ -946,6 +1108,27 @@ The pool directory never holds a result.
   faults (§6). A corrupt ticket file is `failed` for its jobs as a content fault of the ticket; a corrupt
   outcome record is re-read, then treated as absent, never raised out of the follower (senselab R-278).
 
+**Decided in implementation.**
+
+- Two or more `expired` jobs of one call are settled from the store where it serves them, then split
+  in halves under fresh uncharged `takeover` attempts, apart from the ticket's other jobs; only a
+  lone expired job is a timeout that moves up the ladder.
+- A taker splits the lost holder's in-flight call apart from the ticket's other open jobs, in halves,
+  so a job that kills its worker is alone after at most ⌈log₂ b⌉+1 calls.
+- A drained call (SIGTERM from a preemption, a requeue or a stop) is placed again under an uncharged
+  `takeover` attempt while the job's drained attempts are at most `preemption_budget`; past it the
+  cut is charged as a crash.
+- A residency's infrastructure faults in an epoch are O_EXCL records `faults/<epoch>-<label>/<n>`;
+  at `infrastructure_replacements` the worker writes `held-<epoch>-<label>` and settles the ticket's
+  open jobs, and gathered tickets of that residency, `held`. The coordinator then reports that
+  residency's other jobs on the queue `NotRun(held=True)` for its epoch; other residencies sharing
+  the queue are not held. A worker forgets a hold once a newer epoch exists or the mark is removed.
+- Each coordinator writes its `FaultBudgets` and its classifier (a `module:qualname` that must
+  round-trip) to `coordinator/<epoch>/faults.json`; every worker reads the newest epoch's, and one
+  that cannot import the classifier exits before its ready mark.
+- `pydracli pool collect` also removes tickets resolved more than its age ago; the writer of a
+  settled mark removes the ticket's previous one.
+
 ## 6. Faults and outcomes
 
 Faults are typed where they happen, by a classifier, and each class has one effect. The table maps them
@@ -997,6 +1180,13 @@ senselab's profiles differ the table says so (`rt/data/profiles/laptop.yaml:111-
   type. A client with a stricter rule (senselab's: every unclassified exception is infrastructure) passes
   its own.
 
+**Decided in implementation.**
+
+- A lone crash is retried under a fresh, uncharged `restart` attempt; the engine counts the job's
+  lone losses in a row; a survived crash is the residency's infrastructure fault. A load out of
+  memory moves up the ladder at `phase: "load"`, uncharged, and writes an `UnfitRecord`.
+- `start_failures` is a `FaultBudgets` field.
+
 ## 7. Composition with the `GraphRunner`
 
 ### 7.1 `ready()`, `complete()` and the drivers
@@ -1007,10 +1197,9 @@ senselab's profiles differ the table says so (`rt/data/profiles/laptop.yaml:111-
   callable.
 - `checks_store = True`: workers run `Job.run`, which looks up and publishes. The runner may use
   `lookup_before_dispatch` or not; a hit found by a worker settles as a hit either way.
-- **No limit for a batching executor.** RFC 0002 at `6a9ececb` applies `limit` by whole node groups and
-  states that a driver of a `batches = True` executor passes no cap (RFC 0002 §3.1, `ready()`). This
-  proposal asks that R7's drivers enforce it, not only document it: `drive()` passes no `limit` to a round
-  routed to a `batches = True` executor. A pool caps itself (workers, quantum, `max_queued_jobs`).
+- **`max_concurrent` does not limit a pool.** The drivers pass `ready()` no `limit` (RFC 0002 §3.1):
+  `max_concurrent` bounds a scheduler worker's submissions only. A pool's concurrency is its own
+  (workers per device, quantum, `max_queued_jobs`, the batch probe), and a batched call counts once.
 - **Same-checksum twins** are folded by the runner (RFC 0002 §3.1 at `6a9ececb`, "Sharing is the
   runner's") before they reach the pool; the pool's follow index (§5.5) folds what remains across runs.
 - **`retry(job)`** of a `NotRun(held=True)` job hands it out again; the pool puts it on its queue only once
@@ -1087,6 +1276,15 @@ Warm state must never reach a key, a lookup context or an output.
   §4.4); the sampled re-check measures it; the pool's tests pin it for pydra's own tasks (§11).
 - **Context cost.** RFC 0004 I7 resolves tools per job in the submitting process. A worker never recomputes
   a lookup context; it computes the `pool` section from state it already holds.
+
+**Decided in implementation.** The worker attaches `pool-facts@1` to the job; `PortableStore.commit`
+adds it as `pool` to the execute context when its identity lists `pool` in `recorded_only`. The job
+puts the facts on `Result.runtime.pool` and sends a `pool-facts` audit message in every case, before
+the commit. `WarmPool` refuses a store whose identity would key them (`PoolFactsWouldSplitSlots`).
+`since_load` counts the worker's calls on the residency since its load and a reload inside a call
+makes it cold; `losses_survived` counts the job's `takeover` generations; `hardware` is the first
+granted device's product, memory and compute capability, and the worker's CPUs. A `PortableStore`
+rebuilds a read result with `runtime=None`.
 
 ## 9. Prior evidence
 
@@ -1187,7 +1385,7 @@ items port them (§11).
   {worker, classes, probe, status, release-hold, collect}`; `Provider`, `Provided`, `field(provided=)`,
   `ResidentSet`; `Environment.warm()`, `WarmEnvironment`; `ComputeResources.gpu_mem` and `.residency`;
   `python.define(batched=, units=)`.
-- **Asked of RFC 0002 R7/R8:** `drive()` passes no `limit` to a `batches = True` executor (§7.1); R8 names
+- **Asked of RFC 0002 R7/R8:** `drive()` passes no `limit` (§7.1); R8 names
   the optional `place` method (§7.4).
 - **Superseded proposals:** 0001's I and the provider and batching parts of H. 0001 §3.6's prerequisite H0
   (`chdir=False`) has merged and is what lets one process run many jobs.
@@ -1300,6 +1498,12 @@ a login node; each reports a verdict line per check.
 **Documentation.** A how-to for a shell workflow on a warm Apptainer pool, one for a GPU model on Slurm, one
 for writing a process-owning provider, and the worker protocol as a reference page.
 
+**Decided in implementation.** W12's per-job band reads as the steady regime: the warm calls'
+95th-percentile per-job time is below the cold call's, with no numeric width until one is measured.
+A worker is killed in `test_worker_killed_mid_ticket` with `SIGKILL` through an `srun --overlap` step,
+since `scancel --signal=KILL` drains first on real Slurm. The cold re-check runs in the coordinator's
+process on a thread with a bounded queue; a worker-side re-check is a follow-up.
+
 ## 12. Decisions and open questions
 
 **Decided in this revision** (from the architecture review; the owner ruled on the three marked ‡):
@@ -1315,7 +1519,7 @@ for writing a process-owning provider, and the worker protocol as a reference pa
 | Group pools | Single-user now. Preconditions recorded: a codec-only payload path and RFC 0003 §6.4's ownership rules for every file a worker reads. |
 | Calibration home | Passed explicitly; `None` means `DirectoryCalibration(root / "calibration")`. |
 | CPU cap | `Substrate.can_start(cls) -> bool \| str`, with a default reading `per_user_cpu_cap`; sites override it for GRES and submit caps. |
-| `max_concurrent` | The drivers pass no limit to a `batches = True` executor: one line in RFC 0002 R7, enforced, not only documented. |
+| `max_concurrent` | Bounds a scheduler worker's submissions only (RFC 0002 §3.1, R7); the drivers pass no limit, and a pool's workers and batched calls are never throttled by it. |
 | Venv residency | Not waiting for G2. The process-owning provider is the residency primitive for an interpreter in an environment; G2's `Venv.warm()` later reuses it. |
 | Beater on macOS ‡ | The helper-subprocess beater is accepted under `spawn` (about 0.5 s per worker start). |
 
@@ -1363,144 +1567,8 @@ for writing a process-owning provider, and the worker protocol as a reference pa
 
 ## 13. Changes in revisions
 
-### Amendment to revision 4 (implementation of W10)
-
-| Item | Change |
-|---|---|
-| Identity | §4.4, §8: `batched`, `units` and `batch` are class attributes of the task (`PythonTask._batched`, `_units`, `_batch`), never fields, so none enters the checksum: a task declared with them has the checksum of the same function declared without (`test_batched_and_units_do_not_change_the_checksum`, `test_a_declared_batch_is_the_fits_batch`). Consequence: an edit of the batched function invalidates no stored result; only the sampled re-check (`recheck_fraction`, §4.4) measures that its results still equal the function's. |
-| Provenance | §8: a job run by a batched call records, outside the checksum, its pool facts' `batch` as `{"size", "index", "batched": true, "function": "<module>:<qualname>"}`, naming the batched function that produced it; a job run alone keeps `{"size": 1, "index": 0}`. A call of one job of a batched ticket (the isolated item of a bisection) runs the batched function and says so. |
-| `units` | §3.3, §4.4: `units` is called with the job's inputs its signature names (all of them when it takes `**kwargs`) and returns a number or None. It is computed in the submitting process (`fit_request`, `placement.job_units`), carried as `TicketJob.units` and as `FitRequest.units` to `Fit.batch`. A `units` that raises fails its job at submission and in `plan()`, as any placement error does. |
-| Where the batch comes from | §3.3, §4.4: `python.define(..., batch=N)` is the author's declared batch, unhashed, carried as `FitRequest.batch`. `DeclaredFit.batch` returns N; `MeasuredFit.batch` returns N while the per-unit memory `m1` is unknown and `min(N, memory bound)` once it is known (the fastest recorded batch at or below that still wins). `place()` makes `Placement.batch` the batch that will run, which `plan()` reports: the fit's batch for a task that declares `batch`, else 1, whatever the fit's memory bound; the fit's figure for the job without a declared batch is kept as `Placement.memory_bound` (`MeasuredFit`'s memory bound, 1 under `DeclaredFit`). A ticket's `batch` is the least `Placement.batch` of its jobs, written for a task declared `batched`. A ticket of batch 1 runs the function. |
-| Grouping | §4.4: calls are made within one ticket only; one-job tickets gathered by a warm worker are not batched together. A call holds jobs of one task class and one residency digest, ordered by units (unknown last). The quantum counts a ticket's jobs as before; `max_jobs` and the warm-session cap concern shell jobs, which are never batched. |
-| Find before run | §5.5: before a batched call, each job the store already serves (not errored, not `rerun`) settles `done` (served) and is left out of the call; a taker does the same for every open job before it splits a ticket, so jobs a lost call published are never recomputed (`test_committed_jobs_are_served_not_recomputed`, `test_a_taker_serves_what_the_lost_call_published`). |
-| How a batched call runs | §4.3 step 4, §4.4: on the call thread the task's `batched` runs once on the same values the function receives (`asdict(task)`, as the unbatched `PythonTask._run` does), with each provided field bound once; then each job's `Job.run` runs with its element (`Job.batched_element`) in place of the function, so each job's lookup, work directory, audit, pool facts, proof before publish and commit are those of a lone job. The element is never pickled with the job (`Job.__getstate__`), so a rerun from a failed job's `_job.pklz` runs the function. A `LeaseLost` from one job ends the call: no later job runs or publishes (`test_a_lost_lease_mid_call_stops_the_later_jobs`). |
-| Typing per job | §6: only an exception that is the job's own element (or chains from it) is that job's content fault. An exception a job's own `Job.run` raises otherwise (a storage error at commit, an out-of-memory error hashing outputs) is typed by the worker's classifier, the cgroup OOM check included, as a lone call's is; `bisect` honours a record attached to an exception element and settles that job alone with it: an infrastructure fault requeues it, a resource fault moves it up the ladder. Jobs that completed are settled before a faulted one, so a hold settles only the jobs left open. |
-| Whole-call raises | §4.4, §6: a raise of the whole call typed `content`, and a return of the wrong length, become every job's element, so each job fails with its own errored result (the RFC's "fails the jobs of that call"). A crash or a resource fault goes to the engine with its record attached (so the OOM baseline is read once) and is bisected; any other kind fails each job with that fault through the engine (an infrastructure fault requeues them). |
-| Deadline and record | §5.3: the call record lists every job of the call; the deadline is the sum of the jobs' `time`, `call_timeout` for one that declares none, and there is no deadline when a job has neither. |
-| A batched call that expires is bisected | §5.3, §6 resource row, W7 row: when two or more jobs of a ticket hold `expired` outcomes (one call's, as `pool_expire` writes them), the taker (or, for a claim released after its deadline, the next claimant) first settles `done` each job the store holds, then gives each other one a fresh uncharged `takeover` attempt and splits them in halves (`cause: "split"`, uncharged, no ladder move, no `resource_moves` spent), apart from the ticket's other open jobs. Only a lone expired job is typed a timeout and moves up the ladder. A hanging item is alone after ⌈log₂ n⌉ such expiries, which is §5.3's "plus log₂ n such waits", and on a pool with no larger class only it fails `ResourceExhausted` (`test_one_hanging_item_fails_alone_on_a_one_class_pool`, `test_an_expired_batched_call_is_bisected_not_laddered`). |
-| Takeover split | §5.5 "a multi-job ticket split into halves": a taker splits the open jobs of the lost holder's in-flight call apart from the ticket's other open jobs, in halves, and the rest as a third ticket; with no in-flight call it splits in halves as before. An item that kills its worker is therefore alone after at most ⌈log₂ b⌉+1 calls that hold it, `b` its call's size, whatever the ticket's size (`test_crashing_item_isolated_in_log2_calls`, `test_a_lost_batched_call_is_split_apart_from_the_rest`). This also isolates the crashed job of a batch-1 ticket of several jobs at once. |
-| Samples | §4.3 "What a worker records": one sample per job, each with the call's wall, `batch_size` the call's jobs and `units` the call's padded units (the longest job's times the call's size), and `TimeRecord` reads the seconds per unit (per job where units are unknown). |
-| Benchmark | §11 W10: `benchmarks/bench_pool_batched.py` reports per-item wall at batch 1 against N on a fake model with a fixed per-call cost; it is a fake-model figure, not a device one. |
-
-### Amendment to revision 4 (implementation of W5b)
-
-| Item | Change |
-|---|---|
-| Sessions | §3.1, §4.3 step 3: a worker runs a warm shell job through a `PoolSession`, one per (environment, resolved reference), served process-wide through W3's `serving`. A job of a new reference (a moved tag, an Lmod default) opens a session, and the idle session of the old reference is closed. At most `PoolSettings.max_warm_sessions` (default 4, unmeasured) stay open; opening one more closes the least recently used idle one. The worker passes `WorkerClass.mounts` as roots and no store or work root: the jobs' own writable roots (their cache root) cover those. |
-| Start and its failure | §4.3 step 3: the start runs before the call, on the loop thread, at the ticket (`WarmSession.prepare`, bound to the union of the ticket's roots) and again before each call when the handle was closed, spent (`max_jobs`) or reloaded. A failed start is a load fault (`_load_fault`): the ticket is requeued uncharged under a `restart` generation and a later claim starts it again, with the ordinary infrastructure-fault budget. `WarmSession(retry=True)` raises from `prepare` and never turns unwarmable; W3's default (cold for good) stays for direct users of `serving`. `Code.environment` is the carried reference of a warm shell job, so an `UnfitRecord` binds it. |
-| No deadline on the start | §4.3, §5.3: the start (a `docker run -d` with its pull, an `apptainer instance start` of a SIF it may build, the reaping) runs before the call record exists, so no call deadline bounds it, the loop neither proves the claim nor acts on `lost` meanwhile, and a drain cannot interrupt it. The beater keeps the claim alive throughout, so a stalled pull holds the ticket until the worker's own time limit kills it, and the orphaned container is reaped at the next warm start on that host. W5's provider `_load` has the same shape. A hung warm `exec` does not: it runs on the call thread. |
-| Stopping a command | §4.3 step 6: on a lost claim, an expired call (then acknowledged) or the end of a drain, the warm container running the call's command is closed (`WarmEnvironment.busy`), which ends the command; the next job starts a fresh one. A close that raised does not count as stopped. |
-| Roots before the call | A start reads a job's roots from its declared input values, not `Job.inputs`, which fixes the work directory (and copies files into it) and must wait for the attempt the call sets. |
-| Not in the residency | §3.1, §4.2: the environment key is not in a warm job's residency digest, and `place()` does not fill a ticket's `roots`. Shell jobs of every image share the `<class>` queue, and the worker computes the roots from the jobs it decodes. Consequence: `self._warm[queue]` and `group["cold"]` describe the queue, so a shell job's `Sample` taken right after a warm (re)start is marked warm. The pool facts' `environment` entry (`run`, `state`, `since_load`, `load_s`) is right per call. Follow-up: the environment key in the residency digest, `place()` filling `roots`, and warm environments as `ResidentSet` entries in place of the session list. |
-| Holds of a warm environment | §6: warm-start faults are counted, and held at `infrastructure_replacements`, under the environment's own label: the residency label of its resident key alone (`ResidentKey("environment", <plugin>, <resolved key>)`, `warm_environment_label`), never the ticket's residency, which for shell jobs is the empty one every plain ticket of the class shares. Since tickets do not carry the environment, the storage claim does not skip them: a worker that decodes a ticket with a job of a held environment (held by any worker, in the newest epoch) settles its open jobs `held` without a start, and runs every other ticket. Held outcomes carry `hold: <label>`; the coordinator keys its epoch's holds by it, so later jobs of that environment are reported held at submission and others are not. `pydracli pool release-hold --residency <label>` lifts it for the workers; a running coordinator keeps it for its epoch, as it keeps a residency hold, so jobs of that environment submitted to it are reported `NotRun(held=True)` (visible, never queued unclaimed) until a new coordinator epoch. Follow-up: a coordinator that forgets a lifted hold only on a strict listing (one that tells an empty or `ESTALE` listing from a removed mark); reading an empty listing as "lifted" dropped live holds and left later jobs queued, never claimed and never reported. When the environment key enters the residency digest (below), this label is that residency's and the special case goes. |
-| Calibration | Container processes belong to dockerd or the Apptainer starter, not the worker's process groups, so `_held_bytes` and `CallMeter` see no shell job's memory, warm or cold. |
-| W3 follow-up: GPU flags | §3.1 table: only the warm start passes `--gpus` / `--nv` and `CUDA_VISIBLE_DEVICES`. The cold `Docker.execute` and `Singularity.execute`, which a warm environment's job still reaches beyond `max_mount_roots`, add neither, so on a `cuda` class that job runs without a GPU. |
-| Quantum | The end of a quantum does not close sessions: resident state is a cache (§4.2). |
-
-### Amendment to revision 4 (implementation of W3)
-
-| Item | Change |
-|---|---|
-| `warm()` signature | §3.1: `warm(roots, device, ref=None, *, writable=(), scratch=None)`. A worker passes the reference its jobs carry (`ref`) and never resolves; without it the environment resolves locally. `writable` names the roots bound writable; `scratch` places the scratch directory. |
-| Bind modes | §3.1 "Binding roots", "Isolation": a warm container keeps the cold run's modes. Every root is bound read-only under `<root>-ro`; a root holding a writable binding (the cache, store, work and scratch roots) is also bound writable under `<root>`. Read-only fields map through the read-only prefix, the working directory and outputs through the writable one, so a job that edits an input in place fails warm as it fails cold. `covers` checks writable roots too, and a ticket needing a root writable that the start bound read-only restarts it. No rw-inputs limit is admitted. |
-| `/tmp` and `HOME` | §3.1 "Isolation", §11 W3: a per-start scratch directory `<cache root>/.pydra-warm-<token>` (store-internal, never a slot) holds each job's `HOME`, removed after the job, and the container's `/tmp`, bound at `/tmp` and emptied on the host after each job under the session's lock. A literal `/tmp/y` is therefore not seen by the next job. Under `Docker(read_only=True)` this bind replaces `--tmpfs /tmp`. Placing it under the cache root (not the system temporary directory) also keeps Docker Desktop, which does not share `/var`, from silently running cold. |
-| Apptainer environment | §3.1 table: `HOME` and `TMPDIR` are set by `env HOME=… TMPDIR=…` inside the instance, not `--env`, since Apptainer refuses to override `HOME` through `--env`; the image must have `env`. To verify in O5. |
-| `max_mount_roots` | §3.1: the roots counted include the scratch directory's root, computed before the comparison, so a start never binds more than `max_mount_roots` roots. |
-| Docker entrypoint | §3.1 table: each `docker exec` runs the image's `ENTRYPOINT` (read after the start) before the command, as cold `docker run` does; an `--entrypoint` in `xargs` takes its place. |
-| Lifecycle | §3.1, §4.3 step 7: a warm container is labelled `pydra.warm.owner=<host>:<uid>:<pidns>:<pid>` (`<pidns>` the inode of `/proc/self/ns/pid`, `-` where it cannot be read) and `pydra.warm.uid=<uid>`; an instance carries its pid and host in its name, and `instance list` shows only the caller's. A start lists only its own uid's containers and removes those whose owner has ended on this host, under this uid, in this pid namespace; where the namespace cannot be read (macOS) host and uid must match only. Another user's container, or a live sibling's seen from a container sharing the host's network, is never removed. A failed start removes what it may have left, by name. Open warm environments close at exit, and on `SIGTERM` when the process has no handler of its own. A session runs one job at a time. |
-| Benchmark | §9: the Docker `run`-against-`exec` figure is printed by the marked `test_warm_docker_real` on the CI ubuntu runner (50 commands); Apptainer and Lmod figures come from O5 (`bench_warm_environment`, 200 commands). |
-
-### Amendment to revision 4 (fail fast instead of hanging)
-
-A senselab GPU run hung with no error until the test's 700 s budget killed it. Its pool was on
-node-local `/tmp` under a `SlurmSubstrate`, so no worker could start, and the failures reached only
-log lines. The old `start_failures` budget would have broken the class only at about 15.5 minutes,
-and jobs dropped by a raising ticket write would have hung for ever.
-
-| Item | Change |
-|---|---|
-| A failed ticket write | §6 row "infrastructure": its jobs go back to the head of their queue, never dropped (they had been in no queue and no ticket, and no outcome came). A job the codec cannot encode is `Failed` alone. |
-| Start deadline | §4.5 "Failed starts", §6 row "workers of a class never start": `PoolSettings.start_deadline_s` and `start_deadline_failures`, judged at a failed attempt. A streak ends with the class's waiting work. Named apart from the driver's `fail_fast` (row "cancel, `fail_fast`"), which gives `NotRun(held=False)`. |
-| Lifting a break | §4.5, §7.1: `WarmPool.release_hold`, or a `retry` of a held job, lifts the coordinator's break. |
-| Pool events | §4.5: failed starts, listings, writes, encodings and polls, and broken and released classes, are `pydra.pool` log records carrying `event`. |
-| Node-local storage | §4.5: `SlurmSubstrate.check_root` refuses a pool other nodes cannot see, by filesystem type first. |
-
-### Amendment to revision 4 (implementation of W12)
-
-| Item | Change |
-|---|---|
-| The per-job band of `test_one_load_n_jobs_h100` | §11 W12: "per-job wall after the load within the calibration's band" reads as **in the steady regime**: the calibration's batch-1 steady per-job time (`TimeRecord`) is fitted from every warm call of the run, and the warm calls' 95th-percentile per-job time is below the cold call's. No numeric width is set: none is measured, and a factor would be an unmeasured threshold. A numeric band needs a measured width and a further amendment. |
-| Killing a worker in `test_worker_killed_mid_ticket` | §11 W12: `scancel --signal=KILL` is a cancel on real Slurm (SIGTERM, then SIGKILL after `KillWait`), so the worker drains and releases its claim and no takeover happens (seen on the CI Slurm container: `CANCELLED ... DUE to SIGNAL Terminated`). The test SIGKILLs the worker process with an `srun --jobid=<worker job> --overlap` step, run without the allocation's `SLURM_*`, `SRUN_*`, `SBATCH_*` and `SALLOC_*` input variables (keeping `SLURM_CONF`) and with explicit minimal sizes. |
-| Which memory an out-of-memory load ran out of | §3.3, §6: the `UnfitRecord`'s resource is what the first out-of-memory link of the exception's chain says. A device type (torch's two, cupy's `cupy.cuda.memory.OutOfMemoryError`, which is a `MemoryError`) is the device's before the generic `MemoryError` rule; jax's `ResourceExhaustedError` is the device's only when its message names a device; a `MemoryError` is the host's. A loader that caught a device OOM and then ran out of host memory falling back is the host's. |
-| A stopped Slurm worker | §4.5: a job `SlurmSubstrate.stop` cancelled is neither live nor adopted again while Slurm still lists it (during `KillWait`, or completing), and is forgotten once it leaves the listing. |
-
-### Amendment to revision 4 (implementation of W11a)
-
-| Item | Change |
-|---|---|
-| Who owns a pool's lifetime | §4.1 Lifecycle, §7.2, resolving W6's deferral: whoever made an executor closes it. `drive` and `drive_inline` never close the executors they are handed (RFC 0002's driver closed them at the end of each run); `Submitter` closes the `WorkerExecutor`s and the `InlineExecutor` it makes per run. A `WarmPool` passed as `Submitter(worker=pool)` belongs to its caller, who closes it (`close()`); neither a run nor the `Submitter`'s close closes it, so its workers stay resident from one `sub(task)` to the next. A pool made by name, `Submitter(worker="pool", root=…, classes=…, …)`, belongs to that `Submitter` and is closed when the `Submitter` closes (context exit or `close`), never at the end of a run. Substrate workers still exit when idle (`idle_polls`) or orphaned. |
-| `Submitter` wiring | An executor object given as `worker` (or in `workers`) is wrapped as `ExecutorWorker`: a run's driver is handed the executor itself, and a lone task (no workflow) is submitted to it alone, a `Failed` raised as its error and a `NotRun` as `RunIncomplete`. The `Submitter` uses the executor's store when it has one, and refuses another store object passed explicitly. `"pool"` makes a `WarmPool` over the submitter's store from the remaining keyword arguments, `substrate` defaulting to `LocalSubstrate()`; jobs carry the submitter's providers, so it needs no `providers` of its own. The pool's arguments are not kept on the `Submitter`, which travels with every job's payload (a `LocalSubstrate` holds live process handles). The executor is dropped when an `ExecutorWorker` is pickled. |
-| Where the facts enter the context | §8: the worker computes `pool-facts@1` and attaches it to the job (`Job.pool_facts`); `PortableStore.commit` adds it as `pool` to `context(job, "execute")` when its identity lists `pool` in `recorded_only`, so any identity, not only `pydra-identity@1`, gets the section without computing it. The job puts the facts on `Result.runtime.pool` and sends an audit message `{"@type": "pool-facts", "checksum", "attempt", "pool"}` (under `AuditFlag.PROV`) in every case, before the commit. |
-| Which stores are refused | §8: `WarmPool` refuses, before touching the pool, a store whose identity neither lists `pool` in `recorded_only` nor is `pydra-identity@1` (`PoolFactsWouldSplitSlots`); `pydra-identity@1` without it and a store with no identity (`PickleStore`) are accepted and get the facts in the audit and `Result.runtime` only. Until W11b, the default `Submitter` store is such a `@1` root. |
-| Fields | `since_load` counts this worker's completed calls on the residency since its load (0 for the cold call); `load_s` is that load's seconds; `version` is None when the provider's cannot be read here; `losses_survived` counts the job's `takeover` generations, listed only when its current generation is not its first put; `batch` is `{"size": 1, "index": 0}` until W10; `hardware` is the first granted device's product, memory in MiB and compute capability, and the CPUs the worker may use. |
-| Tests | §11 W11a: the four named tests are in `test_pool_context.py`. "Cold and warm share one slot" runs two jobs of one residency on one worker (the cold and the warm call) and checks that both publish into the slot their lookup finds, which then serves both with no further load; "two workers share one slot" runs one job again (rerun) on a second worker. Added for the lifetime rule: `test_two_runs_on_a_caller_owned_pool_load_once` (two `sub(task)` runs, a lone task then a workflow, on one caller-owned pool: one load, counted by a provider that writes a file per load), `test_pool_by_name_closed_on_submitter_exit` and `test_drive_leaves_an_executor_instance_open`. |
-| Concurrent runs | §4.1, §7.2 (W11a review rounds 1 and 2): several runs may share one pool, one after another or at once (two `Submitter`s on two threads, or two `drive` calls on one event loop). `bind` is per run: it records the run's report callable under a run token held in a `contextvars.ContextVar` that `bind` sets, owned by the asyncio task or thread that set it (a context copied from a parent gets a fresh token at its first `bind`, and code that does not bind, such as a hop to a thread, carries the parent's), so each asyncio task (each `gather` member) and each thread is its own run (review round 3; round 2 keyed by `id(loop)`, which let two runs on one loop take each other's outcomes); `drive` delivers outcomes in its run's context, and `submit` stores the binding of the submitting run on each job, so every outcome, `NotRun` and cancellation goes to the run that submitted the job, never to a pool-wide callable. A job whose key another run already has open on the pool is not put again: it waits on that job's ticket and settles with it: its run receives the same outcome. A run's `cancel` touches only its own jobs: a cancelled job that another run's twin waits on hands its place, ticket and all, to the twin and is not withdrawn. `drive` and `ExecutorWorker.run` call the pool's `unbind` as a run ends, so a finished run's callable is not kept; a plain `bind` with no `unbind` (as an external driver or a test does) still works. A submit from a context that never bound goes to the one bound run when exactly one is bound, and is refused (`RuntimeError`) when several are, never sent to the latest. A twin of a `rerun=True` job settles with the other run's attempt rather than computing again. Round 1's `PoolInUse` refusal is removed. Tests: `test_another_run_between_a_runs_pool_rounds` (A1 on the pool, M elsewhere, A2 on the pool; a second run completes while A is in M, and A gets A2), `test_two_runs_bind_one_pool_at_once`, `test_a_twin_in_another_run_gets_the_result`, `test_one_runs_cancel_leaves_the_other_run_alone`, `test_two_drives_on_one_event_loop`, `test_an_unbound_submit_needs_exactly_one_binding`. |
-| Cold after a reload | §8 (review round 1): `state` and `since_load` follow the load the call itself ran: a load inside the call (a reload after a resource fault or a crash) marks the call cold and resets the warm count, so its facts read `cold`, `since_load` 0. Test: `test_reload_after_a_resource_fault_is_cold`. |
-| Where `Result.runtime.pool` is seen | §8 (review round 1): `PortableStore` rebuilds a read result with `runtime=None`, so under a `pydra-identity@1` `PortableStore` the facts on `Result.runtime` stay on the worker's result; the caller sees them under `PickleStore`, which stores the whole result, and in the audit when `AuditFlag.PROV` is set. A messenger that fails on the pool-facts message is logged and never skips the commit. |
-| Existing tests | No expectation changed. The `_drive` helpers of `test_warm_pool.py`, `test_pool_faults.py` and `test_pool_calibration.py`, which drive a `WarmPool` as an external driver does, now close it after the run, as its owner: each relied on `drive` closing it (a second pool on the same root otherwise waits on the first coordinator). |
-
-### Amendment to revision 4 (implementation of W9)
-
-| Item | Change |
-|---|---|
-| Where the re-check runs | §4.4: the sampled cold re-check runs in the coordinator's process, on a re-check thread of its own with a bounded queue (64; one more is dropped and counted in `rechecks_dropped`), never on the follower; `close` lets queued re-checks finish within `PoolSettings.drain_s` and then drops the rest. That process needs the task's dependencies, its providers and, for a GPU task, a device. A worker-side re-check (a ticket flag, run on a worker of the job's class) is a follow-up, and gates senselab turning the re-check on (W12). |
-| The fresh residency | §4.4: a decoded copy of the job (as a worker decodes it) runs alone, never served from the store, on a `ResidentSet` of its own that is closed afterwards, marked `verify` against a `Candidate` of the committed entry (`admitted_by="recheck"`): the store's reuse hook `compare` sees it, and its publish loses to the committed entry, whose result stands. |
-| Re-checks that cannot run | §3.3, §4.4: `ParityRecord.equal` is `True`, `False` (digests differ, or the hook's `compare` refused the fresh outputs) or `None`: the task, a provider's load or the device failed in the coordinator, or the store has no readable committed entry. `None` is recorded with its reason and never audited; only the first `False` of a residency is audited, once per coordinator, as `@type: pool-recheck`. A job without resident state is recorded under the key `"none"`. |
-| Calibration homes | §3.3: a `DirectoryCalibration` passed to `WarmPool` (default `root / "calibration"`) is written into `coordinator/<epoch>/faults.json` as `calibration`, and every worker, whoever started it, writes its samples and unfit records there; the coordinator writes its parity records to it. Any other `Calibration` receives only the parity records and warns that workers write to `root / "calibration"`; a `MeasuredFit` whose calibration directory is not where the workers write warns too. A worker on which that directory's parent is absent (a coordinator's path not mounted on the node) warns once and records nothing, rather than make a node-local tree. |
-| `Sample` | §4.3: `Sample` lives in `pydra.workers.pool.calibration`, with `key` (the residency digest), `hardware`, `device_peak_bytes` and `others`. Memory is attributed to the residency: the worker's own processes are itself and its providers' process groups, never a co-tenant's. `resident_bytes` is the worker's baseline plus the growth across this residency's load of the resident sets of all its own processes (never a process's lifetime peak), None when any of them cannot be read; `device_bytes` is the growth across the load of its own processes' device bytes, read again at each load. A pid-filtered device read that finds no row for the worker's processes while CUDA is initialised in it (`nvidia-smi` listing another pid namespace, as in a container) is unknown (None), never 0. The peaks are each call's above what was held just before it, read where cheap (`CallMeter`: on Linux each own process's resident high-water mark, reset before the call and summed, none when any process's cannot be reset or read; torch's caching-allocator peak, `max_memory_reserved`, when torch is already imported in the worker), else None. Samples taken while another residency was resident in the worker (`others > 0`), cold or reloaded ones, and ones without a measured peak are not fitted. |
-| Unmeasured peaks and units | §3.3: with no measured peak there is no `MemoryFit` (senselab's `device_unmeasured`), never one of zero activation memory, so placement falls back to `DeclaredFit` and a batch of 1. `MemoryFit.m1` is None with fewer than two distinct units. `MeasuredFit.batch` is 1 when `m1` is unknown, or when `m1 > 0` and no unit of the job is known (`place()` carries none until W10); `quantum_jobs`, also the cap of the formula, only when `m1` was measured as 0. |
-| Judging unfit records | §3.3: `MeasuredFit.judge` reads unfit records before the `"unknown"` of a class with `gpu_mem=None`, so a verdict written on such a class, with the memory its worker read, holds for that class. A record binds a class whose grant of the same resource is no larger than the recorded grant (a class raised above it after the fault is judged afresh); only when either grant is unknown does it bind by class name, the class it was written on; on a GPU class both host records (against `mem`) and device records (against the device share) are read. A worker that cannot read its providers' versions does not write a record, since a record of no code would never bind. |
-| Code that binds | §3.3: `version()` must give the same string in the coordinator and in the workers; a record written under a version the coordinator does not read (another environment or container) never binds. `Code.environment` is not filled in yet: no warm environment reaches a worker before W5b. |
-| Hardware class | §3.3: the hardware class a calibration is kept under is derived from the worker class (`hardware_of`: device, GPU type and per-device memory; every CPU class is `cpu`), so a coordinator and a worker name it alike, not from the product string `nvidia-smi` reports. |
-| An existing test's expectation | §11 W9: `test_pool_faults.py::test_pool_passes_faults_and_classify_to_its_workers` asserted that `calibration=` "still warns (W9)", a placeholder for this item; it now asserts that a `DirectoryCalibration` is taken without a warning and handed to the workers, and that any other calibration warns. Under the attribution above, two W5 tests of `test_pool_worker.py` changed with the rule they pinned: `test_samples_leave_resident_memory_out_of_the_per_job_figure` (the process's resident set and lifetime peak as a job's figures) is now `test_samples_never_report_the_processs_lifetime_memory`, and `test_device_memory_read_once_per_claim_on_a_cuda_class` is now `test_device_memory_read_before_the_first_claim_and_at_each_load`. |
-
-### Amendment to revision 4 (implementation of W8)
-
-| Item | Change |
-|---|---|
-| `--qos` and owned options | §3.2, §4.5: `SlurmSubstrate` passes `--qos` only as a class's `substrate_args` give it and never sets one itself. A class whose `substrate_args` set an option the substrate derives or sets (`gres`, `gpus`, `gpus-per-node`, `gpus-per-task`, `gpus-per-socket`, `tres-per-task`, `cpus-per-task`, `cpus-per-gpu`, `mem`, `mem-per-cpu`, `mem-per-gpu`, `time`, `job-name`, `comment`, `output`, `error`, `wrap`, `parsable`, `array`, `clusters`, or their one-letter forms) cannot start: `can_start` names the key, so placement skips the class, and `start` raises. |
-| Resubmission after a timeout | §4.5: the name of a timed-out `sbatch` is looked up at once and again after `attribute_delay`; only when both find nothing is the worker submitted once more, under a new token, so a first submission that lands later is a distinct job of the epoch (listed by `live`, stopped as a surplus) and never a second worker on one token's directory. A lookup that fails leaves the outcome unknown and raises; a second timeout raises. `attribute_delay` and the listing's age default to the pool's `LeaseSettings.attribute_delay` and `poll_s`. |
-| Failed submissions and listings | §4.5 "Failed starts": a `start` that raises (a refused or failed `sbatch`) is a failed start of its class, with the error as the latest cause, so it backs off and breaks the class like a worker that never marks ready. A `live()` that raises skips that poll's scaling instead of counting every started worker gone; after `FaultBudgets.listing_failures` (default 7, pydra's choice) such polls in a row, each class with work is broken and its jobs are `NotRun(held=True)` naming the error; a good listing resets the count. A `can_start` whose listing fails answers `True`, so a transient failure never makes a job unplaceable or moves it to another class (scaling does not start workers on a failed listing). `close` with the listing down stops the workers the coordinator started. |
-| The shared listing | §4.5: one process-wide `squeue -h --user=<uid> -r -o "%i|%T|%j|%k"` (id, state, name, comment) per poll cycle serves `SlurmWorker`'s poller and every `SlurmSubstrate`; a reader takes a listing younger than its own poll interval. A job submitted after a listing was taken counts as live until a later listing, and `SlurmWorker` reads a job as gone only from a listing taken after its submission or after its `scontrol requeue` returned. An event loop's read never waits for another thread's `squeue`: it takes the listing it has. The job's class travels as its `--comment`. |
-| Which jobs `live()` lists | §4.5: the jobs named for this pool and this coordinator epoch or an earlier one. At its first listing a coordinator cancels earlier epochs' jobs still pending (never started); their running ones are adopted as unrecorded workers that count toward the class's `max_workers`, its demand and the CPU cap, and that scaling may stop, so a restart never runs a class above `max_workers`. Running workers keep their drain path on SIGTERM. Jobs of a later epoch are not listed. |
-| Attachment | The `Attachment` a pool hands its substrate carries the pool id, the pool's classes and, once taken, the coordinator epoch. |
-| GPUs under Slurm | Slurm grants a job its GPUs and sets `CUDA_VISIBLE_DEVICES`; the substrate does not, and runs one job per worker whatever `workers_per_device`. |
-
-### Amendment to revision 4 (implementation of W7)
-
-| Item | Change |
-|---|---|
-| Infrastructure count | §5.1 layout, §6: a residency's infrastructure faults in an epoch (survived crashes among them) are counted by O_EXCL records `faults/<epoch>-<label>/<n>` on its queue; at `infrastructure_replacements` the worker writes `held-<epoch>-<label>`, settles the faulting ticket's open jobs `held` (reason naming the residency, the count, the epoch and the latest cause), and settles any ticket of that residency it had already gathered `held` without loading or running it. A failed load is one fault of the residency, not one per job. A worker on a pool with no coordinator epoch holds at epoch 1. The coordinator, on reading a `held` outcome, reports every other job **of that residency** it follows or places on that queue `NotRun(held=True)` for its epoch, with no extra listing per poll; jobs of other residencies sharing the queue (`residency="ignore"`, §4.2) are not held, and a worker judges holds per ticket, not per queue. |
-| `start_failures` | A `FaultBudgets` field (default 7), no longer a `PoolSettings` field. |
-| Passing budgets and classifier | §5.1 layout: each coordinator writes its `FaultBudgets` and its classifier as a `module:qualname` reference to `coordinator/<epoch>/faults.json`, once; every worker, whoever started it (`ExternalSubstrate` included), reads the newest epoch's at start. The coordinator resolves the reference before writing it and refuses one that does not round-trip (a `partial`, a bound method, a lambda, a nested function). A worker that cannot import it, or finds it not callable, exits non-zero before its ready mark, so `start_failures` breaks the class and its jobs are held; it never falls back to the default. A running worker reads the file again whenever the newest epoch changes. |
-| Worker-local holds | A worker remembers a hold it wrote, with its epoch, only while that epoch is the newest and the hold mark stands: a new run and `pydracli pool release-hold` both clear it. A hold on a routed queue (`<class>#<digest>`, one residency) skips the queue without a walk. |
-| Crash in a live worker | §6 "One bisection engine": a lone crash is retried under a fresh, uncharged `restart` attempt; the engine counts the job's lone losses in a row (capped by its own count, whatever a caller's count says), and a survived crash is the residency's infrastructure fault. Generations are charged only by takeovers (§5.5). |
-| Load out of memory | Moves up the ladder at `phase: "load"`, uncharged, as §5.5 says; the `UnfitRecord` §6 names is written from W9, which adds the record type. |
-
-### Amendment to revision 4 (implementation of W6)
-
-| Item | Change |
-|---|---|
-| A proof renews a claim | Found implementing W6, fixed in W5. `prove()` moves the claim's token directory's mtime, so a worker whose beater had died kept the claim of its call alive by proving it, and a call that never returned held its claim forever with no deadline, since deadlines are the beater's. §5.3 "The beater": the worker pings its beater every renewal interval while a call runs (L0 adds `BeaterClient.ping`), proves only while the beater answers, and with a dead beater writes the call's `expired` outcomes itself past the deadline and recycles. W6's `test_job_outlives_stale_after` stops the beater alone, as its row says; W5 adds a test of a dead or hung beater under a call that never returns. |
-| Submitter wiring and pool lifetime | Deferred from W6 to W11a, which owns the `pool` execute context and a pool that outlives a run. Until then a `WarmPool` is used as an external driver uses it (§7.2): `drive` closes its executors at the end of a run, and a sole coordinator's `close` stops its substrate's workers, so warm state does not survive from one run to the next. W11a decides who owns a pool's lifetime (the `Submitter`, a `drive` that does not close executors it was handed, or a `close` that leaves workers to exit on idle) and wires `Submitter(worker=WarmPool(...))`. |
-| `pydracli pool collect` | §4.1: it also removes tickets resolved more than its age ago, with their settled marks, outcomes and losses; a ticket's slot stays in its segment's index. The writer of a settled mark removes the ticket's previous mark (§5.1), so within a run a queue's `settled/` holds one mark per ticket, which bounds the follower's listing at 10⁶ jobs; collect bounds it across runs. A lower mark left by a race (two writers' counts skipping one) stays until collect. |
-
-### Amendment to revision 4 (implementation of W5)
-
-| Item | Change |
-|---|---|
-| Payload location | §5.2, §5.1 layout, the ticket example and §4.1 Lifecycle: payloads live at `<root>/payloads/<sha256>`, written once, read by every attempt, removed only by the pool's `collect`; a run's work directory never holds one, since the store empties it after publishing. |
-| Attempts outside the runner | `<pool id>.<g>` is unique per job only; RFC 0003 §5.4 states that a `work_dir` function receives such attempts and must use the job's address, and the default layout qualifies them by it. |
+The decisions taken while implementing revision 4 are folded into the sections they
+amend ("Decided in implementation"). The tables below answer the reviews of each revision.
 
 ### Revision 4
 
@@ -1584,121 +1652,3 @@ Answers the architecture review of revision 1 (`ef0c27d9`).
 ### Revision 1
 
 Initial draft (`ef0c27d9`). No review findings.
-
-
-## Amendment (2026-11-24): settings, preemption, batched keys and batch by probe
-
-**Section 5.3, settings.** Every number a pool reads is a field of `PoolSettings` (or of the
-`LeaseSettings` it holds, RFC 0003 section 5.3), with these defaults:
-
-| Setting | Default | Derivation |
-|---|---|---|
-| ``poll_s`` | 5 s | A claim waits at most one poll; one listing per poll per worker keeps the storage load flat in the number of idle workers. |
-| ``idle_polls`` | 12 | A worker with nothing to claim for a minute exits. |
-| ``orphan_after_s`` | 600 s | The lease ``timeout``: a coordinator unseen that long is not coming back. |
-| ``timeout_grace`` | 60 s | Time a worker has to stop an expired call before its beater kills it. |
-| ``drain_s`` | 20 s | The drain on SIGTERM; with procgroup's ``TERM_TIMEOUT`` and ``KILL_TIMEOUT`` (10 s each) a stop stays within Slurm's default KillWait of 30 s. |
-| ``preemption_budget`` | 3 | See below. |
-| ``max_warm_sessions`` | 4 | An idle container holds no device memory and little host memory: the bound is on processes, mounts and scratch directories (not measured). |
-| ``SEGMENT_ITEMS`` | 1000 | A listing of one segment stays a few tens of kilobytes, so per-claim work does not grow with the queue. |
-| probe ``limit`` | ``attribute_delay + 1`` s | One second for the watching process to start. |
-
-`MeasuredFit` has no ``headroom`` default: the fraction of a grant a residency may use is a site's
-choice. The storage probe's measured delay counts only the watcher's looks that missed a change
-after it was made (`visibility_delay`), so a descheduled watcher is not read as late storage.
-
-**Preemption (owner decision D4).** A call its worker's drain cuts short (SIGTERM from a
-scheduler's preemption or requeue, or a pool's stop) is marked drained. The worker that takes the
-ticket over places the job again under a fresh ``takeover`` attempt, uncharged, while the job's
-drained attempts (``charges()["preemptions"]``) are at most ``preemption_budget``; past it the cut
-is charged as a crash. Three preemptions are routine on a preemptible partition; more suggest that
-the job itself outlives its allocations.
-
-**W10, batched keys (owner decision D3).** When ``batched=`` is declared, the batched callable's
-code joins the task's key (identity record ``task.batched``), so an edit of it invalidates stored
-results as an edit of the function does. ``units=`` and ``batch=`` stay out of the key.
-
-**W10, batch by probe.** `MeasuredFit.batch` picks the batch within the memory bound by probing:
-one job per call while nothing is measured, then twice the largest size measured while that size
-is the fastest per job, then the fastest size measured (`probe_batch`). A declared capability
-overrides the probe, still capped by the memory bound: the task's ``batch=``, else the site's
-``MeasuredFit(batch=)``. ``Placement.batch``, which ``plan()`` reports, is the batch that will run;
-``memory_bound`` is kept beside it.
-
-
-## Amendment (2026-11-25): QOS, allocations, batch probing per call, defaults
-
-**QOS.** This replaces the earlier rule that `SlurmSubstrate` never passes `--qos`. A class's
-`substrate_args` may set `qos` (or `q`); it is passed to `sbatch` as given. The substrate never
-sets one itself, so a site that requires a QOS names it per class. The other substrate-owned
-options listed in section 4.5 stay refused.
-
-**workers_per_device on Slurm.** Up to `workers_per_device` workers of a class share one `sbatch`
-job, which asks the class's GPUs once and its CPUs and memory per worker, so the share the fit and
-the worker judge against is the share they get. `live` lists every worker of such a job and a later
-coordinator adopts them with the same tokens (each derived from the job's first token). `stop`
-cancels a job once all its workers are stopped; a worker whose job still runs others stops on the
-stop mark its pool writes.
-
-**Allocation end.** A worker reads its allocation's end from `SLURM_JOB_END_TIME`, else once from
-`squeue -h -j $SLURM_JOB_ID -o %e`; with neither, no end is assumed. Once the time left holds less
-than the class's `quantum_s`, or less than `PoolSettings.call_timeout` when that is set, it stops
-claiming and recycles (exit `EXIT_RECYCLE`), so the limit cuts no call and no crash is charged. A
-ticket carries the longest `time` its jobs declare (`Ticket.time`), and a claim passes over a
-ticket whose time exceeds the time left (`PoolRoot.claim(max_time=)`), leaving it to a worker with
-more.
-
-**Batch by probe, per call.** This refines the 2026-11-24 amendment. The coordinator no longer
-chooses the probed size: under `MeasuredFit` without a declared batch, a placement's `batch` is
-the memory bound and its `probe` is true (`Fit.probing`); the ticket carries both. Each worker
-chooses the size of each call from the calibration as it stands when the call is made
-(`probe_batch`), so one run moves through sizes as its own calls are measured:
-
-- times are seconds per unit (`wall_s / units`), per job where units are unknown;
-- only powers of two up to the ceiling count; a tail call of another size does not;
-- a size measured by fewer than `PoolSettings.probe_samples` calls is asked for again;
-- a doubling is kept while it cuts the time per unit by at least `PoolSettings.probe_gain`;
-  then the fastest measured size;
-- a batched call gives the calibration one sample, not one per job (the per-job copy stays in
-  `samples.jsonl`).
-
-A declared batch (`python.define(batch=)`, else `MeasuredFit(batch=)`) is kept as before,
-capped by the memory bound. `plan()` reports the declared size, or the probe's ceiling with
-`probe` true.
-
-**Defaults and their basis.** Each is a site choice, unmeasured unless stated.
-
-| Setting | Default | Basis |
-|---|---|---|
-| `PoolSettings.probe_samples` | 3 | the median of three calls is the fewest one slow call cannot move |
-| `PoolSettings.probe_gain` | 0.05 | a saving under 5% per unit is within run-to-run noise on a shared GPU |
-| `PoolSettings.target_wall_s` | 600 s | a queue's backlog drains within the 10 min a scheduler typically starts a job in |
-| `PoolSettings.unmeasured_workers` | 1 | without a measured per-job time, one worker measures it before scaling |
-| `PoolSettings.start_deadline_s` | 120 s | Python start-up plus a model import on a loaded node, with margin |
-| `PoolSettings.start_deadline_failures` | 3 | one failure is noise; three in a row is a broken class |
-| `WorkerClass.quantum_jobs` | 64 | a ticket of a few minutes of typical jobs (section 12: unmeasured) |
-| `WorkerClass.quantum_s` | 300 s | a queue is revisited at least every 5 min |
-| `FaultBudgets` | 1/2/3/2/7/7 | the counts section 6 gives per fault kind; a site may raise them |
-| `SlurmSubstrate.submit_timeout`, `squeue_timeout` | 60 s | a slurmctld under load answers within a minute |
-| `nvidia-smi` timeout | 20 s | the first query on a node initialises the driver |
-| `DirectoryCalibration.min_samples` | 3 | as `probe_samples` |
-
-The procgroup stop arithmetic in the earlier table (drain 20 s + TERM 10 s + KILL 10 s, plus
-release patience) is 45 s, not within a 30 s KillWait: claims are released before providers
-stop, so a kill at KillWait loses nothing.
-
-## Amendment (2026-11-25, rev. 5): per-call probing, task-keyed samples, time left per job
-
-**Per call.** A probing worker chooses the size of each call from the calibration as it stands
-when the call is made; the calls of one ticket move through the sizes.
-
-**Samples by task.** A sample records its task's code identity (`task_key`); probe timings and
-memory fits are read per task and residency, so two tasks over one model are not compared.
-
-**Time left per job.** Before each job (and each batched call) a worker compares the time left in
-its allocation with the job's declared `time`, else `call_timeout`; the first that does not fit
-recycles the worker and leaves the rest of the ticket to another. The fallback `squeue` query is
-bounded by `PoolSettings.squeue_timeout`.
-
-**Shared jobs.** A worker writes `exit.json` as it exits; a worker of a still-listed shared job that
-wrote it is not live, so its class may start a replacement and a never-ready one is a failed start.
