@@ -130,9 +130,7 @@ def test_crash_notebook_displays_successes_and_reruns_failures(
     assert not any("_tasks[2]" in source for source in sources)
 
 
-def test_result_display_formats_outputs_as_table(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_result_display_formats_outputs_as_table(tmp_path: Path, monkeypatch) -> None:
     displayed = []
     ipython = ModuleType("IPython")
     ipython_display = ModuleType("IPython.display")
