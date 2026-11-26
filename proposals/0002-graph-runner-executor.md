@@ -554,16 +554,18 @@ an executor that reports from another thread has its outcomes marshalled to that
 **`ready()`** applies the precedence of §2.3(b) to every released element. It returns the jobs to
 dispatch and, separately, every job it completed itself, with how. Each job is handed out once.
 `dispatch` is grouped by node, in node order (workflow path, then name).
-- **`limit`** caps the jobs handed out by this call (`max_concurrent`, below) by whole node groups:
-  groups are taken in order while they fit, and only the group that crosses the cap is sliced. With
-  `limit=4` and two nodes of three released jobs, the first node is handed out whole and one job of
-  the second. A driver of an executor with `batches = True` passes no cap (`max_concurrent` is
-  infinite) and lets the executor cap inside itself, so a node's elements stay in one array or
-  batch: it gives its worker at most `max_concurrent` jobs at once and holds the rest of a round
-  until jobs end. Each batching executor caps its own jobs, and the driver's cap counts only the
-  jobs of the other executors, so a run with several batching executors, or one beside other
-  executors, can have more than `max_concurrent` jobs in flight in all. An external driver
-  (§3.5) passes no `limit`.
+- **`limit`** caps the jobs handed out by this call by whole node groups: groups are taken in order
+  while they fit, and only the group that crosses the cap is sliced. With `limit=4` and two nodes of
+  three released jobs, the first node is handed out whole and one job of the second. It is for an
+  external driver (§3.5) that bounds its own work; pydra's drivers pass none.
+- **`max_concurrent`** exists to respect the job limits of batch schedulers (Slurm, SGE). It bounds
+  the jobs each scheduler executor has submitted or queued at once: a `WorkerExecutor` over a
+  batching worker gives its worker at most `max_concurrent` jobs, in node order, and holds the rest
+  of a round until jobs end. Each job counts as the scheduler counts it (a job, or one task of an
+  array), so a batched call submitted as one scheduler job counts once. It does not limit a warm
+  pool, a local worker or in-process batching: a pool's concurrency is governed by
+  `workers_per_device` and its batch probe (RFC 0005), a local worker's by its own size. Each
+  scheduler executor counts only its own submissions.
 - **Sharing is the runner's.** The same-checksum table (today's `futured`, `sharing` and
   `finished`, `submitter.py:610-616`, `:702-719`) is runner state applied in `ready()` after the
   gate and absence steps. A twin of a job in flight is held and settled as `Settled(how="shared")` when
@@ -651,9 +653,10 @@ from the store needs it.
 **Nested workflows and flattening.** The end state is one runner per `Submitter` call that expands
 nested workflows itself, so `ready()` returns leaf jobs across every level. This flattening changes
 two behaviours, which §4.3 delivers in their own PR (R6):
-- `max_concurrent` becomes one cap over the whole run. Today each nested workflow applies its own
-  cut (`submitter.py:902-908`), so with `max_concurrent=4` and eight nested workflows of four
-  ready leaves each, up to 4 run per workflow. After flattening, 4 run in all.
+- `max_concurrent` counts across nested workflows. Today each nested workflow applies its own cut
+  (`submitter.py:902-908`), so with `max_concurrent=4` and eight nested workflows of four ready
+  leaves each, up to 4 run per workflow. After flattening, 4 in all; from R7 the cap bounds only a
+  scheduler worker's submissions (§3.1).
 - Equal-checksum jobs in two nested workflows are folded into one. Today each nested loop has its
   own `sharing` table (`:610-616`), so both run, and the second waits on the first's lease.
 
@@ -824,7 +827,7 @@ async def drive(runner, executors, router):
         ex.bind(lambda job, out: loop.call_soon_threadsafe(on_outcome, job, out))
     try:
         while not runner.done:
-            rnd = runner.ready(limit=max_concurrent - in_flight)
+            rnd = runner.ready()
             audit(rnd.settled, rnd.unrunnable)
             for name, jobs in group_by(router, rnd.dispatch):
                 open_handles.add(executors[name].submit(jobs))
@@ -996,8 +999,9 @@ What such a driver must and need not supply:
   `PickleStore`; checksums; the cache layout; `WorkflowError`, `errors` and `entries`; the `debug`
   default; `on_error` defaults; error semantics under `debug`, including the caller's thread and no
   job after the first failure (§3.3).
-- **Named behaviour changes, in R6 only:** `max_concurrent` caps the whole run rather than each
-  nested workflow; equal-checksum jobs in different nested workflows run once.
+- **Named behaviour changes:** `max_concurrent` counts the whole run rather than each nested
+  workflow (R6) and bounds only the submissions of scheduler workers, no longer local workers or
+  warm pools (R7); equal-checksum jobs in different nested workflows run once (R6).
 - **New and opt-in:** `GraphRunner`, `Round`, `Unrunnable`, `Outcome`, `Executor`, `Lease.try_take`,
   `ResultStore.read_succeeded` (optional), `RunIncomplete`, `Absent`, `absent=`, `when=`/`unless=`,
   `select(n)`, `workflow.loop`, `Round.loops`/`LoopClosed`, `PlanNode.rounds`/`max_rounds` and
@@ -1124,80 +1128,6 @@ more threads than `max_threads`) fails only that group's jobs.
 
 **Absent values.** A `TypeParser` refuses an `Absent` unless built with `accepts_absent=True`
 (a field that accepts one, and output reads).
-
-### Moved from docstrings
-
-### plan()
-    """One node of the graph, as the runner would run it now
-
-    Parameters
-    ----------
-    path : str
-        The node's name, with the nested workflows that hold it (``"outer/inner/node"``);
-        a workflow job whose lease is not yet held is named by its own path
-    elements : int, optional
-        How many elements the node releases, whatever a concurrency cap would hand out at
-        once; None if that depends on an upstream output that has not been read
-    resources : ComputeResources, optional
-        What the node asks of its worker
-    worker : str, optional
-        The name of the worker the submitter's router sends the node's first element to.
-        An element whose job cannot be formed yet is routed as a stand-in (name, task with
-        lazy inputs, resources), and the answer is ``provisional``; a stand-in the router
-        fails on gives None. A real job the router fails on raises, as the run would
-    expected_hits : int
-        How many of the node's unfinished elements have a stored result to reuse. The store
-        may answer with an ``expected_hits(jobs)`` method, which then counts everything
-        ``ready`` would settle; otherwise the records are counted, and the results
-        ``lookup`` returns when the runner has ``lookup_before_dispatch``. A store with a
-        ``recorded(jobs)`` method (``PickleStore``) is asked for its recorded jobs and the
-        others are looked up under that option. A store with neither (an adapter) reports 0. Only
-        elements whose inputs are resolvable now have a checksum and are counted.
-    state : "pending" | "waiting" | "deferred"
-        ``pending``: its elements are released or can be. ``waiting``: a workflow job
-        whose lease another process holds. ``deferred``: what it holds is not known yet (a
-        workflow job not yet expanded, a split over an upstream output)
-    gated : int
-        Elements a gate switches off; always 0 until gates exist
-    placement : object, optional
-        What the worker's executor's ``place(jobs)`` returned for the node's elements,
-        when it has one (RFC 0005 section 7.4). Elements whose jobs cannot be formed yet are
-        shown to ``place`` as the same stand-ins the router sees, so the answer is then
-        ``provisional``
-    provisional : bool
-        Whether ``worker`` or ``placement`` was derived from a stand-in rather than from
-        the jobs the run will dispatch, so a later plan may differ
-
-
-### 2.3(d) workflow.loop
-    """The task class of a loop over ``body``, whose rounds are instantiated at run time
-    (RFC 0002 section 2.3(d))
-
-    Added to a workflow, the loop is one node that can be split, gated and read like any
-    other; under a split there is one loop per element. The runner expands it with one
-    round, ``r0``, given the loop's inputs. When round ``k`` is done and its ``until``
-    output is false, it adds ``r<k+1>``, whose ``carry`` inputs read round ``k``'s
-    outputs, whose ``index`` (if named) is ``k+1`` and whose other inputs are the loop's.
-    Nothing is built for a round before the one before it has returned false.
-
-    The loop ends after the first round for which one of these holds, in order: its
-    ``until`` is an ``Absent`` (``stopped="absent"``); it is true (``"until"``); with
-    ``index=None``, the round's checksum equals an earlier round's (``"cycle"``: its
-    state repeats, so ``until`` can never become true); ``max_rounds`` is reached
-    (``"max-rounds"``). A round that fails fails the loop.
-
-    The loop's inputs are ``body``'s without ``index``. Its outputs are ``body``'s, from
-    the last round instantiated, plus ``rounds`` (the rounds instantiated, less a last
-    round that completed absent by propagation), ``converged`` (that round's ``until``
-    as returned: ``True``, ``False`` or the ``Absent``) and ``stopped``.
-
-    Rounds of different elements' loops are dispatched separately, so a loop whose
-    rounds should be batched across elements puts the split inside a workflow ``body``
-    that combines before ``until``.
-
-
-index: with index=None the loop iterates a pure body, and a round whose inputs equal an earlier round's is served that round's result. max_rounds is only a stop, which sizes nothing.
-
 
 ## Amendment (2026-11-25, rev. 5): progress as a count, declared contracts, dead keywords
 
