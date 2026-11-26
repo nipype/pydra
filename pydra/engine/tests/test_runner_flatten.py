@@ -451,7 +451,9 @@ def LeaseBroken(x: int) -> int:
 
 
 def test_lease_lost_on_commit_is_entry(tmp_path):
-    with Submitter(worker="debug", cache_root=tmp_path, on_error="raise_at_end") as sub:
+    with Submitter(
+        worker="debug", store="pickle", cache_root=tmp_path, on_error="raise_at_end"
+    ) as sub:
         with pytest.raises(WorkflowError) as raised:
             sub(LeaseBroken(x=1))
     (entry,) = [e for e in raised.value.entries if e.job_name == "inner"]
@@ -961,7 +963,9 @@ def test_error_reading_a_nested_result_is_an_entry(tmp_path, monkeypatch):
         return original(self, *args, **kwargs)
 
     monkeypatch.setattr(Job, "result", result)
-    with Submitter(worker="debug", cache_root=tmp_path, on_error="raise_at_end") as sub:
+    with Submitter(
+        worker="debug", store="pickle", cache_root=tmp_path, on_error="raise_at_end"
+    ) as sub:
         with pytest.raises(WorkflowError) as raised:
             sub(AfterWrapped(log=os.devnull, hold=0.0))
     (entry,) = [e for e in raised.value.entries if e.job_name == "wrapped"]
@@ -973,7 +977,7 @@ def test_error_making_the_outer_lease_is_raised_as_itself(tmp_path, monkeypatch)
         raise PermissionError("no lease")
 
     monkeypatch.setattr(PickleStore, "acquire", refuse_acquire)
-    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=tmp_path) as sub:
         task = Wrapped(log=os.devnull, hold=0.0)
         runner = GraphRunner(  # the failure is the runner's state, not a raise
             task,

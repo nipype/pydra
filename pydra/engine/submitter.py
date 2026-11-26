@@ -1,6 +1,8 @@
 """Handle execution backends."""
 
 import asyncio
+import errno
+import stat
 import typing as ty
 import warnings
 import os
@@ -29,14 +31,17 @@ from pydra.engine.runner import (  # noqa: F401
     NotRun,
     OnError,
     element_label,
+    find_before_dispatch,
 )
 from pydra.engine.store import (
     PickleStore,
     ResultStore,
     ReusePolicy,
+    forget_outcome,
 )
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.general import default_run_cache_root
+from pydra.utils.general import default_run_cache_root, default_store_root
+from pydra.utils.storagedir import IS_WINDOWS
 from pydra.compose import workflow
 from pydra.engine.state import State
 from pydra.workers.base import Worker
@@ -121,9 +126,13 @@ class Submitter:
     ----------
     cache_root : os.PathLike, optional
         Cache directory where the working directory/results for the job will be
-        stored, by default None. Loading from a cache unpickles its files, so
-        pointing Pydra at a cache trusts everyone who can write to it with code
-        execution as the reading user: only use caches whose writers you trust
+        stored. Under the default ``store="portable"`` it is the root of a ``private``
+        :class:`~pydra.engine.portable.store.PortableStore` that may hold pickles (empty
+        or such a root; default ``store`` in the user cache directory, see
+        :func:`~pydra.utils.general.default_store_root`). Under ``store="pickle"`` it holds
+        :class:`~pydra.engine.store.PickleStore` slots (default ``run-cache`` there), whose
+        files are unpickled, so it trusts everyone who can write to it with code execution
+        as the reading user: only use caches whose writers you trust
     worker : str or Worker, optional
         The worker to use, by default "cf". It runs every job the router does not send
         elsewhere, and is available to the router under the name ``"default"``
@@ -136,11 +145,12 @@ class Submitter:
         to ``worker``. See :func:`pydra.utils.routing.tag_router`
     environment: Environment, optional
         The execution environment to use, by default None
-    readonly_caches : list[os.PathLike], optional
+    readonly_caches : list[os.PathLike | Root], optional
         Alternate cache locations to check for pre-computed results, by default None.
-        These are unpickled like ``cache_root``, so they trust everyone who can write
-        to them with code execution as the reading user: only list caches whose
-        writers you trust
+        Under ``store="portable"`` each is read as ``shared`` (no pickle member is
+        opened) unless given as a :class:`~pydra.engine.portable.trust.Root` with another
+        trust. Under ``store="pickle"`` they are unpickled like ``cache_root``: only list
+        caches whose writers you trust
     max_concurrent: int | float, optional
         The most jobs each scheduler worker (slurm, sge) has submitted or queued at once,
         to stay within the scheduler's job limits; by default float("inf") (no cap). A
@@ -160,10 +170,14 @@ class Submitter:
         Deprecated and ignored. A lease whose holder stopped renewing it is taken over
         once it is older than ``stale_after`` (see
         :class:`~pydra.engine.lease.LeaseSettings`), whichever host left it
-    store : ResultStore, optional
-        Where jobs run and their results are kept, by default a
+    store : "portable", "pickle" or ResultStore, optional
+        Where jobs run and their results are kept: ``"portable"`` (the default) a
+        :class:`~pydra.engine.portable.store.PortableStore` over ``cache_root``, opened
+        ``private`` with ``pickle=True``, reading ``readonly_caches``; ``"pickle"`` a
         :class:`~pydra.engine.store.PickleStore` over ``cache_root`` and
-        ``readonly_caches``
+        ``readonly_caches``; or a store object, which holds its own roots (a portable
+        root on shared storage is passed this way, with ``trust="shared"`` and a
+        ``work_dir``)
     reuse : str | ReusePolicy, optional
         Which stored results the default store reuses, given the execution context
         recorded beside each (see :func:`~pydra.engine.context.job_context`):
@@ -229,6 +243,7 @@ class Submitter:
     entries: list[JobErrorEntry]
 
     ON_ERROR_MODES = ty.get_args(OnError)
+    STORE_NAMES = ("portable", "pickle")
 
     def __init__(
         self,
@@ -245,7 +260,7 @@ class Submitter:
         max_concurrent: int | float = float("inf"),
         propagate_rerun: bool = True,
         clean_stale_locks: bool | None = None,
-        store: ResultStore | None = None,
+        store: "ResultStore | str | None" = "portable",
         reuse: str | ReusePolicy | None = None,
         on_error: OnError | None = None,
         telemetry: bool = True,
@@ -279,8 +294,15 @@ class Submitter:
             messengers=messengers,
             messenger_args=messenger_args,
         )
+        if store is None:
+            store = "portable"
+        if isinstance(store, str) and store not in self.STORE_NAMES:
+            raise ValueError(
+                f"'store' must be one of {self.STORE_NAMES} or a store object, "
+                f"not {store!r}"
+            )
         store_root = getattr(store, "cache_root", None)
-        if store is not None:
+        if not isinstance(store, str):
             if readonly_caches is not None:
                 raise ValueError(
                     "readonly_caches cannot be combined with store, "
@@ -297,16 +319,25 @@ class Submitter:
                     f"cache_root {str(store_root)!r}"
                 )
         if cache_root is None:
-            cache_root = default_run_cache_root()
+            cache_root = (
+                default_store_root()
+                if store == "portable"
+                else default_run_cache_root()
+            )
         cache_root = Path(cache_root).resolve()
-        cache_root.mkdir(parents=True, exist_ok=True)
+        if store == "portable":
+            _make_private_dir(cache_root)
+        else:
+            cache_root.mkdir(parents=True, exist_ok=True)
 
         self.cache_root = cache_root
         self.readonly_caches = readonly_caches
-        if store is None:
+        if store == "pickle":
             store = PickleStore(
                 cache_root, readonly_caches, reuse=reuse or "consistent"
             )
+        elif store == "portable":
+            store = _portable_store(cache_root, readonly_caches, reuse or "consistent")
         elif reuse is not None:
             raise ValueError(
                 "'reuse' applies to the default store, set it on the store passed as "
@@ -335,6 +366,8 @@ class Submitter:
         for name, spec in workers.items():
             self.workers[name] = self._make_worker(spec, {})
         self._sync_pool = None
+        # the default work directories of the attempts this submitter handed out, emptied
+        # once their entries are published, removed by `close`
         self.run_start_time = None
         if clean_stale_locks is not None:
             warnings.warn(
@@ -489,15 +522,17 @@ class Submitter:
             environment=environment,
             hooks=hooks,
         )
-        job.attempt = uuid4().hex
-        self.store.note_attempt(job)
         self.errors = []
         self.entries = []
         try:
             self.run_start_time = datetime.now()
             if is_workflow(task):  # the runner leases, expands and commits it
+                job.attempt = uuid4().hex
+                self.store.note_attempt(job)
                 self._run_workflow(job, rerun)
-            else:
+            elif rerun or not self._served(job):
+                job.attempt = uuid4().hex
+                self.store.note_attempt(job)
                 self.submit(job, rerun=rerun)
         except Exception as exc:
             self.errors = exc.errors if isinstance(exc, WorkflowError) else []
@@ -511,17 +546,55 @@ class Submitter:
                 + crash_file
             )
             exc.add_note(error_msg)
-            if raise_errors or not job.result():
+            # a run that failed leaving no errored result of its own raises: what the store
+            # holds at the job's address is an earlier run's result, never this one's
+            if raise_errors or not self._failed_here(job):
                 raise exc
-            else:
-                logger.error("\nTask execution failed\n%s", error_msg)
+            logger.error("\nTask execution failed\n%s", error_msg)
         finally:
             self.run_start_time = None
         PersistentCache().clean_up()
-        result = job.result()
+        # the job has run: under a store with work directories, a result it did not store
+        # is read from its `_committed.json`, waited for as long as the store's visibility
+        # retry allows (RFC 0003 section 7.2)
+        result = job.result(settled=True)
         if result is None:
             raise RuntimeError(no_result_diagnosis(job))
+        forget_outcome(self.store, job)
         return result
+
+    @staticmethod
+    def _failed_here(job: "Job[TaskType]") -> bool:
+        """Whether this call's run of ``job`` ended with an errored result of its own (its
+        task or a node failed), which a failed call returns when not raising. Under a store
+        with work directories that is a failure recorded for this attempt, never what the
+        store holds at the job's address, which an earlier run may have stored; the job is
+        then marked errored so that its result is the errored one."""
+        held = job._held
+        if job.errored or (held is not None and held.errored):
+            return True
+        if not job._has_work_dir:
+            return bool(job.result())
+        try:
+            failed = job.store.has_error(job)
+        except ValueError:  # never given an attempt
+            failed = False
+        if failed:
+            job._errored = True
+        return failed
+
+    def _served(self, job: "Job[TaskType]") -> bool:
+        """Whether the store serves the outer job of a call before it is leased, as
+        ``ready()`` serves a job (RFC 0002 section 3.1): one existence check of its own
+        address, and the entry read through the reuse hook only if there is one. A
+        `Verify` marks the job, which then runs."""
+        if not self.store.finds:
+            return False
+        result = job.accept_found(find_before_dispatch(self.store, job, False))
+        if result is None:
+            return False
+        GraphRunner._serve_stored(job, result)
+        return True
 
     def submit(self, job: "Job[TaskType]", rerun: bool = False) -> None:
         """Submit a job to the worker.
@@ -771,6 +844,68 @@ class Submitter:
         else:
             self._cache_root = mkdtemp()
             self._cache_root = Path(self._cache_root).resolve()
+
+
+def _make_private_dir(path: Path) -> None:
+    """Make ``path``, a portable root the submitter opens ``private``, ``0o700`` whatever the
+    umask (under ``umask 002`` a directory is otherwise group-writable, which ``private``
+    refuses). An existing directory is left as it is."""
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        return
+    if not IS_WINDOWS:
+        os.chmod(path, 0o700)
+
+
+def _check_private(root: Path) -> None:
+    """Refuse a root the current user does not own, or that others can write, with the ways
+    on (POSIX; on Windows the store checks ``%LOCALAPPDATA%``)."""
+    if IS_WINDOWS or not root.exists():  # one the store makes is its own
+        return
+    from pydra.utils.storagedir import StoreUnavailable
+
+    st = os.stat(root)
+    if st.st_uid == os.geteuid() and not st.st_mode & 0o022:
+        return
+    raise StoreUnavailable(
+        errno.EACCES,
+        f"the cache_root {str(root)!r} is not private (owner uid {st.st_uid}, mode "
+        f"{stat.S_IMODE(st.st_mode):#o}), so it may not hold pickles: if it is yours, run "
+        f"`chmod 700 {root}`; if everyone who can write it is trusted, pass "
+        f'store=PortableStore({str(root)!r}, trust="trusted"); or give a cache_root that '
+        "does not exist yet, which the submitter makes 0o700",
+    )
+
+
+def _portable_store(
+    root: Path, readonly_caches: "list | None", reuse: "str | ReusePolicy"
+) -> ResultStore:
+    """The store of ``Submitter(store="portable")``: ``root`` is the user's own cache, so it is
+    opened ``private`` and may hold pickles (RFC 0003 section 6.4); each read-only cache is a
+    portable root read ``shared`` unless given as a `~pydra.engine.portable.trust.Root`. On
+    Windows, where a shared root is unsupported (RFC 0003 section 9), it is read ``private``,
+    which is accepted only under ``%LOCALAPPDATA%``; elsewhere it is skipped with a warning.
+    """
+    from pydra.engine.portable.store import PortableStore
+    from pydra.engine.portable.trust import Root
+    from pydra.utils.general import ensure_list
+
+    _check_private(root)
+    readonly = [
+        (
+            ro
+            if isinstance(ro, Root)
+            else Root(Path(ro).resolve(), trust="private" if IS_WINDOWS else "shared")
+        )
+        for ro in ensure_list(readonly_caches)
+    ]
+    return PortableStore(
+        root, trust="private", pickle=True, readonly=readonly, reuse=reuse
+    )
 
 
 def workflow_error(

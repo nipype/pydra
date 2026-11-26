@@ -38,6 +38,7 @@ from pydra.engine.absent import (
     task_definition,
 )
 from pydra.engine.lease import LeaseLost
+from pydra.engine.store import forget_outcome
 from pydra.engine.loop import MAX_ADVANCES, LoopState, advance, loop_label
 from pydra.engine.partial import (
     ALL,
@@ -1149,6 +1150,18 @@ class NodeExecution(ty.Generic[TaskType]):
         return errors
 
 
+def find_before_dispatch(store: "ResultStore", job: Job, complete: bool) -> ty.Any:
+    """What ``store.find`` answers for ``job`` before it is leased: ``find(job)`` when
+    ``complete``, else ``find(job, probe=True)``, one existence check of the job's own
+    address before a read; None when the store cannot be read (the job is then looked up
+    under its lease)"""
+    try:
+        return store.find(job) if complete else store.find(job, probe=True)
+    except Exception as exc:
+        logger.debug("Looking up %s before dispatch: %s", job.checksum, exc)
+        return None
+
+
 def _check_splittable(node: str, state_key: str, value: ty.Any) -> None:
     """Refuse an upstream output a splitter splits over that is not a sequence, such as a
     reference an external driver completed the upstream job with (RFC 0002 section 3.5)
@@ -1688,7 +1701,7 @@ class GraphRunner:
         rerun = self.rerun if frame.parent is None else job.rerun
         if not rerun:
             try:
-                result = job.result()
+                result = self._stored_workflow(job)
             except Exception as exc:
                 self._fail(frame, exc, "run")
                 return
@@ -1709,6 +1722,14 @@ class GraphRunner:
             self._expand(frame, job.task)
         except Exception as exc:
             self._finish(frame, exc)
+
+    def _stored_workflow(self, job: Job) -> "Result | None":
+        """The stored result of a workflow job under its lease: through ``find`` when the
+        store has it (a `Verify` marks the job, which is then expanded; RFC 0003 section 13
+        item 6), otherwise what ``job.result()`` reads"""
+        if not self.store.finds:
+            return job.result()
+        return job.accept_found(self.store.find(job), errored=True)
 
     def _release_lease(self, frame: _Frame) -> None:
         lease, frame.lease = frame.lease, None
@@ -1794,7 +1815,9 @@ class GraphRunner:
             job._held = frame.result
             self._release_lease(frame)
             job._complete_workflow(frame.result)
-            self._forget(job)
+            # as published: under a store with work directories, read from its entry
+            job._held = job._cached_result
+            forget_outcome(self.store, job)
             self._succeeded(frame)
         elif frame.parent is None:
             frame.state = "finished"
@@ -1983,10 +2006,10 @@ class GraphRunner:
 
     def _progress(self) -> int:
         """The count of changes to the state a pass of :meth:`ready` reads: the jobs
-        handed out, the frames' states, the loops' rounds, the nodes' tables and modes, and
-        a partial node's blocks, groups and seal (`~pydra.engine.progress.changed`).
-        ``ready`` repeats its pass until a pass hands out a job or leaves the count
-        unchanged."""
+        handed out or checked, the frames' states, the loops' rounds,
+        the nodes' tables and modes, and a partial node's blocks, groups and seal
+        (`~pydra.engine.progress.changed`). ``ready`` repeats its pass until a pass hands
+        out a job or leaves the count unchanged."""
         return changes()
 
     def _nodes_done(self, frame: _Frame) -> bool:
@@ -2149,24 +2172,40 @@ class GraphRunner:
     def _read_store(self, jobs: list[Job]) -> list[Job]:
         """Settle as ``stored`` the jobs whose slots carry a success record, and, under
         ``lookup_before_dispatch``, those the store's ``lookup`` returns an acceptable
-        result for; return the others. A job read once without a result is not read
-        again while the ``ready`` limit holds it back."""
+        result for; return the others. A store that `finds` (`PortableStore`) is asked
+        that instead (RFC 0002 section 3.1): a `Hit` is settled, a `Verify` is dispatched
+        with ``job.verify`` set, a `Miss` is dispatched. Without
+        ``lookup_before_dispatch`` a job whose own address holds no entry (`present`)
+        costs one existence check and is dispatched. A job read once without a result is
+        not read again while the ``ready`` limit holds it back."""
         rest = []
         for job in jobs:
-            if job in self._checked:
+            if (
+                job in self._checked
+            ):  # read, nothing to serve: handed out when there is room
                 rest.append(job)
                 continue
-            result = self.store.read_succeeded(job.checksum, job.context, job.task)
-            if result is None and self.lookup_before_dispatch:
-                result = self._lookup(job)
+            if self.store.finds:
+                found = find_before_dispatch(
+                    self.store, job, self.lookup_before_dispatch
+                )
+                result = job.accept_found(found)
+            else:
+                result = self.store.read_succeeded(job.checksum, job.context, job.task)
+                if result is None and self.lookup_before_dispatch:
+                    result = self._lookup(job)
             if result is None:
                 self._checked.add(job)
                 rest.append(job)
                 continue
-            self._serve_stored(job, result)
-            self._handed.add(job)
-            self._settled.append(Settled(job, "stored", result))
+            self._settle_stored(job, result)
         return rest
+
+    def _settle_stored(self, job: Job, result: "Result") -> None:
+        """Settle ``job`` as ``stored`` with ``result``"""
+        self._serve_stored(job, result)
+        self._handed.add(job)
+        self._settled.append(Settled(job, "stored", result))
 
     @staticmethod
     def _serve_stored(job: Job, result: "Result") -> None:
@@ -2294,6 +2333,9 @@ class GraphRunner:
             frame.entries.append(job_entry(job, exc))
         else:
             job._held = outcome
+            if outcome is not None and outcome.committed is not None:
+                # a reader in this process or one the job is sent to reads by it
+                job.committed = outcome.committed
             if outcome is not None and outcome.errored:
                 exc = result_error(job, outcome)
                 job._errored = True
@@ -2301,7 +2343,7 @@ class GraphRunner:
                 frame.errors.append(job_error(job, exc))
                 frame.entries.append(job_entry(job, exc))
             else:
-                self._forget(job)
+                forget_outcome(self.store, job)
         if self._first.get(job.checksum) is job:
             del self._first[job.checksum]
             self._finished[job.checksum] = outcome
@@ -2309,14 +2351,6 @@ class GraphRunner:
                 self._waiting_twins.discard(twin)
                 self._share(twin, outcome)
         self._collect_resolution_errors()
-
-    def _forget(self, job: Job) -> None:
-        """Tell a store that keeps a job's outcome in its work directory until the runner
-        holds it (``forget_committed``, RFC 0003 section 5.4) that it is held now"""
-        try:
-            self.store.forget_committed(job)
-        except Exception as exc:  # left for the store's collection
-            logger.debug("Forgetting the outcome file of %s: %s", job.checksum, exc)
 
     def retry(self, job: Job) -> None:
         """Hand a job reported :class:`NotRun` out again at the next :meth:`ready`, with

@@ -1,0 +1,52 @@
+{
+  "@context": [
+    {
+      "@version": 1.1,
+      "schema": "https://schema.org/",
+      "records": {
+        "@id": "@graph",
+        "@container": "@type"
+      }
+    },
+    "https://raw.githubusercontent.com/openprov/prov-jsonld/69964ed16818f78dc5f71bdf97add026288291d4/context.json",
+    {
+      "pydra": "http://s.pydra.org/",
+      "uid": "pydra:id/",
+      "task": {
+        "@id": "pydra:task",
+        "@type": "@vocab"
+      },
+      "monitor": {
+        "@id": "pydra:resourceMonitor",
+        "@type": "@vocab"
+      },
+      "runtime": {
+        "@id": "pydra:runtimeInformation",
+        "@type": "@vocab"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "prov:wasGeneratedBy",
+        "@type": "@vocab"
+      },
+      "rss_peak_gb": {
+        "@id": "pydra:rss_peak_gb",
+        "@type": "xsd:float"
+      },
+      "vms_peak_gb": {
+        "@id": "pydra:vms_peak_gb",
+        "@type": "xsd:float"
+      },
+      "cpu_peak_percent": {
+        "@id": "pydra:cpu_peak_percent",
+        "@type": "xsd:float"
+      },
+      "errored": {
+        "@id": "pydra:errored",
+        "@type": "xsd:boolean"
+      }
+    }
+  ],
+  "@id": "uid:8a6b00e35ecc471ca8021123c2ed1845",
+  "endedAtTime": "2026-11-26T01:25:53.101214",
+  "errored": false
+}

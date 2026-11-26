@@ -38,7 +38,11 @@ from pydra.utils.storagedir import (
     WrongKindError,
 )
 
-TRUST = "trusted" if IS_WINDOWS else "private"
+# The trust of the roots these tests open: on Windows `private` holds only under %LOCALAPPDATA%,
+# so it is `trusted` there unless CI sets PYDRA_TEST_PORTABLE_TRUST (its temp directory is there)
+TRUST = os.environ.get("PYDRA_TEST_PORTABLE_TRUST") or (
+    "trusted" if IS_WINDOWS else "private"
+)
 posix_only = pytest.mark.skipif(
     IS_WINDOWS, reason="needs POSIX modes, owners and signals"
 )

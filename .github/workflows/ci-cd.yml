@@ -133,7 +133,8 @@ jobs:
     needs: plan
     if: needs.plan.outputs.run == 'true'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && (matrix.os == 'windows-latest' && 35 || 25) || 10 }}
+    # `long`: the fast tier's Windows job, which runs no cf tests but is the slowest runner
+    timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && (matrix.os == 'windows-latest' && 35 || 25) || 15 }}
     strategy:
       # Full tier: every OS x Python 3.11-3.15, plus pre-release and minimum dependency
       # variants. Fast tier: Python 3.13 only (see the plan job).
@@ -172,6 +173,15 @@ jobs:
           tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && (matrix.os == 'windows-latest' && 1500 || 900) || 300 }} > tox-log.txt 2>&1 || rc=$?
           tail -n 400 tox-log.txt
           exit $rc
+      # The portable store's own tests use `trusted` roots on Windows, where `private` holds only
+      # under %LOCALAPPDATA% (the runner's temporary directory is there): run them again as
+      # `private`, the trust of a Submitter's default store (RFC 0003 section 6.4)
+      - name: Run the portable store tests under private roots
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          PYDRA_TEST_PORTABLE_TRUST: private
+        run: tox -v --exit-and-dump-after 300 -- -n auto pydra/engine/tests/test_portable_*.py
       - name: List processes left running
         if: always()
         shell: bash

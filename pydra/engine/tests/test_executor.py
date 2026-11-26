@@ -122,7 +122,7 @@ def test_true_returning_worker_result_read_late(tmp_path):
 
 
 def test_true_returning_worker_never_visible(tmp_path):
-    with Submitter(worker="debug", cache_root=tmp_path) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=tmp_path) as sub:
         job = one_job(sub)
         worker = WritesLate(0.0, write=False)
         worker.loop = sub.loop
