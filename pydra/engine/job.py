@@ -354,7 +354,7 @@ class Job(ty.Generic[TaskType]):
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(self.cache_dir, error=traceback)
+                record_error(self.cache_dir, error=traceback, job=self)
                 result.errored = True
                 raise
             finally:
@@ -412,7 +412,7 @@ class Job(ty.Generic[TaskType]):
             except Exception:
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
-                record_error(self.cache_dir, error=traceback)
+                record_error(self.cache_dir, error=traceback, job=self)
                 result.errored = True
                 self._errored = True
                 raise
@@ -673,7 +673,7 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
         if not errorfile.exists():  # not sure if this is needed
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
-            errorfile = record_error(job.cache_dir, error=traceback)
+            errorfile = record_error(job.cache_dir, error=traceback, job=job)
         if not resultfile.exists():  # not sure if this is needed
             result = Result(output=None, runtime=None, errored=True, task=None)
             save(job.cache_dir, result=result)

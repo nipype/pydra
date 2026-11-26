@@ -1,6 +1,7 @@
 """Job I/O definitions."""
 
 import getpass
+import html
 import json
 import logging
 import os
@@ -111,6 +112,40 @@ class Result(ty.Generic[OutputsType]):
             return None
         with open(return_values_pkl, "rb") as f:
             return cp.load(f)
+
+    def display(self) -> None:
+        """Display outputs as a table in an IPython session."""
+        try:
+            from IPython.display import HTML, display
+        except ImportError as exc:
+            raise RuntimeError("Displaying results requires IPython") from exc
+
+        if self.outputs is None:
+            display(HTML("<p>No outputs were produced.</p>"))
+            return
+
+        output_values = attrs_values(self.outputs)
+        rows = "".join(
+            "<tr>"
+            f"<th>{html.escape(name)}</th>"
+            f"<td><code>{html.escape(repr(value))}</code></td>"
+            "</tr>"
+            for name, value in output_values.items()
+        )
+        display(
+            HTML(
+                "<table>"
+                "<thead><tr><th>Output</th><th>Value</th></tr></thead>"
+                f"<tbody>{rows}</tbody>"
+                "</table>"
+            )
+        )
+        for value in output_values.values():
+            if isinstance(value, FileSet):
+                thumbnail = getattr(value, "thumbnail", None)
+                if callable(thumbnail):
+                    thumbnail = thumbnail()
+                display(value if thumbnail is None else thumbnail)
 
 
 @attrs.define(kw_only=True)
@@ -311,7 +346,11 @@ def create_checksum(name, inputs):
     return "-".join((name, inputs))
 
 
-def record_error(error_path, error):
+def record_error(
+    error_path: Path,
+    error,
+    job: "Job[TaskType] | None" = None,
+):
     """Write an error file."""
 
     error_message = str(error)
@@ -340,7 +379,7 @@ def record_error(error_path, error):
         cp.dump(full_error, fp)
 
     try:
-        _write_crash_artifacts(error_path)
+        _write_crash_artifacts(error_path, job=job)
     except Exception:
         logger.warning(
             "Could not create Jupyter crash artifacts in %s",
@@ -351,30 +390,124 @@ def record_error(error_path, error):
     return error_path / "_error.pklz"
 
 
-def _write_crash_artifacts(error_path: Path) -> None:
-    notebook = {
-        "cells": [
+def _write_crash_artifacts(
+    error_path: Path,
+    job: "Job[TaskType] | None" = None,
+) -> None:
+    cells = [
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": (
+                "# Pydra crash report\n\n"
+                "Run the cells in order. Completed tasks load their cached results; "
+                "only failed tasks are rerun."
+            ),
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": (
+                "from pathlib import Path\n"
+                "import cloudpickle as cp\n\n"
+                "from IPython.display import display\n\n"
+                'with Path("_job.pklz").open("rb") as fp:\n'
+                "    job = cp.load(fp)\n"
+                'graph = job.return_values.get("exec_graph")'
+            ),
+        }
+    ]
+    graph = job.return_values.get("exec_graph") if job is not None else None
+    failed_jobs = 0
+    if graph is not None:
+        for node in graph.sorted_nodes:
+            for index in node._tasks or {}:
+                status = None
+                if index in node.successful:
+                    status = "successful"
+                elif index in node.errored:
+                    status = "errored"
+                elif index in node.queued or index in node.running:
+                    task_result = node._tasks[index].result()
+                    if task_result is not None:
+                        status = "errored" if task_result.errored else "successful"
+                label = node.name if index is None else f"{node.name}[{index}]"
+                if status == "successful":
+                    cells.extend(
+                        [
+                            {
+                                "cell_type": "markdown",
+                                "metadata": {},
+                                "source": (
+                                    f"## Completed task: `{label}`\n\n"
+                                    "This task completed successfully. The next cell "
+                                    "loads and displays its cached result without "
+                                    "rerunning it."
+                                ),
+                            },
+                            {
+                                "cell_type": "code",
+                                "execution_count": None,
+                                "metadata": {},
+                                "outputs": [],
+                                "source": (
+                                    f"task_job = graph[{node.name!r}]._tasks[{index!r}]\n"
+                                    "display(task_job.task)\n"
+                                    "task_job.result().display()"
+                                ),
+                            },
+                        ]
+                    )
+                elif status == "errored":
+                    cells.extend(
+                        [
+                            {
+                                "cell_type": "markdown",
+                                "metadata": {},
+                                "source": (
+                                    f"## Failed task: `{label}`\n\n"
+                                    "The next cell reruns only this failed task. "
+                                    "Edit its resolved inputs first if needed."
+                                ),
+                            },
+                            {
+                                "cell_type": "code",
+                                "execution_count": None,
+                                "metadata": {},
+                                "outputs": [],
+                                "source": (
+                                    f"failed_job = graph[{node.name!r}]._tasks[{index!r}]\n"
+                                    "display(failed_job.task)\n"
+                                    "failed_job.run(rerun=True)"
+                                ),
+                            },
+                        ]
+                    )
+                    failed_jobs += 1
+    if not failed_jobs:
+        cells.append(
             {
-                "cell_type": "code",
-                "execution_count": None,
+                "cell_type": "markdown",
                 "metadata": {},
-                "outputs": [],
                 "source": (
-                    "from pathlib import Path\n"
-                    "import cloudpickle as cp\n\n"
-                    'with Path("_job.pklz").open("rb") as fp:\n'
-                    "    job = cp.load(fp)\n"
-                    "job.task"
+                    "## Failed task\n\n"
+                    "The next cell reruns the task that produced this crash report."
                 ),
-            },
+            }
+        )
+        cells.append(
             {
                 "cell_type": "code",
                 "execution_count": None,
                 "metadata": {},
                 "outputs": [],
                 "source": "job.run(rerun=True)",
-            },
-        ],
+            }
+        )
+    notebook = {
+        "cells": cells,
         "metadata": {},
         "nbformat": 4,
         "nbformat_minor": 5,
