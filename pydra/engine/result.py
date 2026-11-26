@@ -417,7 +417,7 @@ def _write_crash_artifacts(
                 "    job = cp.load(fp)\n"
                 'graph = job.return_values.get("exec_graph")'
             ),
-        }
+        },
     ]
     graph = job.return_values.get("exec_graph") if job is not None else None
     failed_jobs = 0
