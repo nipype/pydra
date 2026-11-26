@@ -918,7 +918,10 @@ fingerprints or the output encoding forces a recompute, because it creates a new
   (§6.2).
 - **Collection.** `store.collect()` removes, by descriptor, `staging/` directories, default work
   directories, quarantined objects and `q-` and aside names older than the policy's ages. A
-  quarantined object is aged from its move (§6.3 step 4). A writer with a large copy in progress
+  quarantined object is aged from its move (§6.3 step 4): age is the later of the modification and
+  change times, as a rename changes only the change time, and a mover also stamps what it moves (on
+  Windows, where the change time is the creation time, before an entry's move and just after a
+  set-aside; one user's processes can race that gap). A writer with a large copy in progress
   touches its staging directory at least once per quarter of the staging age, so a live stage is never
   collected; a writer whose staging directory vanished stages again once, then raises. `collect` never
   removes an entry; retention of entries is an open question (§13). `remove_from_cache`
