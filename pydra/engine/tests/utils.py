@@ -52,6 +52,10 @@ need_sge = _need(
     bool(shutil.which("qsub")) and bool(shutil.which("qacct")),
     "sge not available",
 )
+need_oar = pytest.mark.skipif(
+    not (bool(shutil.which("oarsub")) and bool(shutil.which("oarstat"))),
+    reason="oar not available",
+)
 
 
 def num_python_cache_roots(cache_path: Path) -> int:
