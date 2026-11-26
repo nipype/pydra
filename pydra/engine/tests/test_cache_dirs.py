@@ -1,5 +1,5 @@
 import typing as ty
-import time
+import os
 from pathlib import Path
 from fileformats.generic import File
 from pydra.compose import python
@@ -189,8 +189,8 @@ def test_task_files_persistentcache(tmp_path):
     test_file._contents = b"bar"
     # should return result from the first run using the persistent cache
     assert read_contents(x=test_file)(cache_root=cache_root).out == b"foo"
-    time.sleep(2)  # Windows has a 2-second resolution for mtime
-    test_file_path.touch()  # update the mtime to invalidate the persistent cache value
+    # bump the mtime to invalidate the persistent cache value
+    os.utime(test_file_path, (0, test_file_path.stat().st_mtime + 10))
     assert (
         read_contents(x=test_file)(cache_root=cache_root).out == b"bar"
     )  # returns the overridden value
