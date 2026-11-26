@@ -347,6 +347,21 @@ runs during a workflow.
 **#777.** Close it, citing FH1–FH4 and the probe §8.3 cases as regression tests, with gap 1 in the
 same PR.
 
+**Decided in implementation.**
+
+- `class@1` hashes, after a class's code, the values it holds that its code does not carry: every
+  plain attribute of its namespace (not `__dunder__` or `_sunder_`, not a descriptor such as a
+  function, property or slot) and the default of each `attrs` field. The names come from the class
+  itself, not from its source, so classes made by `type()` or `attrs.make_class`, classes of a
+  factory compiled from a string, and definitions of one qualified name that differ only in a
+  literal all digest differently, and the same way on every supported minor. Where a qualified name
+  is defined more than once in a source, the class code is its functions' code. A value that cannot
+  be hashed raises the hashing error.
+- Documentation is not identity: attrs digests leave out attributes marked
+  `metadata={"pydra.documentation": True}`, which a field's `help` carries.
+- One rule names every task class: a non-word character becomes `_` and a leading digit is
+  prefixed (`<lambda>` becomes `_lambda_`). A class name does not enter a checksum.
+
 ### 4.3 Workflows
 
 A workflow's constructor is walked like a function today (the `code_hash` documented at
@@ -498,6 +513,10 @@ be reused for this.
   for a file's own digest. A version command takes 3 to 70 ms (probe §8.5), once in the submitting
   process and once per worker process.
 
+**Decided in implementation.** `ConsistentReuse` compares a recorded tool by `executable`,
+`found` and `sha256`; its `path` and `owner` are recorded only. A version command is bounded by
+`version.TIMEOUT` (60 s, unmeasured): it prints and exits, and the bound ends one that hangs.
+
 ### 5.3 Environments
 
 The environment a shell task runs in is part of the tool, so for shell tasks its identity is
@@ -580,6 +599,10 @@ that is already resolved (`docker.py:36`, `singularity.py:16`, `base.py:133-137`
 - **Venv (G2, not yet landed).** A Python task in a `Venv` must resolve the distribution versions of
   §4.1 inside the venv, not in the submitting interpreter. The lock digest is recorded. G2 has to
   carry this; it is noted here so the two proposals agree.
+
+**Decided in implementation.** Each registry request is bounded by `REGISTRY_TIMEOUT` (10 s,
+unmeasured); a slower registry leaves the image unresolved (process-local reuse) rather than
+stalling keying.
 
 ## 6. Inputs, overrides and context
 
@@ -948,113 +971,38 @@ Lmod resolution is measured on a cluster that has Lmod before it is merged.
 
 ## 12. Changes in revisions 2 to 4
 
-Amendment after revision 4 (T2): classes pickled by value keep their `class@1` (§4.2 gap 1 and the "classes pickled by value" row), and the `cloudpickle !=3.1.3` pin is dropped.
+Revisions 2, 3 and 4 answer the review of #932 and its two re-reviews; nits of rounds 1 and 2
+were not addressed. Later decisions are folded into the sections they amend.
 
-Amendment after revision 4 (T4): `type@1` of `Annotated[T, *meta]` is `T`'s digest and the metadata is not hashed, as upstream #887, which this RFC had contradicted; task checksums do not change, since field types are stripped at definition (§5.1).
-
-Revision 4 answers the second re-review of #932 at `e98634c6`, made jointly with RFC 0003 at
-`547f7b1d`:
-
-| Finding | How it is addressed |
-|---|---|
-| R2-B1 a nested constructor branching on a lazy input builds the wrong branch silently | A nested workflow with any lazy input at keying is `"deferred"`, whether or not lazy construction raises; its job is keyed and served whole when it runs. The cost (never served whole, node by node) is stated, and the re-resolve alternative is named as future work (§4.3) |
-| R2-B1 cost notes | Offline with a non-local image, a finished workflow is readable only node by node; the construction runs when the workflow job's checksum is first computed, so a constructor error raises there and is not a recorded job error (§4.3) |
-| R2-I1 `$class` leaves out the walk's references | One definition, `class@1`: `_class_code` plus the walk's class references (bases, the functions and globals methods reach), used for gap 1, `type@1`, `$class` and `py@1`; I4 tests a base-class method and a helper (§4.2, §5.1, §6.2, §10) |
-| R2-I2 0004 describes an RFC 0003 that no longer exists | Re-pinned to `547f7b1d`; the file-set passage rewritten on 0003's key-preserving `files/<set>/<path>` layout: the digest is read from the entry, and recomputing it in a worker agrees (§6.2); §9.2 reworded to what 0003 carries, by section |
-
-| RFC 0002 review, round 4, nit j: entries under an absence-suffixed checksum fail `check_key` | The record carries the `"absent"` triples, and `check_key` compares the checksum with the base checksum plus the recomputed suffix of RFC 0002 §2.3(a) (§3.1) |
-| R3-I1 a split nested workflow builds one branch | A nested workflow node with a splitter is `"deferred"`; per-element `nodes` named as future work (§4.3). With it, three nits: `"deferred"` at any depth is a miss, the per-job error isolation of constructor errors at keying (§4.3, §10 I5), the status line |
-
-Nits of rounds 1 and 2 are not addressed in this revision.
-
-Revision 3 answers the first re-review of #932 at `871c5d96`:
-
-| Finding | How it is addressed |
-|---|---|
-| R1-B1 a workflow's key holds none of what §5 keys | Design change: the record names `task.version` and `job` (`environment`, `tool_version`); `Job.checksum` is the digest of the job's record and `task._checksum` keeps the environment-free task record, with the rule for each task-level use (§3.1). A workflow record carries `nodes`, the run facts of every node of the constructed graph, nested workflows constructed with lazy inputs; a node that cannot be resolved is `"deferred"` and makes the workflow a miss by rule, so its nodes are looked up under their own keys (§4.3, §5.2, §5.3) |
-| R1-I1 (B1 residual) `@2` default outside the group; `checksum=` roots | I8 ships with I1–I6, and why (§10); `checksum=` projects' `@1` `PortableStore` roots are re-created, and why `@2` cannot read only their supplied entries (§9.1) |
-| R1-I2 (B2 residual) `file@1` not recomputable from a decoded multi-file value | The writer records `file@1` per `$fileset`; a store that decodes a verified `$fileset` primes the in-memory digest cache with it, so the downstream input gets the producer's digest (§6.2, §9.2 item 8) |
-| R1-I3 (I4 residual) `type@1` unions and `Outputs` classes | Fields classes (every `Outputs`, every `define` class) by `_versioned_fields`; unions under one order-free tag; rules for `Literal`, `Annotated`, `Callable`, `...`, type variables (§5.1); probe §8.8 |
-| R1-I4 user-class instance inside a container with a codec | Precedence stated ("the first row that applies wins"); a user-class `$codec` value carries `$class` in the digest form; gap 1 lives in the generic serialiser, so it holds at any depth of `py@1` (§6.2) |
-| R1-I5 (B4, I8 residual) Docker re-tagged images, step reference, registry name in the key | Step 3 now covers no `RepoDigests`, no entry for the repository and several entries, all keyed and run by `Id`; the registry is asked only when the tag is not local; the key is `docker@1:sha256:<digest>` and the repository is carried, so mirrors share keys (§5.3) |
-| R1-I6 §9.2 incomplete; I0 ↔ 0003 P3 cycle | The tag registry moves into I0 and P3 uses it; the order is stated (I0 independent; P1 → P2 → P3 after I0; I1 after I0 and P2) (§10); §9.2 lists the four changes RFC 0003's next revision carries, by section, and the five further items (§9.2) |
-
-Nits of round 1 are not addressed in this revision.
-
-Revision 2 answers the review of #932 at `6a4d8f84`. Blocking and important findings:
-
-| Finding | How it is addressed |
-|---|---|
-| B1 `pydra-identity@1` collides with RFC 0003's name; stale 0003 citations | Renamed `pydra-identity@2`, defined as a 0003 `StoreIdentity` with `key` and `check_key`, header shape taken from 0003 §3.2 (§3.1); `@1` roots raise `StoreLayoutMismatch`, no cross-scheme migration, and why (§9.1); order of delivery and the text 0003 must carry (§9.2, §10 I1 after 0003 P2); every 0003 citation re-pinned to `8be263c9` (now `547f7b1d`) |
-| B2 `npy@1`/`file@1` are not 0003's member names | `npy@1` is the sha256 of the canonical `.npy` bytes that are 0003's member, so the names are equal by construction; `file@1` is computed from what `entry.json` records, with the per-member key 0003 has to add; the digest form is 0003's output encoding with two stated substitutions, so sets, complex, bytes, datetimes, `Path` and numpy scalars use 0003's form (§6.2, §9.2) |
-| B3 `Path` by content breaks output locations | Design change: a `Path` is a value (`{"$path": …}`, as 0003), never tested for existence; content identity is declared by typing a field `File`/`Directory`. Why, and what stays per-host (§6.2) |
-| B4 environment keys not bound to what runs | Design change: the reference is resolved once in the submitting process and the worker executes the resolved reference (`repo@sha256:…`, local `Id`, full Lmod names), or fails; `.sif` and `Native` version are re-checked in the worker; local builds never consult the registry (§5.2, §5.3) |
-| I1 JCS conflates `1` and `1.0`, loses large ints | Numbers enter the digest form as typed strings (`$int` decimal, `$float` `float.hex`) (§6.2); the §3.1 example no longer uses an undefined tag |
-| I2 `npy@1` over `dtype.str` | Preimage is the canonical `.npy` (header `descr`, little-endian, C order); subclasses and reference dtypes stay on `py@1`; non-contiguous copies and the cost limited to contiguous arrays stated; probe §8.8 (§6.2, §7) |
-| I3 `AnyReuse` claim false | Owners of input value types keyed (`task.values`, §4.1); §6.3 rewritten to state what `AnyReuse` still serves (transitive, dynamic dispatch) and that `ConsistentReuse` refuses it |
-| I4 gap 1 misses dunders, unstable across minors; `type@1` unspecified | Gap 1 uses `_class_code` (whole `ClassDef` under `ast@1`); `type@1` specified (§4.2, §5.1); probe §8.8: `__call__` edit seen, `Enum` input equal under 3.11 and 3.13 |
-| I5 public version is not an identity for local, archive or VCS installs | The key uses `_identify`'s identity for direct-URL installs (`@commit`, `@archive hash`, `dir:`); public version only for index installs (§4.1) |
-| I6 `version_command` stdout machine-dependent; stale cache for shims; container start | `version_pattern` keys only the declared part; memoised per process, not in `PersistentCache`; run under `Native` only, re-checked in the worker; not-found rule stated (§5.2) |
-| I7 `tools` filled in the worker | `tools` is built in the submitting process with the rest of the lookup context; a missing executable is a stable `found: false`; worker facts only in 0003's execute-phase context (§5.2) |
-| I8 local and offline images lose reuse; `RepoDigests` selection | Local builds keyed by `docker-local@1:<Id>` and run by it (reused per image store, as today); `RepoDigests` entry chosen by repository, several entries fall to the registry; air-gapped images resolve locally (§5.3) |
-| I9 `.sif` not portable; `:tag` appended to resolved forms | `docker://` digest is the portable Singularity form; `.sif` content stated as exact but per-site, re-checked in the worker; `execute` stops appending `:{tag}` to resolved references (§5.3, I6) |
-| I10 Lmod unprobed, extra call, ambient modules | Resolution specified (purge, load, name mapping, dependencies and shell modules recorded), the extra call costed, no-Lmod rule, measurement required before merge (§5.3, §7, §10) |
-| I11 key depends on classification and env vars | Record carries `walk` (tier, overrides) so a mismatch is explainable; unowned library modules get an owner from `packages_distributions`; 3.14/3.15 bytecode reading listed as unchecked and required in I4's tests; goal 1 stated as conditional (§2, §3.1, §4.1, §4.2, §8) |
-
-Nits are not addressed in this revision, except two citations corrected while re-checking lines:
-the `executable` field is built at `compose/shell/builder.py:212-219`, and `compose/workflow.py:141-153`
-is cited as the documentation of the constructor's `code_hash`.
-
-
-## Amendment (2026-11-24): classes made by a factory (section 4.2, gap 1; owner decision D1)
-
-``class@1`` also hashes the values of a class's plain attributes whose class-body assignment is
-not a literal: an assignment ``offset = n`` inside ``def make(n): class Made: ...`` puts the same
-code in every class ``make`` returns, so the code alone cannot tell ``make(1)`` from ``make(2)``.
-A plain attribute is one that is not dunder, not callable and not a descriptor (``staticmethod``,
-``classmethod``, ``property``). Each such attribute enters the digest as ``attr:<name>=`` and the
-digest of its value, in name order. A class whose class-body assignments are all literals keeps its
-digest. The names are found from the class's source; a class hashed in one process carries them
-(``__pydra_computed_attributes__``), so a copy unpickled by value where the source cannot be read
-hashes the same attributes.
-
-
-## Amendment (2026-11-25): computed attributes, documentation, tools, timeouts
-
-**Computed attributes (D1).** Every name a class-body assignment binds through any target
-(tuple, list, starred) and every name an augmented assignment rebinds is a computed attribute,
-hashed by value.
-
-**Documentation is not identity.** attrs digests leave out attributes marked
-`metadata={"pydra.documentation": True}`, which a field's `help` carries. This changes the
-`type@1` digest of classes whose fields carry help and the checksums of tasks whose field
-definitions are digested; it lands as its own PR.
-
-**The hash cache** keeps every object it memoises by `id` alive in one list (`keepalive`).
-
-**Tools under ConsistentReuse.** A recorded tool is compared by `executable`, `found` and
-`sha256`; its `path` and `owner` are recorded only, so an owner lookup cut short on a loaded
-host never refuses a stored result.
-
-**Timeouts.** `version.TIMEOUT = 60 s`: a version command prints and exits; the bound ends one
-that hangs and is large against a container start on a loaded node. `REGISTRY_TIMEOUT = 10 s`
-per registry request: a manifest HEAD answers in well under a second; a slower registry leaves
-the image unresolved (process-local reuse) rather than stalling keying. Both unmeasured.
-
-**Task class names.** One rule names every task class: a non-word character becomes `_` and a
-leading digit is prefixed (`<lambda>` becomes `_lambda_`). A class name does not enter a
-checksum.
-
-
-## Amendment (2026-11-25, rev. 5): class@1 hashes the values a class holds
-
-`class@1` hashes, after a class's code, the values it holds that its code does not carry: every
-plain attribute of its namespace (not `__dunder__` or `_sunder_`, not a descriptor such as a
-function, property or slot) and the default of each `attrs` field. The names come from the class
-itself, not from its source, so classes made by `type()` or `attrs.make_class`, classes of a factory
-compiled from a string, and definitions of one qualified name that differ only in a literal all
-digest differently, and the same way on every supported minor. Where a qualified name is defined
-more than once in a source, the class code is its functions' code on every minor (no definition is
-chosen by `__firstlineno__`). A value that cannot be hashed raises the hashing error. Checksum
-changes: the class, type and input digests of classes with plain attributes (the enum and
-annotated goldens).
+| Rev. | Finding | How it is addressed |
+|---|---|---|
+| 4, T2 | Amendment | classes pickled by value keep their `class@1` (§4.2 gap 1 and the "classes pickled by value" row), and the `cloudpickle !=3.1.3` pin is dropped. |
+| 4, T4 | Amendment | `type@1` of `Annotated[T, *meta]` is `T`'s digest and the metadata is not hashed, as upstream #887, which this RFC had contradicted; task checksums do not change, since field types are stripped at definition (§5.1). |
+| 4 | R2-B1 a nested constructor branching on a lazy input builds the wrong branch silently | A nested workflow with any lazy input at keying is `"deferred"`, whether or not lazy construction raises; its job is keyed and served whole when it runs. The cost (never served whole, node by node) is stated, and the re-resolve alternative is named as future work (§4.3) |
+| 4 | R2-B1 cost notes | Offline with a non-local image, a finished workflow is readable only node by node; the construction runs when the workflow job's checksum is first computed, so a constructor error raises there and is not a recorded job error (§4.3) |
+| 4 | R2-I1 `$class` leaves out the walk's references | One definition, `class@1`: `_class_code` plus the walk's class references (bases, the functions and globals methods reach), used for gap 1, `type@1`, `$class` and `py@1`; I4 tests a base-class method and a helper (§4.2, §5.1, §6.2, §10) |
+| 4 | R2-I2 0004 describes an RFC 0003 that no longer exists | Re-pinned to `547f7b1d`; the file-set passage rewritten on 0003's key-preserving `files/<set>/<path>` layout: the digest is read from the entry, and recomputing it in a worker agrees (§6.2); §9.2 reworded to what 0003 carries, by section |
+| 4 | RFC 0002 review, round 4, nit j: entries under an absence-suffixed checksum fail `check_key` | The record carries the `"absent"` triples, and `check_key` compares the checksum with the base checksum plus the recomputed suffix of RFC 0002 §2.3(a) (§3.1) |
+| 4 | R3-I1 a split nested workflow builds one branch | A nested workflow node with a splitter is `"deferred"`; per-element `nodes` named as future work (§4.3). With it, three nits: `"deferred"` at any depth is a miss, the per-job error isolation of constructor errors at keying (§4.3, §10 I5), the status line |
+| 3 | R1-B1 a workflow's key holds none of what §5 keys | Design change: the record names `task.version` and `job` (`environment`, `tool_version`); `Job.checksum` is the digest of the job's record and `task._checksum` keeps the environment-free task record, with the rule for each task-level use (§3.1). A workflow record carries `nodes`, the run facts of every node of the constructed graph, nested workflows constructed with lazy inputs; a node that cannot be resolved is `"deferred"` and makes the workflow a miss by rule, so its nodes are looked up under their own keys (§4.3, §5.2, §5.3) |
+| 3 | R1-I1 (B1 residual) `@2` default outside the group; `checksum=` roots | I8 ships with I1–I6, and why (§10); `checksum=` projects' `@1` `PortableStore` roots are re-created, and why `@2` cannot read only their supplied entries (§9.1) |
+| 3 | R1-I2 (B2 residual) `file@1` not recomputable from a decoded multi-file value | The writer records `file@1` per `$fileset`; a store that decodes a verified `$fileset` primes the in-memory digest cache with it, so the downstream input gets the producer's digest (§6.2, §9.2 item 8) |
+| 3 | R1-I3 (I4 residual) `type@1` unions and `Outputs` classes | Fields classes (every `Outputs`, every `define` class) by `_versioned_fields`; unions under one order-free tag; rules for `Literal`, `Annotated`, `Callable`, `...`, type variables (§5.1); probe §8.8 |
+| 3 | R1-I4 user-class instance inside a container with a codec | Precedence stated ("the first row that applies wins"); a user-class `$codec` value carries `$class` in the digest form; gap 1 lives in the generic serialiser, so it holds at any depth of `py@1` (§6.2) |
+| 3 | R1-I5 (B4, I8 residual) Docker re-tagged images, step reference, registry name in the key | Step 3 now covers no `RepoDigests`, no entry for the repository and several entries, all keyed and run by `Id`; the registry is asked only when the tag is not local; the key is `docker@1:sha256:<digest>` and the repository is carried, so mirrors share keys (§5.3) |
+| 3 | R1-I6 §9.2 incomplete; I0 ↔ 0003 P3 cycle | The tag registry moves into I0 and P3 uses it; the order is stated (I0 independent; P1 → P2 → P3 after I0; I1 after I0 and P2) (§10); §9.2 lists the four changes RFC 0003's next revision carries, by section, and the five further items (§9.2) |
+| 2 | B1 `pydra-identity@1` collides with RFC 0003's name; stale 0003 citations | Renamed `pydra-identity@2`, defined as a 0003 `StoreIdentity` with `key` and `check_key`, header shape taken from 0003 §3.2 (§3.1); `@1` roots raise `StoreLayoutMismatch`, no cross-scheme migration, and why (§9.1); order of delivery and the text 0003 must carry (§9.2, §10 I1 after 0003 P2); every 0003 citation re-pinned to `8be263c9` (now `547f7b1d`) |
+| 2 | B2 `npy@1`/`file@1` are not 0003's member names | `npy@1` is the sha256 of the canonical `.npy` bytes that are 0003's member, so the names are equal by construction; `file@1` is computed from what `entry.json` records, with the per-member key 0003 has to add; the digest form is 0003's output encoding with two stated substitutions, so sets, complex, bytes, datetimes, `Path` and numpy scalars use 0003's form (§6.2, §9.2) |
+| 2 | B3 `Path` by content breaks output locations | Design change: a `Path` is a value (`{"$path": …}`, as 0003), never tested for existence; content identity is declared by typing a field `File`/`Directory`. Why, and what stays per-host (§6.2) |
+| 2 | B4 environment keys not bound to what runs | Design change: the reference is resolved once in the submitting process and the worker executes the resolved reference (`repo@sha256:…`, local `Id`, full Lmod names), or fails; `.sif` and `Native` version are re-checked in the worker; local builds never consult the registry (§5.2, §5.3) |
+| 2 | I1 JCS conflates `1` and `1.0`, loses large ints | Numbers enter the digest form as typed strings (`$int` decimal, `$float` `float.hex`) (§6.2); the §3.1 example no longer uses an undefined tag |
+| 2 | I2 `npy@1` over `dtype.str` | Preimage is the canonical `.npy` (header `descr`, little-endian, C order); subclasses and reference dtypes stay on `py@1`; non-contiguous copies and the cost limited to contiguous arrays stated; probe §8.8 (§6.2, §7) |
+| 2 | I3 `AnyReuse` claim false | Owners of input value types keyed (`task.values`, §4.1); §6.3 rewritten to state what `AnyReuse` still serves (transitive, dynamic dispatch) and that `ConsistentReuse` refuses it |
+| 2 | I4 gap 1 misses dunders, unstable across minors; `type@1` unspecified | Gap 1 uses `_class_code` (whole `ClassDef` under `ast@1`); `type@1` specified (§4.2, §5.1); probe §8.8: `__call__` edit seen, `Enum` input equal under 3.11 and 3.13 |
+| 2 | I5 public version is not an identity for local, archive or VCS installs | The key uses `_identify`'s identity for direct-URL installs (`@commit`, `@archive hash`, `dir:`); public version only for index installs (§4.1) |
+| 2 | I6 `version_command` stdout machine-dependent; stale cache for shims; container start | `version_pattern` keys only the declared part; memoised per process, not in `PersistentCache`; run under `Native` only, re-checked in the worker; not-found rule stated (§5.2) |
+| 2 | I7 `tools` filled in the worker | `tools` is built in the submitting process with the rest of the lookup context; a missing executable is a stable `found: false`; worker facts only in 0003's execute-phase context (§5.2) |
+| 2 | I8 local and offline images lose reuse; `RepoDigests` selection | Local builds keyed by `docker-local@1:<Id>` and run by it (reused per image store, as today); `RepoDigests` entry chosen by repository, several entries fall to the registry; air-gapped images resolve locally (§5.3) |
+| 2 | I9 `.sif` not portable; `:tag` appended to resolved forms | `docker://` digest is the portable Singularity form; `.sif` content stated as exact but per-site, re-checked in the worker; `execute` stops appending `:{tag}` to resolved references (§5.3, I6) |
+| 2 | I10 Lmod unprobed, extra call, ambient modules | Resolution specified (purge, load, name mapping, dependencies and shell modules recorded), the extra call costed, no-Lmod rule, measurement required before merge (§5.3, §7, §10) |
+| 2 | I11 key depends on classification and env vars | Record carries `walk` (tier, overrides) so a mismatch is explainable; unowned library modules get an owner from `packages_distributions`; 3.14/3.15 bytecode reading listed as unchecked and required in I4's tests; goal 1 stated as conditional (§2, §3.1, §4.1, §4.2, §8) |
