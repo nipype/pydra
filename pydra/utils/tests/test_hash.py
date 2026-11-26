@@ -3,7 +3,6 @@ import os
 import sys
 from hashlib import blake2b
 from pathlib import Path
-import time
 from unittest import mock
 import attrs
 import pytest
@@ -303,7 +302,6 @@ def test_bytes_repr_type2():
     T = ty.TypeVar("T")
 
     class MyClass(ty.Generic[T]):
-
         a: int
         b: str
 
@@ -500,8 +498,10 @@ def test_persistent_hash_cache(cache_path, text_file):
     assert hash_object(text_file, persistent_cache=cache_path) == modified_hash
 
     # Test that changes to the text file result in new hash
-    time.sleep(2)  # Need to ensure that the mtimes will be different
     text_file.fspath.write_text("bar")
+    os.utime(
+        text_file.fspath, (0, text_file.fspath.stat().st_mtime + 10)
+    )  # distinct mtime
     assert hash_object(text_file, persistent_cache=cache_path) != modified_hash
     assert len(list(cache_path.iterdir())) == 2
 
@@ -533,7 +533,6 @@ def test_persistent_hash_cache_cleanup2(cache_path, text_file):
     persistent_cache = PersistentCache(cache_path, cleanup_period=-100)
     hash_object(text_file, persistent_cache=persistent_cache)
     assert len(list(cache_path.iterdir())) == 1
-    time.sleep(2)
     persistent_cache.clean_up()
     assert len(list(cache_path.iterdir())) == 0
 
@@ -552,7 +551,6 @@ def test_unhashable():
     """
 
     class A:
-
         def __bytes_repr__(self, cache: Cache) -> ty.Generator[bytes, None, None]:
             raise TypeError("unhashable")
 
@@ -597,3 +595,88 @@ def test_bytes_repr_annotated_type():
         ty.List[ty.Union[Json, Yaml]]
     )
     assert hash_function(annotated) != hash_function(ty.Union[Json, TextFile])
+
+
+def test_hash_function_stable_after_pickling_by_value(tmp_path: Path, monkeypatch):
+    """Functions decorated by ``python.define`` are shadowed by the task class at the
+    module level, so cloudpickle pickles them by value, which replaces their
+    ``co_filename`` with '<dynamic-code>'. The hash should still match the original."""
+    cloudpickle = pytest.importorskip("cloudpickle")
+    module_name = "pydra_test_pickle_by_value_mod"
+    (tmp_path / f"{module_name}.py").write_text(
+        "import typing as ty\n"
+        "from pydra.compose import python\n"
+        "\n"
+        "\n"
+        "@python.define(outputs=['a', 'b'])\n"
+        "def ToProcess(\n"
+        "    x: int, y: ty.Union[ty.List[str], None] = None\n"
+        ") -> ty.Tuple[ty.List[str], ty.List[str]]:\n"
+        "    # a comment\n"
+        "    return [str(x)], []\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    mod = __import__(module_name)
+    try:
+        func = mod.ToProcess(x=1).function
+        unpickled = cloudpickle.loads(cloudpickle.dumps(func))
+        assert unpickled is not func
+        assert hash_function(unpickled) == hash_function(func)
+    finally:
+        sys.modules.pop(module_name, None)
+
+
+def test_hash_lambda_and_nested_function_stable_after_pickling_by_value(
+    tmp_path: Path, monkeypatch
+):
+    """Lambdas and nested functions (e.g. output callables of tasks defined inside
+    functions) are always pickled by value by cloudpickle"""
+    cloudpickle = pytest.importorskip("cloudpickle")
+    module_name = "pydra_test_pickle_by_value_lambda_mod"
+    (tmp_path / f"{module_name}.py").write_text(
+        "def make():\n"
+        "    def nested(a, b=1):\n"
+        "        return a + b\n"
+        "\n"
+        "    return nested, dict(\n"
+        "        callable=lambda orig_file: orig_file,\n"
+        "    )\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    mod = __import__(module_name)
+    try:
+        nested, kwargs = mod.make()
+        for func in (nested, kwargs["callable"]):
+            unpickled = cloudpickle.loads(cloudpickle.dumps(func))
+            # NB: cloudpickle >= 3.1 replaces the co_filename with '<dynamic-code>'
+            assert unpickled is not func
+            assert hash_function(unpickled) == hash_function(func)
+    finally:
+        sys.modules.pop(module_name, None)
+
+
+def test_hash_function_stable_after_pickling_when_module_not_loaded(
+    tmp_path: Path, monkeypatch
+):
+    """Simulates unpickling a function in a worker process that hasn't loaded (or
+    can't import) the module it was defined in (e.g. 'spawn' start method), where the
+    hash bytes stored on the function before it was pickled should be used"""
+    cloudpickle = pytest.importorskip("cloudpickle")
+    module_name = "pydra_test_pickle_by_value_unloaded_mod"
+    (tmp_path / f"{module_name}.py").write_text(
+        "def make():\n"
+        "    def nested(a, b=1):\n"
+        "        return a + b\n"
+        "\n"
+        "    return nested, lambda orig_file: orig_file\n"
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    mod = __import__(module_name)
+    try:
+        funcs = mod.make()
+        hashes = [hash_function(f) for f in funcs]
+        pickled = [cloudpickle.dumps(f) for f in funcs]
+    finally:
+        sys.modules.pop(module_name, None)
+    for pkl, hsh in zip(pickled, hashes):
+        assert hash_function(cloudpickle.loads(pkl)) == hsh
