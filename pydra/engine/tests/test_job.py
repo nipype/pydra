@@ -1,12 +1,75 @@
+import logging
+import sys
 from pathlib import Path
-import pytest
+
 import cloudpickle as cp
-from pydra.engine.submitter import Submitter
-from pydra.engine.job import Job
-from pydra.engine.result import Result
+import pytest
+
 from pydra.compose import workflow
+from pydra.engine.job import Job, load_and_run, save
+from pydra.engine.result import Result
+from pydra.engine.submitter import Submitter
 from pydra.engine.tests.utils import Multiply, RaiseXeq1
-from pydra.engine.job import save, load_and_run
+
+
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="symlinks not supported on Windows"
+)
+def test_result_falls_back_to_cache_dir_ref(tmp_path):
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
+    cache_dir_ref = tmp_path / "workflow" / "_nodes" / "node-mult" / "single"
+    submitter = Submitter(cache_root=cache_root)
+    cache_dir_ref.parent.mkdir(parents=True)
+    cache_dir_ref.symlink_to("missing-cache-dir", target_is_directory=True)
+
+    original = Job(
+        name="mult",
+        task=Multiply(x=2, y=10),
+        submitter=submitter,
+        cache_dir_ref=cache_dir_ref,
+    )
+    original.create_cache_dir_ref()
+    original.run()
+
+    assert cache_dir_ref.resolve() == original.cache_dir
+
+    lookup = Job(
+        name="mult",
+        task=Multiply(x=2, y=10),
+        submitter=submitter,
+        cache_dir_ref=cache_dir_ref,
+    )
+    lookup._checksum = "changed-checksum"
+
+    result = lookup.result()
+
+    assert result is not None
+    assert result.outputs.out == 20
+    assert result.cache_dir == cache_dir_ref.resolve()
+
+
+def test_cache_dir_ref_oserror_is_nonfatal(tmp_path, monkeypatch, caplog):
+    cache_dir_ref = tmp_path / "workflow" / "_nodes" / "node-mult" / "single"
+    job = Job(
+        name="mult",
+        task=Multiply(x=2, y=10),
+        submitter=Submitter(cache_root=tmp_path),
+        cache_dir_ref=cache_dir_ref,
+    )
+    path_exists = Path.exists
+
+    def raise_for_reference(path):
+        if path == cache_dir_ref:
+            raise OSError(22, "Invalid argument", path)
+        return path_exists(path)
+
+    monkeypatch.setattr(Path, "exists", raise_for_reference)
+
+    with caplog.at_level(logging.WARNING, logger="pydra"):
+        job.create_cache_dir_ref()
+
+    assert "Could not create cache reference" in caplog.text
 
 
 def test_save(tmpdir):

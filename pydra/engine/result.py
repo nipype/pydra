@@ -159,23 +159,32 @@ def load_result(
     """
     if not readonly_caches:
         return None
-    # TODO: if there are issues with loading, we might need to
-    # TODO: sleep and repeat loads (after checking that there are no lock files!)
     for location in readonly_caches:
-        if (location / checksum).exists():
-            result_file = location / checksum / "_result.pklz"
-            if result_file.exists() and result_file.stat().st_size > 0:
-                # Load the result file, retrying if necessary while waiting for the file
-                # to be written completely.
-                for _ in range(retries):
-                    try:
-                        with open(result_file, "rb") as fp:
-                            return cp.load(fp)
-                    except (pickle.UnpicklingError, EOFError):
-                        # if the file is not finished writing
-                        # wait and retry
-                        time.sleep(polling_interval)
-            return None
+        cache_dir = location / checksum
+        if cache_dir.exists():
+            return load_result_from_dir(
+                cache_dir,
+                retries=retries,
+                polling_interval=polling_interval,
+            )
+    return None
+
+
+def load_result_from_dir(
+    cache_dir: Path,
+    retries: int = 10,
+    polling_interval: float = 0.1,
+) -> Result | None:
+    """Restore a result directly from a job cache directory."""
+    result_file = cache_dir / "_result.pklz"
+    if not result_file.exists() or result_file.stat().st_size == 0:
+        return None
+    for _ in range(retries):
+        try:
+            with open(result_file, "rb") as fp:
+                return cp.load(fp)
+        except (pickle.UnpicklingError, EOFError):
+            time.sleep(polling_interval)
     return None
 
 
