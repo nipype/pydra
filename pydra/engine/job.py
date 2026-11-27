@@ -25,6 +25,7 @@ from pydra.engine.result import (
     Result,
     RuntimeSpec,
     load_result,
+    load_result_from_dir,
     record_error,
     save,
 )
@@ -37,10 +38,6 @@ from pydra.utils.general import (
     get_fields,
     is_workflow,
 )
-from pydra.utils.typing import is_lazy
-from pydra.engine.result import load_result, load_result_from_dir, save
-from pydra.utils.typing import copy_nested_files
-from pydra.compose.shell.templating import template_update
 from pydra.utils.messenger import AuditFlag
 from pydra.utils.typing import copy_nested_files, is_lazy
 
