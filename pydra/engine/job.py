@@ -405,6 +405,14 @@ class Job(ty.Generic[TaskType]):
         """Where a failure of the job is recorded (the store's `error_file`)"""
         return self.store.error_file(self)
 
+    def _may_record_error(self, lease) -> bool:
+        """Whether a failure may be recorded beside the job: always in an attempt's own
+        work directory, which no other run writes to; in a slot, or the work directory a
+        resumable job shares across runs, only while ``lease`` is still held."""
+        if self._has_work_dir and not self.can_resume:
+            return True
+        return lease_still_held(lease)
+
     def _record_error(self, error, exception: BaseException | None = None) -> Path:
         """Record ``error`` (a formatted traceback) and ``exception`` beside the job."""
         return self.store.record_error(self, error, exception)
@@ -653,7 +661,7 @@ class Job(ty.Generic[TaskType]):
                 error = exc
         if error is not None:
             traceback = format_exception(type(error), error, error.__traceback__)
-            if lease_still_held(lease):
+            if self._may_record_error(lease):
                 self._record_error(traceback, error)
             result.errored = True
             self._errored = True
@@ -732,7 +740,7 @@ class Job(ty.Generic[TaskType]):
                 except Exception:
                     etype, eval, etr = sys.exc_info()
                     traceback = format_exception(etype, eval, etr)
-                    if lease_still_held(lease):
+                    if self._may_record_error(lease):
                         self._record_error(traceback, eval)
                     result.errored = True
                     raise
@@ -812,7 +820,7 @@ class Job(ty.Generic[TaskType]):
                 except Exception:
                     etype, eval, etr = sys.exc_info()
                     traceback = format_exception(etype, eval, etr)
-                    if lease_still_held(lease):
+                    if self._may_record_error(lease):
                         self._record_error(traceback, eval)
                     result.errored = True
                     self._errored = True

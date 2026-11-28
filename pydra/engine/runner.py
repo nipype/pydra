@@ -1476,6 +1476,9 @@ class _Frame:
         self.workflow: "Workflow | None" = None
         self.graph: "DiGraph[NodeExecution] | None" = None
         self.retry_at: float | None = None
+        # whether the lookup under the lease is skipped: ``find(job)`` was asked before a
+        # lease that excludes no other taker, taken without waiting
+        self.checked: bool = False
         self.errors: list[str] = []
         self.entries: list[JobErrorEntry] = []
         # the state of the loop whose rounds the runner adds to the graph, if the job
@@ -1675,7 +1678,18 @@ class GraphRunner:
         if job in self._child or job in self._handed:
             return
         job.rerun = self._inner_rerun
-        if not job.rerun and self._read_succeeded([job]) == []:
+        checked = False
+        if not job.rerun and self.store.finds:
+            # RFC 0002 section 3.1: the store check by ``find(job)``, before the lease;
+            # an unreadable store is checked again under the lease
+            found = find_before_dispatch(self.store, job, complete=True)
+            if found is not None:
+                checked = True
+                result = job.accept_found(found)
+                if result is not None:
+                    self._settle_stored(job, result, "workflow-stored")
+                    return
+        elif not job.rerun and self._read_succeeded([job]) == []:
             # stored with a success record: complete without a lease
             self._settled.append(Settled(job, "workflow-stored", job._cached_result))
             return
@@ -1693,6 +1707,11 @@ class GraphRunner:
             self._prepare(frame)
         except Exception as exc:  # a hook or the store refused: an entry, not a raise
             self._fail(frame, exc, "run")
+            return
+        # a lease that excludes other takers (de-duplicating, resumable or a rerun) may
+        # have been held by a process that published the job since the lookup: look again
+        # under it (RFC 0003 section 5.3)
+        frame.checked = checked and not frame.lease.exclusive
 
     def _try_lease(self, frame: _Frame) -> None:
         now = time.monotonic()
@@ -1706,10 +1725,11 @@ class GraphRunner:
         if delay is not None:
             frame.retry_at = now + delay
             self._waiting.add(frame)
+            frame.checked = False  # another process may publish it meanwhile
             return
         job = frame.job
         rerun = self.rerun if frame.parent is None else job.rerun
-        if not rerun:
+        if not rerun and not frame.checked:
             try:
                 result = self._stored_workflow(job)
             except Exception as exc:
@@ -2235,11 +2255,16 @@ class GraphRunner:
             self._settle_stored(job, result)
         return rest
 
-    def _settle_stored(self, job: Job, result: "Result") -> None:
-        """Settle ``job`` as ``stored`` with ``result``"""
+    def _settle_stored(
+        self,
+        job: Job,
+        result: "Result",
+        how: ty.Literal["stored", "workflow-stored"] = "stored",
+    ) -> None:
+        """Settle ``job`` with ``result``, read from the store, as ``how``"""
         self._serve_stored(job, result)
         self._handed.add(job)
-        self._settled.append(Settled(job, "stored", result))
+        self._settled.append(Settled(job, how, result))
 
     @staticmethod
     def _serve_stored(job: Job, result: "Result") -> None:
