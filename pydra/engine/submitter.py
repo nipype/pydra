@@ -596,6 +596,18 @@ class Submitter:
         GraphRunner._serve_stored(job, result)
         return True
 
+    def collect(self) -> ty.Any:
+        """Remove what the store keeps only for a while (`PortableStore.collect`: old staging,
+        quarantined entries, default work directories past ``ages.work``); returns its
+        report.
+
+        Raises
+        ------
+        TypeError
+            The store has no ``collect``.
+        """
+        return self.store.collect()
+
     def submit(self, job: "Job[TaskType]", rerun: bool = False) -> None:
         """Submit a job to the worker.
 

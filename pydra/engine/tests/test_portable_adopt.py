@@ -365,7 +365,7 @@ def test_cli_store_adopt(tmp_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["store", "--help"])
     assert result.exit_code == 0
-    assert "adopt" in result.output
+    assert "adopt" in result.output and "collect" in result.output
     module = __name__
     result = runner.invoke(
         cli,

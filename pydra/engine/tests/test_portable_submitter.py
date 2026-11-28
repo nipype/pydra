@@ -239,6 +239,22 @@ def test_top_level_hit_is_served_before_its_lease(tmp_path, monkeypatch):
     assert result.outputs.out == 2 and result.committed.served and taken == []
 
 
+def test_submitter_collect_and_the_store_collect_command(tmp_path, cli_runner):
+    from pydra.engine.portable.store import CollectReport
+    from pydra.scripts.cli import cli
+
+    root = tmp_path / "cache"
+    with Submitter(worker="debug", cache_root=root) as sub:
+        sub(Add1(x=1))
+        assert isinstance(sub.collect(), CollectReport)
+    out = cli_runner(cli, ["store", "collect", str(root)])
+    assert out.exit_code == 0, out.output
+    assert "removed" in out.output and "kept" in out.output
+    with Submitter(worker="debug", cache_root=tmp_path / "p", store="pickle") as sub:
+        with pytest.raises(TypeError, match="collect"):
+            sub.collect()
+
+
 def test_submitter_store_names(tmp_path):
     from pydra.engine.store import PickleStore
 
