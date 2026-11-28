@@ -153,3 +153,53 @@ def test_unstructure_with_filter():
     assert isinstance(dct, dict)
     check_dict_fully_unstructured(dct)
     assert dct["inputs"] == {"a": {"type": int}}
+
+
+def test_a_held_directory_is_not_removed(tmp_path):
+    from pydra.utils.general import dir_held, hold_dir, release_dir, remove_if_unheld
+
+    held = tmp_path / "held"
+    held.mkdir()
+    hold_dir(held)
+    try:
+        assert dir_held(held) and dir_held(tmp_path)
+        assert not remove_if_unheld(held) and held.exists()
+    finally:
+        release_dir(held)
+    assert not dir_held(held)
+    assert remove_if_unheld(held) and not held.exists()
+
+
+@python.define
+def _RemoveIfUnheld(path: str) -> bool:
+    from pydra.utils.general import remove_if_unheld
+
+    return remove_if_unheld(path)
+
+
+def test_a_running_job_holds_the_directory_it_returns_to(tmp_path, monkeypatch):
+    from pydra.engine.submitter import Submitter
+
+    start = tmp_path / "start"
+    start.mkdir()
+    monkeypatch.chdir(start)
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        result = sub(_RemoveIfUnheld(path=str(start)))
+    assert result.outputs.out is False
+    assert start.is_dir()
+
+
+def test_the_captured_working_directory_stays_held_until_released(
+    tmp_path, monkeypatch
+):
+    from pydra.utils.general import capture_cwd, dir_held, release_dir
+
+    first, other = tmp_path / "first", tmp_path / "other"
+    first.mkdir()
+    other.mkdir()
+    monkeypatch.chdir(first)
+    cwd = capture_cwd()
+    monkeypatch.chdir(other)
+    assert dir_held(first)
+    release_dir(cwd)
+    assert not dir_held(first)

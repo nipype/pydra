@@ -31,6 +31,8 @@ from pydra.engine.result import (
     record_error,
 )
 from pydra.utils.general import (
+    capture_cwd,
+    release_dir,
     atomic_write,
     attrs_values,
     attrs_fields,
@@ -676,47 +678,54 @@ class Job(ty.Generic[TaskType]):
             self._begin_rerun(rerun)
             self._errored = False
             enters = self._enters_cache_dir
-            cwd = os.getcwd()
-            self._withdraw_success(lease)
-            self._populate_filesystem()
-            if enters:
-                os.chdir(self.cache_dir)
-            result = Result(
-                outputs=None,
-                runtime=None,
-                errored=False,
-                cache_dir=self.cache_dir,
-                task=self.task,
-                context=self.context,
-            )
-            self.hooks.pre_run_task(self)
-            self.audit.start_audit(
-                odir=self.cache_dir, chdir=enters, record_dir=self._make_record_dir()
-            )
-            if self.audit.audit_check(AuditFlag.PROV):
-                self.audit.audit_task(job=self)
+            # the directory restored to after the run, captured and held at once so that
+            # nothing removes it meanwhile (jobs on threads share the working directory)
+            cwd = capture_cwd() if enters else os.getcwd()
             try:
-                self.audit.monitor()
-                self.task._run(self, rerun)
-                result.outputs = self.task.Outputs._from_job(self)
-                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
-            except Exception:
-                etype, eval, etr = sys.exc_info()
-                traceback = format_exception(etype, eval, etr)
-                if lease_still_held(lease):
-                    self._record_error(traceback, eval)
-                result.errored = True
-                raise
-            finally:
+                self._withdraw_success(lease)
+                self._populate_filesystem()
+                if enters:
+                    os.chdir(self.cache_dir)
+                result = Result(
+                    outputs=None,
+                    runtime=None,
+                    errored=False,
+                    cache_dir=self.cache_dir,
+                    task=self.task,
+                    context=self.context,
+                )
+                self.hooks.pre_run_task(self)
+                self.audit.start_audit(
+                    odir=self.cache_dir,
+                    chdir=enters,
+                    record_dir=self._make_record_dir(),
+                )
+                if self.audit.audit_check(AuditFlag.PROV):
+                    self.audit.audit_task(job=self)
                 try:
+                    self.audit.monitor()
+                    self.task._run(self, rerun)
+                    result.outputs = self.task.Outputs._from_job(self)
+                    self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+                except Exception:
+                    etype, eval, etr = sys.exc_info()
+                    traceback = format_exception(etype, eval, etr)
+                    if lease_still_held(lease):
+                        self._record_error(traceback, eval)
+                    result.errored = True
+                    raise
+                finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
-                finally:
-                    if enters:
+            finally:
+                if enters:
+                    try:
                         os.chdir(cwd)
+                    finally:
+                        release_dir(cwd)
         result = self._published(result)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
@@ -752,44 +761,51 @@ class Job(ty.Generic[TaskType]):
             self._begin_rerun(rerun)
             self._errored = False
             enters = self._enters_cache_dir
-            cwd = os.getcwd()
-            self._withdraw_success(lease)
-            self._populate_filesystem()
-            result = Result(
-                outputs=None,
-                runtime=None,
-                errored=False,
-                cache_dir=self.cache_dir,
-                task=self.task,
-                context=self.context,
-            )
-            self.hooks.pre_run_task(self)
-            self.audit.start_audit(
-                odir=self.cache_dir, chdir=enters, record_dir=self._make_record_dir()
-            )
+            # the directory restored to after the run, captured and held at once so that
+            # nothing removes it meanwhile (jobs on threads share the working directory)
+            cwd = capture_cwd() if enters else os.getcwd()
             try:
-                self.audit.monitor()
-                await self.task._run_async(self, rerun)
-                result.outputs = self.task.Outputs._from_job(self)
-                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
-            except Exception:
-                etype, eval, etr = sys.exc_info()
-                traceback = format_exception(etype, eval, etr)
-                if lease_still_held(lease):
-                    self._record_error(traceback, eval)
-                result.errored = True
-                self._errored = True
-                raise
-            finally:
+                self._withdraw_success(lease)
+                self._populate_filesystem()
+                result = Result(
+                    outputs=None,
+                    runtime=None,
+                    errored=False,
+                    cache_dir=self.cache_dir,
+                    task=self.task,
+                    context=self.context,
+                )
+                self.hooks.pre_run_task(self)
+                self.audit.start_audit(
+                    odir=self.cache_dir,
+                    chdir=enters,
+                    record_dir=self._make_record_dir(),
+                )
                 try:
+                    self.audit.monitor()
+                    await self.task._run_async(self, rerun)
+                    result.outputs = self.task.Outputs._from_job(self)
+                    self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+                except Exception:
+                    etype, eval, etr = sys.exc_info()
+                    traceback = format_exception(etype, eval, etr)
+                    if lease_still_held(lease):
+                        self._record_error(traceback, eval)
+                    result.errored = True
+                    self._errored = True
+                    raise
+                finally:
                     self.hooks.post_run_task(self, result)
                     self.audit.finalize_audit(result=result)
                     self.store.commit(lease, result, job=self._pickle_to_commit(result))
                     self._awaiting_run = False
                     self._remove_info_file()
-                finally:
-                    if enters:
+            finally:
+                if enters:
+                    try:
                         os.chdir(cwd)
+                    finally:
+                        release_dir(cwd)
         result = self._published(result)
         self.hooks.post_run(self, result)
         # Check for any changes to the input hashes that have occurred during the execution
