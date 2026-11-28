@@ -2,6 +2,7 @@ import asyncio
 import errno
 import os
 import sys
+import time
 from pathlib import Path
 import cloudpickle
 import pytest
@@ -123,11 +124,15 @@ def test_lease_async_waits_for_holder(tmp_path):
 
     async def contend():
         held = store.acquire("abc", CTX).__enter__()
-        waiter = asyncio.ensure_future(store.acquire("abc", CTX).__aenter__())
-        await asyncio.sleep(0.3)
+        waiting = store.acquire("abc", CTX)
+        waiter = asyncio.ensure_future(waiting.__aenter__())
+        deadline = time.monotonic() + 60  # bound only
+        while waiting._last_seen == (None, None):  # until it has judged the holder
+            assert time.monotonic() < deadline, "the waiter never saw the holder"
+            await asyncio.sleep(0.01)
         assert not waiter.done()
         held.__exit__(None, None, None)
-        lease = await asyncio.wait_for(waiter, 10)
+        lease = await asyncio.wait_for(waiter, 60)
         assert lease.lockfile.exists()
         await lease.__aexit__(None, None, None)
         assert not lease.lockfile.exists()
@@ -137,8 +142,8 @@ def test_lease_async_waits_for_holder(tmp_path):
 
 @python.define
 def LeaseUser(me: str, root: str, sync: str) -> int:
-    """Take the lease on one key. ``a`` holds it until ``b`` is about to ask for it and
-    has then seen ``b`` stay out for a while; ``b`` only asks once ``a`` holds it"""
+    """Take the lease on one key. ``a`` holds it until ``b`` has found it held and is
+    waiting; ``b`` only asks once ``a`` holds it"""
     import os
     import time
     from pathlib import Path
@@ -154,19 +159,20 @@ def LeaseUser(me: str, root: str, sync: str) -> int:
             time.sleep(0.01)
 
     store = PickleStore(Path(root))
+    lease = store.acquire("key", {"environment": "e"})
     if me == "b":
         wait_for("held_a")
-        (sync / "tried_b").touch()
-    with store.acquire("key", {"environment": "e"}):
+
+        def waiting(seconds):  # b found the lease held and waits to try again
+            (sync / "waiting_b").touch()
+            time.sleep(seconds)
+
+        lease.sleep = waiting
+    with lease:
         if me == "a":
             (sync / "held_a").touch()
-            wait_for("tried_b")
-            end = time.monotonic() + 0.5
-            while time.monotonic() < end:
-                assert not (
-                    sync / "entered_b"
-                ).exists(), "b entered while a held the lease"
-                time.sleep(0.01)
+            wait_for("waiting_b")
+            assert not (sync / "entered_b").exists(), "b entered while a held it"
             (sync / "released_a").touch()
         else:
             assert (sync / "released_a").exists()

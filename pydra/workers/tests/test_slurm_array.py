@@ -2,7 +2,6 @@
 
 import asyncio
 import sys
-import time
 import pickle
 import re
 import types
@@ -339,13 +338,12 @@ def test_hung_squeue_subprocess_is_killed_at_the_timeout(tmp_path, monkeypatch):
         return await real(sys.executable, "-c", "import time; time.sleep(30)", **kwargs)
 
     monkeypatch.setattr(slurm.base, "read_and_display_async", hanging_squeue)
-    start = time.monotonic()
     (result,) = run_all(worker, jobs)
-    elapsed = time.monotonic() - start
     assert isinstance(result, RuntimeError)
     assert "squeue_timeout=0.3" in str(result) and "squeue" in str(result)
-    assert elapsed < 5, f"waited {elapsed:.1f}s for a child that sleeps 30s"
-    assert children and children[0].returncode is not None  # the child is gone
+    # the child is gone, stopped rather than waited for: one that ran out its 30 s
+    # sleep would have exited 0
+    assert children and children[0].returncode not in (None, 0)
 
 
 def test_job_submitted_during_a_running_squeue_is_not_judged_by_it(
