@@ -22,6 +22,7 @@ from pydra.engine.drivers import drive
 from pydra.engine.lease import LeaseSettings
 from pydra.engine.runner import GraphRunner, NotRun
 from pydra.engine.submitter import RunIncomplete, Submitter, run_incomplete
+from pydra.workers.pool.faults import FaultBudgets
 
 POSIX = sys.platform != "win32"
 LEASE = LeaseSettings(
@@ -676,7 +677,7 @@ def test_pool_never_starting_holds_jobs(tmp_path, tasks, pools, fake_nvidia_smi)
         sub,
         [gpu],
         substrate=substrate,
-        settings=_settings(start_failures=2),
+        faults=FaultBudgets(start_failures=2),
     )
     with pytest.raises(RunIncomplete) as info:
         _drive(sub, tasks.GpuMany(xs=[1, 2]), pool)
@@ -1091,7 +1092,7 @@ def test_job_placed_after_its_class_broke_is_held(tmp_path, tasks, pools):
         pools,
         sub,
         substrate=NeverStarts(),
-        settings=_settings(start_failures=2),
+        faults=FaultBudgets(start_failures=2),
     )
     reported = []
     pool.bind(lambda job, outcome: reported.append((job, outcome)))
