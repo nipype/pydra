@@ -240,19 +240,36 @@ class ExactReuse:
 
 class ConsistentReuse:
     """Reuses results recorded under the same Python major.minor and implementation,
-    the same platform and environment, and the same versions of the distributions the
-    task reaches (``packages``), all of them known. The full Python version and the
-    other installed distributions (``installed``) may differ."""
+    the same platform and environment, the same versions of the distributions the
+    task reaches (``packages``), all of them known, and the same ``tools`` (executable,
+    found, digest). The full
+    Python version and the other installed distributions (``installed``) may differ."""
 
-    EQUAL = ("record", "implementation", "platform", "environment", "packages")
+    EQUAL = (
+        "record",
+        "implementation",
+        "platform",
+        "environment",
+        "packages",
+    )
+    # what a recorded tool is; its ``path`` and ``owner`` are recorded only
+    TOOL_KEYS = ("executable", "found", "sha256")
 
     def accept(self, stored: Context, current: Context, task: "Task | None") -> bool:
         return (
             _known(stored)
             and _known(current)
             and all(stored[k] == current[k] for k in self.EQUAL)
+            and self._tools(stored) == self._tools(current)
             and _minor(stored["python"]) == _minor(current["python"])
         )
+
+    @classmethod
+    def _tools(cls, context: Context) -> list[tuple]:
+        return [
+            tuple(tool.get(k) for k in cls.TOOL_KEYS)
+            for tool in context.get("tools") or ()
+        ]
 
 
 class AnyReuse:
