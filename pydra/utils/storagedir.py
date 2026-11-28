@@ -122,7 +122,7 @@ class StoreAges:
     ----------
     staging : float
         A writer's ``staging/`` directory, and a header temporary. A live writer touches
-        its staging directory at least once per quarter of this.
+        its staging directory (from a thread) at least once per quarter of this.
     work : float
         A default work directory. It must exceed the longest run that reads a kept result.
     quarantine : float
