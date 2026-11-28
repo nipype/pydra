@@ -25,7 +25,13 @@ from pathlib import Path
 import attrs
 import cloudpickle as cp
 
-from pydra.engine.lease import DirectoryLease, LeaseSettings
+from pydra.engine.lease import (
+    HOLDER_FILE,
+    DirectoryLease,
+    LeaseSettings,
+    holder_stale_after,
+    read_holder_record,
+)
 from pydra.engine.portable.entry import (
     CorruptEntry,
     EntryFormat,
@@ -389,6 +395,11 @@ class PortableStore(ResultStore):
     pickle : bool
         Whether writers to a new root may write pickle members; recorded when the root is
         created and read from the header after.
+    lease_settings : LeaseSettings, optional
+        How the store's leases (de-duplication, resume and rerun) beat, age and wait; see
+        `~pydra.engine.lease.LeaseSettings`, with the holder always ``"anonymous"`` (a
+        lease names no user, host or pid). Default ``LeaseSettings()``; read-only after
+        construction.
     shard : {"sha256-2", "prefix2"}, optional
         The shard rule (RFC 0003 section 3.1). Default: the header's for a root that has
         one, ``"sha256-2"`` for a new root.
@@ -413,9 +424,18 @@ class PortableStore(ResultStore):
         pickle: bool = False,
         reuse: ty.Any = "consistent",
         on_commit: ty.Callable | None = None,
+        lease_settings: LeaseSettings | None = None,
         shard: ty.Literal["sha256-2", "prefix2"] | None = None,
         dirs: ty.Mapping[str, ty.Any] | None = None,
     ) -> None:
+        if lease_settings is None:
+            lease_settings = LeaseSettings()
+        elif not isinstance(lease_settings, LeaseSettings):
+            raise TypeError(
+                f"lease_settings must be a LeaseSettings, got {type(lease_settings).__name__}"
+            )
+        # evolve checks the bounds again
+        lease_settings = attrs.evolve(lease_settings, holder="anonymous")
         if trust not in TRUSTS:
             raise ValueError(f"trust must be one of {TRUSTS}, got {trust!r}")
         if trust == "shared" and work_dir is None:
@@ -436,6 +456,7 @@ class PortableStore(ResultStore):
             pickle=pickle,
             reuse=reuse,
             on_commit=on_commit,
+            lease_settings=lease_settings,
             shard=shard,
             dirs=dirs,
         )
@@ -450,9 +471,9 @@ class PortableStore(ResultStore):
         self._attempts: set[Path] = set()
         self.reuse: Reuse = as_reuse(reuse)
         self.on_commit = on_commit
-        self.visibility_timeout = LeaseSettings().visibility_timeout
+        self.visibility_timeout = lease_settings.visibility_timeout
         self._work_policy = attrs.evolve(policy, verify_files="digest")
-        self._lease_settings = LeaseSettings(holder="anonymous")
+        self._lease_settings = lease_settings
         self._make_root()
         header_present = os.path.lexists(os.path.join(self.path, HEADER_NAME))
         with self._open() as handle:
@@ -513,6 +534,11 @@ class PortableStore(ResultStore):
 
     def __reduce__(self) -> tuple:
         return (_rebuild, (self._args,))
+
+    @property
+    def lease_settings(self) -> LeaseSettings:
+        """The bounds of the store's leases, holder ``"anonymous"``; fixed at construction."""
+        return self._lease_settings
 
     def __repr__(self) -> str:
         return f"PortableStore({self.path!r}, trust={self.trust!r})"
@@ -1570,18 +1596,40 @@ class PortableStore(ResultStore):
                 self._sweep(work, e, age, now, report)
 
     def _lease_live(self, root: StorageDir, name: str, now: float) -> bool:
-        """Whether the lease ``<root>/leases/<name>.lock`` exists and was renewed within its
-        ``stale_after``; one that cannot be read is taken as live."""
+        """Whether the lease ``<root>/leases/<name>.lock`` exists and was renewed within the
+        larger of this store's ``stale_after`` and its holder's; one that cannot be read is
+        taken as live."""
         try:
             with root.child(_LEASES) as leases:
                 newest = self._newest_in(leases, f"{name}.lock")
+                record, unreadable = self._holder_record(leases, f"{name}.lock")
         except (FileNotFoundError, WrongKindError):
             return False
         except OSError:
             return True
         if newest is None:  # not a directory: not a lease this store takes
             return False
-        return now - newest < self._lease_settings.stale_after
+        return now - newest < holder_stale_after(
+            record, self.lease_settings, unreadable=unreadable
+        )
+
+    @staticmethod
+    def _holder_record(leases: StorageDir, name: str) -> tuple[dict | None, bool]:
+        """The holder record of the lease ``name`` (None if none can be read), and whether
+        a record exists that could not be read."""
+
+        def read(entry: str) -> bytes:
+            try:
+                with lease.child(entry) as t, t.open_read(HOLDER_FILE) as f:
+                    return f.read()
+            except WrongKindError as err:
+                raise NotADirectoryError(str(err)) from err
+
+        try:
+            with leases.child(name) as lease:
+                return read_holder_record([e.name for e in lease.scandir()], read)
+        except (OSError, WrongKindError):
+            return None, False
 
     @staticmethod
     def _newest_in(parent: StorageDir, name: str) -> float | None:
@@ -2979,7 +3027,7 @@ class PortableStore(ResultStore):
                 root.child(_LEASES, create=True, mode=self.policy.side_mode).close()
         leases = Path(self.path) / _LEASES
         return DirectoryLease(
-            checksum, leases, leases / f"{name}.lock", settings=self._lease_settings
+            checksum, leases, leases / f"{name}.lock", settings=self.lease_settings
         )
 
     # -- the ResultStore adapter ---------------------------------------------------------------------
