@@ -48,13 +48,17 @@ from pydra.engine.portable.layout import (
     FINGERPRINT,
     HASHED_CDIR,
     _TEMP_RE,
+    HEADER_NAME,
     LayoutHeader,
     LegacyLayout,
     StoreLayoutAbsent,
     StoreLayoutMismatch,
     StoreLayoutUnknown,
     cdir_for,
+    DEFAULT_DIRS,
+    check_layout_names,
     open_layout,
+    read_header,
     shard_for,
 )
 from pydra.engine.portable.reuse import (
@@ -115,6 +119,8 @@ _ATTEMPT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
 RECORD_CAP = 1 << 20
 """Most bytes of a ``_committed.json`` that are read: its fields are a fixed set of names and
 digests, and the cap only bounds a hostile file. An ``_error.json`` is read whole."""
+_VERSION_DIR = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*@[0-9]+")
+_STRAY_WARNED: set[tuple[str, str]] = set()  # (root, name) logged by _warn_strays
 
 
 @attrs.frozen
@@ -382,6 +388,13 @@ class PortableStore(ResultStore):
     pickle : bool
         Whether writers to a new root may write pickle members; recorded when the root is
         created and read from the header after.
+    shard : {"sha256-2", "prefix2"}, optional
+        The shard rule (RFC 0003 section 3.1). Default: the header's for a root that has
+        one, ``"sha256-2"`` for a new root.
+    dirs : mapping, optional
+        The header's ``dirs``: the names of the staging and quarantine directories and of
+        each sidecar directory. Default: the header's for a root that has one (an adopted
+        store names its own, section 8.2), ``staging`` and ``quarantine`` for a new root.
     """
 
     def __init__(
@@ -399,6 +412,8 @@ class PortableStore(ResultStore):
         pickle: bool = False,
         reuse: ty.Any = "consistent",
         on_commit: ty.Callable | None = None,
+        shard: ty.Literal["sha256-2", "prefix2"] | None = None,
+        dirs: ty.Mapping[str, ty.Any] | None = None,
     ) -> None:
         if trust not in TRUSTS:
             raise ValueError(f"trust must be one of {TRUSTS}, got {trust!r}")
@@ -420,6 +435,8 @@ class PortableStore(ResultStore):
             pickle=pickle,
             reuse=reuse,
             on_commit=on_commit,
+            shard=shard,
+            dirs=dirs,
         )
         self.path = os.path.abspath(os.fspath(root))
         self.trust = trust
@@ -435,16 +452,28 @@ class PortableStore(ResultStore):
         self._work_policy = attrs.evolve(policy, verify_files="digest")
         self._lease_settings = LeaseSettings(holder="anonymous")
         self._make_root()
-        expected = LayoutHeader.for_store(
-            identity,
-            policy,
-            pickle=pickle,
-            entries=entry_format.entries,
-            entry_format=entry_format.name,
-        )
-        header_present = os.path.lexists(os.path.join(self.path, "pydra-store.json"))
+        header_present = os.path.lexists(os.path.join(self.path, HEADER_NAME))
         with self._open() as handle:
+            if header_present and (shard is None or dirs is None):
+                stored = read_header(handle)
+                if stored is not None:
+                    shard = stored.shard if shard is None else shard
+                    dirs = stored.dirs if dirs is None else dirs
+            shard = "sha256-2" if shard is None else shard
+            check_layout_names(
+                DEFAULT_DIRS if dirs is None else dirs, entry_format.entries, shard
+            )
+            expected = LayoutHeader.for_store(
+                identity,
+                policy,
+                pickle=pickle,
+                entries=entry_format.entries,
+                entry_format=entry_format.name,
+                shard=shard,
+                dirs=dirs,
+            )
             self.header = open_layout(handle, expected, create=True)
+            self._warn_strays(handle)
             self.pickle = self.header.pickle
             self.format = entry_format.bind(identity, self.pickle, trust)
             self._expected = expected
@@ -502,6 +531,34 @@ class PortableStore(ResultStore):
 
     def _open(self) -> StorageDir:
         return StorageDir.open_root(self.path, self.policy, trust=self.trust)
+
+    def _warn_strays(self, root: StorageDir) -> None:
+        """Log, once per process, each directory under the root named like a version
+        directory that is not this store's: what a writer that predates an adopted store's
+        header makes, and this store never reads (RFC 0003 section 8.2)."""
+        dirs = self.header.dirs
+        own = {self.header.entries, dirs.get("staging"), dirs.get("quarantine")}
+        for relative in (dirs.get("sidecars") or {}).values():
+            own.add(str(relative).split("/")[0])
+        try:
+            names = root.names()
+            for name in names:
+                if name in own or not _VERSION_DIR.fullmatch(name):
+                    continue
+                if (self.path, name) in _STRAY_WARNED:
+                    continue
+                if not stat.S_ISDIR(root.lstat(name).st_mode):
+                    continue
+                _STRAY_WARNED.add((self.path, name))
+                logger.warning(
+                    "%s holds %s, a version directory this store (%s) never reads: a "
+                    "writer that predates the header is writing there (RFC 0003 section 8.2)",
+                    self.path,
+                    name,
+                    self.header.entries,
+                )
+        except OSError as err:
+            logger.debug("the root %s was not listed: %s", self.path, err)
 
     def _writable(self) -> bool:
         return os.access(self.path, os.W_OK | os.X_OK)
@@ -1425,6 +1482,10 @@ class PortableStore(ResultStore):
         older than ``ages.work``, which must exceed the longest run. ``<root>/audit/`` is removed by
         `evict` with its entry, not here.
 
+        The aside names are the entry format's ``aside_names``, so an adopted store's own set-aside
+        entries are collected (section 8.2). A directory named like a version directory that is not
+        this store's is logged once, never read or removed.
+
         Returns
         -------
         CollectReport
@@ -1435,6 +1496,7 @@ class PortableStore(ResultStore):
         now = _now()
         aside = self.format.aside_names()
         with self._open() as root:
+            self._warn_strays(root)
             for e in list(root.scandir()):
                 if _TEMP_RE.fullmatch(e.name):
                     self._sweep(root, e, ages.staging, now, report)
