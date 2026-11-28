@@ -219,6 +219,9 @@ class LazyOutField(LazyField[T]):
         # Get the execution node that the value is coming from
         upstream_node = graph.node(self._node.name)
 
+        # A partial node keys its elements by tuple and is read through the node
+        if upstream_node.is_partial:
+            return upstream_node.read_value(retrieve_from_job, state_index)
         if not upstream_node._tasks:  # No jobs, return empty state array
             return StateArray()
         if not upstream_node.state:  # Return the singular job

@@ -28,6 +28,7 @@ from pydra.engine.runner import (  # noqa: F401
     NodeExecution,
     NotRun,
     OnError,
+    element_label,
 )
 from pydra.engine.store import (
     PickleStore,
@@ -791,7 +792,7 @@ def run_incomplete(
     """The error raised at the end of a workflow whose run left jobs not run"""
     lines = []
     for job, outcome in not_run:
-        name = job.name if job.state_index is None else f"{job.name}({job.state_index})"
+        name = element_label(job.name, job.state_index, job.state_key)
         held = ", held by infrastructure" if outcome.held else ""
         lines.append(f"Job {name!r} did not run{held}: {outcome.reason}")
     listed = "\n".join(lines)

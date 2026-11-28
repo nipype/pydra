@@ -119,6 +119,7 @@ def make(tmp_path, monkeypatch, n, split=True, plans=None, queue_cycles=3, **kwa
             rerun=False,
             lockfile=tmp_path / f"c{i}-key.lock",
             state_index=i if split else None,
+            state_key=None,
             workflow_path=(),
         )
         for i in range(n)
@@ -273,7 +274,7 @@ def test_worker_still_pickles_after_a_run(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("args", ["--array=1-3", "-a 1-3", "-ofile", "--output=x"])
 def test_user_array_and_output_options_make_a_job_ineligible(args):
-    job = types.SimpleNamespace(state_index=0)
+    job = types.SimpleNamespace(state_index=0, state_key=None)
     assert slurm.SlurmWorker(sbatch_args=args)._array_eligible(job) is False
     assert slurm.SlurmWorker(sbatch_args="--partition=x")._array_eligible(job) is True
 

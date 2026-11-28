@@ -49,11 +49,17 @@ def test_entries_record_unresolvable_inputs(worker, tmp_path):
         with pytest.raises(WorkflowError) as excinfo:
             sub(BadInput(xs=[0, 1, 2, 3], marks=str(marks)), raise_errors=True)
     (entry,) = excinfo.value.entries
-    assert (entry.job_name, entry.state_index, entry.phase) == ("B", 1, "resolution")
+    # B splits over A's output: its entries carry the element's key, not an index
+    assert (entry.job_name, entry.state_index, entry.state_key, entry.phase) == (
+        "B",
+        None,
+        (1, 0),
+        "resolution",
+    )
     assert entry.exception_type
     assert "Traceback" in entry.traceback
     assert len(excinfo.value.errors) == 1
-    assert "B(1)" in excinfo.value.errors[0]
+    assert "B[1,0]" in excinfo.value.errors[0]
     assert pickle.loads(pickle.dumps(excinfo.value)).entries == [entry]
 
 

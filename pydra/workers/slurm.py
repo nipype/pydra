@@ -382,7 +382,8 @@ class SlurmWorker(base.Worker):
         ``sbatch_args`` do not set the output, error or array options, because those
         are per-array in an array submission.
         """
-        if getattr(job, "state_index", None) is None or self.max_array_size < 2:
+        split = job.state_index is not None or job.state_key is not None
+        if not split or self.max_array_size < 2:
             return False
         for token in self.sbatch_args.split():
             if token.startswith(("--output", "--error", "--array")) or token[:2] in (

@@ -204,13 +204,14 @@ CASES = {
         {i: on("A", i) | on("B", i) for i in range(2)},
         [11, 22],
     ),
-    # splitting over an upstream output still waits for the whole upstream node
+    # splitting over an upstream output is released per upstream element; the
+    # elements are keyed by (y index, A element, position in A's output) until sealed
     "resplit": (
         Resplit(x=[1, 2], y=[10, 100]),
         [],
         ["A"],
         "B",
-        {i: on("A", 0, 1) for i in range(12)},
+        {(k, a, j): on("A", a) for k in range(2) for a in range(2) for j in range(3)},
         [10, 20, 30, 20, 40, 60, 100, 200, 300, 200, 400, 600],
     ),
 }
@@ -238,9 +239,9 @@ def test_readiness_per_element(case, tmp_path):
                 graph[job.name].update_status()
                 done.add((job.name, job.state_index))
             released = graph[downstream].get_runnable_tasks(graph)
-            assert {j.state_index for j in released} == {
-                i for i, n in needs.items() if n <= done
-            }
+            assert {
+                j.state_index if j.state_key is None else j.state_key for j in released
+            } == {i for i, n in needs.items() if n <= done}
         for job in released:
             job.run()
         graph[downstream].update_status()
@@ -483,11 +484,12 @@ def test_readiness_unresolvable_input_errors_its_element(tmp_path):
             job.run()
         upstream.update_status()
         released = downstream.get_runnable_tasks(graph)
-        assert [j.state_index for j in released] == [0, 2]
-        assert list(downstream.errored) == [1]
-        assert isinstance(downstream.errored[1], Exception)
+        # B splits over A's output: its elements are keyed (A element, position)
+        assert [j.state_key for j in released] == [(0, 0), (2, 0)]
+        assert list(downstream.errored) == [(1, 0)]
+        assert isinstance(downstream.errored[(1, 0)], Exception)
         (error,) = downstream.pop_resolution_errors()
-        assert "B(1)" in error and "could not be resolved" in error
+        assert "B[1,0]" in error and "could not be resolved" in error
         assert downstream.pop_resolution_errors() == []
         for job in released:
             job.run()
@@ -500,7 +502,7 @@ def test_readiness_unresolvable_input_cf(tmp_path):
     """Under several cf processes the workflow raises the element's error after its
     siblings have run, naming the element, rather than the bare coercion error"""
     with pytest.raises(
-        RuntimeError, match=r"Job 'B\(1\)', inputs could not be resolved"
+        RuntimeError, match=r"Job 'B\[1,0\]', inputs could not be resolved"
     ):
         BadInput(xs=[0, 1, 2, 3])(worker="cf", n_procs=4, cache_root=tmp_path)
 
@@ -508,7 +510,7 @@ def test_readiness_unresolvable_input_cf(tmp_path):
 @pytest.mark.timeout(120)
 def test_readiness_unresolvable_input_debug(tmp_path):
     with pytest.raises(
-        RuntimeError, match=r"Job 'B\(1\)', inputs could not be resolved"
+        RuntimeError, match=r"Job 'B\[1,0\]', inputs could not be resolved"
     ):
         BadInput(xs=[0, 1, 2])(worker="debug", cache_root=tmp_path)
 
@@ -524,6 +526,11 @@ def test_readiness_upstream_just_failed_is_not_done_and_successful(tmp_path):
         jobs[0].run()
         jobs[1]._errored = True  # as the scheduler records a job that failed to run
         assert not upstream.errored  # status not yet refreshed
-        assert downstream.get_runnable_tasks(graph) == []
-        assert downstream.unrunnable == {None: [upstream]}
-        assert not downstream.started or not downstream.blocked
+        # the block of A's element 0 is released, the block of element 1 is failed
+        released = downstream.get_runnable_tasks(graph)
+        assert {j.state_key for j in released} == {
+            (k, 0, j) for k in range(2) for j in range(3)
+        }
+        ((block, nodes),) = downstream.unrunnable.items()
+        assert (type(block).__name__, block.key, nodes) == ("Block", (1,), [upstream])
+        assert not downstream.blocked

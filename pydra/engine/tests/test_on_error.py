@@ -350,7 +350,8 @@ def test_on_error_unresolvable_input_raise_at_end(worker, tmp_path):
         with pytest.raises(WorkflowError) as excinfo:
             sub(task, raise_errors=True)
     assert len(excinfo.value.errors) == 1
-    assert "B(1)" in excinfo.value.errors[0]
+    # B splits over A's output, so its elements are named by their key
+    assert "B[1,0]" in excinfo.value.errors[0]
     assert sorted(p.name for p in marks.iterdir()) == ["0", "2", "3"]
 
 
@@ -362,7 +363,7 @@ def test_on_error_unresolvable_input_fail_fast(worker, tmp_path):
     marks.mkdir()
     task = BadInput(xs=[0, 1, 2], marks=str(marks))
     with Submitter(worker=worker, on_error="fail_fast", cache_root=tmp_path) as sub:
-        with pytest.raises(WorkflowError, match=r"B\(1\)"):
+        with pytest.raises(WorkflowError, match=r"B\[1,0\]"):
             sub(task, raise_errors=True)
 
 
