@@ -20,7 +20,7 @@ if ty.TYPE_CHECKING:
     from pydra.engine.job import Job
     from pydra.engine.lazy import LazyOutField
     from pydra.engine.graph import DiGraph
-    from pydra.engine.submitter import NodeExecution
+    from pydra.engine.runner import NodeExecution
     from pydra.environments.base import Environment
     from pydra.engine.hooks import TaskHooks
     from pydra.utils.resources import ComputeResources

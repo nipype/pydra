@@ -88,6 +88,7 @@ class Job(ty.Generic[TaskType]):
     submitter: "Submitter | None"
     environment: "Environment | None"
     state_index: int
+    rerun: bool = False  # Set by the graph runner when it hands the job out
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
 
     _inputs: dict[str, ty.Any] | None = None
