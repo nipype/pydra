@@ -48,6 +48,11 @@ class Worker(metaclass=abc.ABCMeta):
         """Return coroutine for job execution."""
         pass
 
+    def place(self, jobs: "list[Job]") -> ty.Any:
+        """Where ``jobs`` would run if handed to the worker now (`GraphRunner.plan`);
+        None: the worker gives no placement"""
+        return None
+
     async def submit(self, job: "Job[TaskType]", rerun: bool = False) -> "Result":
         assert self.is_async, "Worker is not asynchronous, job should just be `run()`"
         if job.is_async:  # only for workflows at this stage and the foreseeable

@@ -34,6 +34,7 @@ logger = logging.getLogger("pydra.submitter")
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task, Outputs
     from pydra.engine.node import Node
+    from pydra.engine.plan import Plan
     from pydra.engine.result import Result
     from pydra.engine.store import ResultStore
     from pydra.engine.workflow import Workflow
@@ -196,16 +197,21 @@ class NodeExecution(ty.Generic[TaskType]):
             The state index of the element, None if the node has no state
         """
         if (job := self._tasks[index]) is None:
-            job = self._tasks[index] = Job(
-                task=self._split_task(index),
-                submitter=self.submitter,
-                environment=self.node._environment,
-                name=self.node.name,
-                hooks=self.node._hooks,
-                resources=self.node._resources,
-                state_index=index,
-            )
-            job.workflow_path = self.path
+            job = self._tasks[index] = self._new_job(index)
+        return job
+
+    def _new_job(self, index: int | None) -> "Job[TaskType]":
+        """The job of an element, formed without being kept (:meth:`job` keeps it)"""
+        job = Job(
+            task=self._split_task(index),
+            submitter=self.submitter,
+            environment=self.node._environment,
+            name=self.node.name,
+            hooks=self.node._hooks,
+            resources=self.node._resources,
+            state_index=index,
+        )
+        job.workflow_path = self.path
         return job
 
     def start(self) -> None:
@@ -1464,6 +1470,34 @@ class GraphRunner:
                 whole = isinstance(indices, range)
             found[name] = [(up.job(i), None if whole else i) for i in indices]
         return found
+
+    def plan(self, executors: "ty.Mapping[str, ty.Any] | None" = None) -> "Plan":
+        """What the run would do now, without running, leasing or writing anything
+
+        No job is released, handed out or settled, no lease is taken and no live node or
+        its ``State`` is written, so a planned run ends as an unplanned one. A workflow job
+        waiting for its lease is ``waiting``, one not yet tried is ``deferred``. Nodes that
+        are done are not listed. A job is formed only from upstream elements the runner has
+        accepted, never from one in flight. The store is asked once per node
+        (``recorded`` or ``expected_hits``) and the router once per node, with a real job when
+        one can be formed.
+
+        Parameters
+        ----------
+        executors : Mapping[str, Executor], optional
+            The executors by the names the router returns, by default the submitter's
+            workers. Each is asked where the node's unfinished elements would run
+            (``place(jobs)``, None for no answer), carried as :attr:`PlanNode.placement`
+
+        Returns
+        -------
+        Plan
+            One :class:`PlanNode` per node still to do, in release order, nested
+            workflows that are expanded by their own nodes
+        """
+        from pydra.engine.plan import build_plan
+
+        return build_plan(self, executors)
 
     def stuck(self) -> str | None:
         """A diagnosis of why nothing can progress, or None if the graph is done or a
