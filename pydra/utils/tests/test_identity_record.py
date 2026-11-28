@@ -207,6 +207,15 @@ def test_job_keeps_record_and_pickles_it():
     assert clone.checksum == job.checksum
 
 
+@pytest.mark.xfail(strict=True, reason="I8 maps StoredEntry.key to Result.record")
+def test_result_keeps_record_under_the_default_store(tmp_path):
+    from pydra.engine.submitter import Submitter
+
+    with Submitter(cache_root=tmp_path / "cache") as sub:
+        result = sub(Add(a=1))
+    assert result.record == task_record(Add(a=1))
+
+
 def test_result_keeps_record(tmp_path):
     job = Job(
         name="t",
@@ -377,8 +386,10 @@ def test_result_record_through_worker_and_async(any_worker, tmp_path):
 
     with Submitter(worker=any_worker, store="pickle", cache_root=tmp_path) as sub:
         wf_result = sub(Wf(a=3))
-    assert wf_result.record == task_record(Wf(a=3))
-    assert record_checksum(wf_result.record) == Wf(a=3)._checksum
+    # a workflow job's record is the task's plus the run facts of its nodes (a python
+    # node has none), so its checksum is not the task's (RFC 0004 section 4.3)
+    assert wf_result.record == dict(task_record(Wf(a=3)), nodes={})
+    assert record_checksum(wf_result.record) != Wf(a=3)._checksum
 
 
 @python.define

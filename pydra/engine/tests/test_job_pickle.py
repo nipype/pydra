@@ -6,6 +6,7 @@ import sys
 import cloudpickle as cp
 import pytest
 from pydra.compose import python, workflow
+from pydra.engine.job import Job
 from pydra.engine.store import PickleStore
 from pydra.engine.submitter import Submitter
 from pydra.scripts.cli import crash
@@ -44,7 +45,11 @@ class RemoteLikeWorker(Worker):
 
 
 def slots(task, cache_root):
-    return list(PickleStore(cache_root).slots(task._checksum))
+    # a job's slot is under the job's checksum: a workflow job's record adds the run
+    # facts of its nodes to the task's (RFC 0004 section 4.3)
+    with Submitter(store="pickle", cache_root=cache_root) as sub:
+        checksum = Job(task, submitter=sub, name="main").checksum
+    return list(PickleStore(cache_root).slots(checksum))
 
 
 @pytest.fixture(params=["debug", "cf"])
