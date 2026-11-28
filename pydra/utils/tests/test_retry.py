@@ -83,3 +83,10 @@ def test_wait_says_whether_a_try_is_left():
 def test_bad_settings_are_refused(kwargs):
     with pytest.raises(ValueError):
         Backoff(**kwargs)
+
+
+def test_next_wait_leaves_the_sleep_to_the_caller():
+    clock = FakeClock()
+    tries = Backoff(first=1, cap=2, attempts=3).tries(clock=clock, sleep=clock.sleep)
+    assert [tries.next_wait(), tries.next_wait(), tries.next_wait()] == [1, 2, None]
+    assert clock.waits == []

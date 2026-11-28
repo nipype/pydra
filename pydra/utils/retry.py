@@ -77,16 +77,27 @@ class Tries:
 
     def __next__(self) -> int:
         if self._n >= 0:
-            if self.last:
+            wait = self.next_wait()
+            if wait is None:
                 raise StopIteration
-            wait = min(self._backoff.first * 2**self._n, self._backoff.cap)
-            if self._backoff.jitter:
-                wait *= self._rng()
-            if self._end is not None:
-                wait = min(wait, max(self._end - self._clock(), 0.0))
             self._sleep(wait)
+            return self._n
+        self._n = 0
+        return 0
+
+    def next_wait(self) -> float | None:
+        """Move to the next try without sleeping: the seconds to wait before it, or None when
+        none is left. An asynchronous caller awaits the wait itself."""
+        self._n = max(self._n, 0)
+        if self.last:
+            return None
+        wait = min(self._backoff.first * 2**self._n, self._backoff.cap)
+        if self._backoff.jitter:
+            wait *= self._rng()
+        if self._end is not None:
+            wait = min(wait, max(self._end - self._clock(), 0.0))
         self._n += 1
-        return self._n
+        return wait
 
     @property
     def last(self) -> bool:
