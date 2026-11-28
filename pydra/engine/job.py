@@ -187,6 +187,9 @@ class Job(ty.Generic[TaskType]):
         self._stored_contexts = None
         self.attempt = None
         self.committed = None
+        # The stored entry the job runs against, set from a `Verify` by `_reusable` or by a
+        # runner (`Candidate | None`; RFC 0003 section 7.1)
+        self.verify = None
         self._work_dir_memo = None
 
         # Save the submitter attributes needed to run the job later
@@ -247,6 +250,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("_stored_contexts", None)
         self.__dict__.setdefault("attempt", None)
         self.__dict__.setdefault("committed", None)
+        self.__dict__.setdefault("verify", None)
         self.__dict__.setdefault("_work_dir_memo", None)
 
     @classmethod
@@ -475,10 +479,14 @@ class Job(ty.Generic[TaskType]):
 
     def _reusable(self) -> Result | None:
         """The result a run under the lease can serve instead of computing: the stored
-        result for the job, if any. A work directory's ``_committed.json`` is the
-        outcome of an earlier run and is never served to a new one."""
-        if self._has_work_dir:
-            result = self.store.read_own(self)
+        result for the job, if any. A store with ``find`` answers through its reuse hook
+        (RFC 0003 section 7.1): a `Verify` marks the job to verify against that entry (and
+        the job runs), anything else clears the mark. A work directory's ``_committed.json``
+        is the outcome of an earlier run and is never served to a new one."""
+        if self.store.finds:
+            found = self.store.find(self)
+            self.verify = found.candidate
+            result = found.result
             if result is not None:  # a reader in another process finds what was served
                 self.store.record_served(self, result)
             return result

@@ -55,6 +55,11 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "__qualname__",
     ): "a type annotation may not have it",
     ("engine/portable/store.py", "errno", "ESTALE"): "not defined on every platform",
+    (
+        "engine/portable/store.py",
+        "hook",
+        "__qualname__",
+    ): "a callable may have no qualified name",
     ("engine/portable/store.py", "os", "sync"): "POSIX only",
     (
         "engine/runner.py",

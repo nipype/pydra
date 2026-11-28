@@ -26,7 +26,7 @@ from pydra.engine.lease import LeaseSettings, _describe
 from pydra.engine.portable.entry import CorruptEntry, EntryNotTrusted
 from pydra.engine.portable.layout import cdir_for
 from pydra.engine.portable.store import PortableStore
-from pydra.engine.store import check_declared_code
+from pydra.engine.store import DeclaredVersionWarning, check_declared_code
 from pydra.engine.submitter import Submitter
 from pydra.scripts.cli import crash
 from pydra.utils.storagedir import IS_WINDOWS, StoreAges, StorePolicy
@@ -34,8 +34,10 @@ from pydra.utils.storagedir import IS_WINDOWS, StoreAges, StorePolicy
 from .test_portable_quarantine import age, aged_store, skew  # noqa: F401
 from .test_portable_store import (
     CTX,
+    CTX2,
     IDENT,
     TRUST,
+    Refusing,
     _Lost,
     _result,
     _work_under,
@@ -179,9 +181,14 @@ def test_work_dir_pure_across_processes(tmp_path):
 # -- _committed.json ---------------------------------------------------------------------------------
 
 
+def refusing_submitter(tmp_path):
+    return portable_submitter(tmp_path, store=make(tmp_path, reuse=Refusing()))
+
+
 def _occupy_and_commit(store, sub, out=2, occupant=3):
     """Commit ``out`` for a job whose address holds an entry with other outputs: the result is
-    not stored, and is kept in its work directory."""
+    not stored, and is kept in its work directory (the store's hook refuses the occupant).
+    """
     first = job_in(sub, _Inc(a=1), name="first")
     store.commit(_Lost(), _result(first, _Inc.Outputs(out=occupant)), first)
     job = job_in(sub, _Inc(a=1))
@@ -191,7 +198,7 @@ def _occupy_and_commit(store, sub, out=2, occupant=3):
 
 
 def test_stored_false_read_by_other_process_via_committed_json(tmp_path):
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         job, result = _occupy_and_commit(store, sub)
     assert result.stored is False and result.committed.kept is not None
@@ -278,7 +285,7 @@ def test_a_committed_json_of_another_job_is_not_followed(tmp_path):
 
 
 def test_kept_entry_rehashed_on_read(tmp_path):
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         job, result = _occupy_and_commit(store, sub)
         wd = store.work_dir(job)
@@ -303,7 +310,7 @@ def test_kept_entry_copied_across_filesystems_is_rehashed(tmp_path, monkeypatch)
             raise OSError(errno.EXDEV, "cross-device link")
         return real(src, dst, *a, **kw)
 
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         monkeypatch.setattr(os, "rename", rename)
         job, result = _occupy_and_commit(store, sub)
@@ -340,7 +347,7 @@ def test_a_kept_entry_with_many_members_is_copied_across_filesystems(
             raise OSError(errno.EXDEV, "cross-device link")
         return real(src, dst, *a, **kw)
 
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         monkeypatch.setattr(codecs.Encoder, "__init__", init)
         monkeypatch.setattr(os, "rename", rename)
@@ -365,7 +372,7 @@ def test_kept_entry_copy_that_changed_is_refused(tmp_path, monkeypatch):
         return real_rename(src, dst, *a, **kw)
 
     real_rename = os.rename
-    store, sub = portable_submitter(tmp_path)
+    store, sub = refusing_submitter(tmp_path)
     with sub:
         first = job_in(sub, _Inc(a=1), name="first")
         store.commit(_Lost(), _result(first, _Inc.Outputs(out=3)), first)
@@ -553,7 +560,41 @@ def test_check_declared_code_reads_entry_path(tmp_path):
     # an entry in the context's own slot: nothing to check, and no slot directory is asked for
     assert check_declared_code(store, "python-abc", context, None) is None
     # none stored: the store has no stored contexts to compare with
-    assert check_declared_code(store, "python-other", context, None) is None
+    assert not check_declared_code(store, "python-other", context, None)
+
+
+class ServesAny:
+    """A reuse hook with no ``accept``: it ranks every stored entry and serves it"""
+
+    def bind(self, store):
+        self._store = store
+
+    def rank(self, current, stored, task):
+        from pydra.engine.portable.reuse import Candidate
+
+        return [Candidate(e, c, d, 1, "any") for e, c, d in stored]
+
+    def verdict(self, candidate, current, task):
+        from pydra.engine.portable.reuse import Verdict
+
+        return Verdict.SERVE
+
+    def served(self, candidate, current, task, entry):
+        pass
+
+    def compare(self, *args, **kwargs):
+        return None
+
+
+def test_check_declared_code_asks_the_reuse_hook(tmp_path):
+    """The warning says what ``find`` would do: a hook that serves an entry of moved code
+    makes it "reused", whether or not it has a ``ReusePolicy``'s ``accept``"""
+    store = make(tmp_path, reuse=ServesAny())
+    publish(store, context={**CTX, "code": {"mod.f==1": "d1"}})
+    with pytest.warns(DeclaredVersionWarning, match="That result is reused"):
+        check_declared_code(
+            store, "python-abc", {**CTX2, "code": {"mod.f==1": "d2"}}, None
+        )
 
 
 # -- the de-duplication lease ----------------------------------------------------------------------------
@@ -583,7 +624,7 @@ def test_dedupe_lease_second_submitter_serves(tmp_path):
         thread.join()
         assert first.result().outputs.out == 2
     assert log.read_text() == "ran\n"
-    assert served.outputs.out == 2 and second.committed.won is False
+    assert served.outputs.out == 2 and second.committed.served is True
     assert store.dedupe is True
 
 

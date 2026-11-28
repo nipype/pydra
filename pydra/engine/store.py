@@ -305,7 +305,7 @@ def check_declared_code(
             moved.setdefault(identity, set()).add(digest)
     if not moved:
         return stored
-    first = store.declared_code_reuse(stored, context, task)
+    first = store.declared_code_reuse(checksum, stored, context, task)
     reused = first is not None and bool(_moved(first, code))
     name = type(task).__name__ if task is not None else "A task"
     changes = "; ".join(
@@ -380,6 +380,14 @@ class ResultStore(ty.Protocol):
     has_work_dirs: ty.ClassVar[bool] = False
     """Whether jobs run in work directories of their own (`work_dir`), apart from the
     entries the store commits"""
+    finds: ty.ClassVar[bool] = False
+    """Whether the store answers `find`; otherwise a job's result is read by `lookup`"""
+
+    def find(self, job: "Job") -> ty.Any:
+        """What ``job`` may reuse (a `Hit`, `Verify` or `Miss`), under a store with `finds`. A `Hit`
+        is served as the job's result; after a `Verify` the job runs with ``job.verify`` set to its
+        candidate; after a `Miss` it runs."""
+        raise NotImplementedError(f"{type(self).__name__} answers through lookup")
 
     def work_dir(self, job: "Job") -> Path:
         """The directory ``job`` runs in, under a store with `has_work_dirs`"""
@@ -440,6 +448,7 @@ class ResultStore(ty.Protocol):
 
     def declared_code_reuse(
         self,
+        checksum: str,
         stored: "list[tuple[Path, Context]]",
         context: Context,
         task: "Task | None",

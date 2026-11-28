@@ -26,6 +26,7 @@ from pydra.engine.portable.entry import (
 )
 from pydra.engine.portable.identity import PydraIdentityV1
 from pydra.engine.portable.layout import HEADER_NAME, StoreLayoutMismatch, cdir_for
+from pydra.engine.portable.reuse import PolicyReuse, Verdict
 from pydra.engine.portable.store import Committed, PortableStore, StoreNotWritable
 from pydra.engine.result import Result
 from pydra.engine.submitter import Submitter
@@ -72,6 +73,19 @@ def retry_clock(monkeypatch):
     clock = RetryClock()
     monkeypatch.setattr("pydra.utils.retry.time", clock)
     return clock
+
+
+class Refusing(PolicyReuse):
+    """A hook that serves nothing: a job that loses a race keeps its own outputs (RFC 0003
+    section 7.3, third row)."""
+
+    def __init__(self) -> None:
+        from pydra.engine.store import ConsistentReuse
+
+        super().__init__(ConsistentReuse())
+
+    def verdict(self, candidate, current, task):
+        return Verdict.REFUSE
 
 
 def _work_under(base, checksum, fingerprint, attempt):
@@ -621,7 +635,7 @@ def test_lost_lease_still_commits(tmp_path):
 
 
 def test_commit_of_an_unequal_result_is_not_stored(tmp_path):
-    store = make(tmp_path)
+    store = make(tmp_path, reuse=Refusing())
     with Submitter(worker="debug", cache_root=tmp_path / "pc") as sub:
         job = Job(task=_Inc(a=1), name="j", submitter=sub)
         store.commit(_Lost(), _result(job, _Inc.Outputs(out=2)), job)
