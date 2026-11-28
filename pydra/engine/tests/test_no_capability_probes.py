@@ -14,6 +14,12 @@ PACKAGES = ("engine", "workers")
 # (path under pydra/, object expression, attribute): why a probe is right there
 ALLOWED: dict[tuple[str, str, str], str] = {
     (
+        "engine/absent.py",
+        "f",
+        "container_path",
+    ): "only shell fields carry a container path",
+    ("engine/absent.py", "task", "__checksum__"): "a task may define this hook",
+    (
         "engine/audit.py",
         "job.task",
         "executable",
