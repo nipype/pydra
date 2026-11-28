@@ -36,6 +36,7 @@ __all__ = [
     "digest",
     "digest_form",
     "fileset_digest",
+    "holds_references",
     "is_canonical_array",
     "jcs",
     "lookup_tag",
@@ -266,7 +267,10 @@ def _dtype_any(dtype: "np.dtype", pred: ty.Callable[["np.dtype"], bool]) -> bool
     return dtype.subdtype is not None and _dtype_any(dtype.subdtype[0], pred)
 
 
-def _holds_references(dtype: "np.dtype") -> bool:
+def holds_references(dtype: "np.dtype") -> bool:
+    """True if elements of ``dtype`` are references (object, ``StringDType``, or a structured
+    or sub-array dtype holding one): ``tobytes()`` of such an array is pointers, not content.
+    """
     return _dtype_any(dtype, lambda d: d.hasobject or d.kind == "T")
 
 
@@ -277,7 +281,7 @@ def is_canonical_array(value: ty.Any) -> bool:
     return (
         np is not None
         and type(value) is np.ndarray
-        and not _holds_references(value.dtype)
+        and not holds_references(value.dtype)
     )
 
 
@@ -477,18 +481,10 @@ def digest_form(value: ty.Any) -> JSON:
     return FormWalker().walk(value)
 
 
-def _py_digest(value: ty.Any) -> str:
+def _py_digest(value: ty.Any, cache: ty.Any = None) -> str:
     from pydra.utils.hash import hash_object
 
-    if (
-        np is not None
-        and type(value) is np.ndarray
-        and _dtype_any(value.dtype, lambda d: d.kind == "T")
-    ):
-        # StringDType strings can live on the heap, so ``tobytes()`` holds only
-        # references and arrays of different long strings collide: digest the elements
-        value = ("numpy.ndarray", str(value.dtype), value.shape, value.tolist())
-    return "py@1:" + hash_object(value).hex()
+    return "py@1:" + hash_object(value, cache=cache).hex()
 
 
 def digest(value: ty.Any) -> str:
