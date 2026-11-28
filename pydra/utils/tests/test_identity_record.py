@@ -145,7 +145,7 @@ def test_identity_v2_is_a_store_identity():
     assert ident.name == IDENTITY_SCHEME == "pydra-identity@2"
     assert ident.fingerprint_name == "pydra-context@1"
     assert ident.recorded_only == frozenset(
-        {"x", "environment_facts", "environment_repository"}
+        {"x", "pool", "environment_facts", "environment_repository"}
     )
     ctx = {"a": 1, "x": 2}
     assert ident.fingerprint(ctx) == PydraIdentityV1(recorded_only=["x"]).fingerprint(
