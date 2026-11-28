@@ -8,7 +8,8 @@ name: CI/CD
 #         one Linux and one macOS job; no wall-clock tests, no slurm/docker/singularity/lmod,
 #         no docs; Python 3.13 only, on Linux, macOS and Windows
 #   full  PRs that carry the `full-ci` or `release` label (every push while present), merge queue
-#         runs (merge_group), pushes to main, releases, manual runs and the weekly schedule:
+#         runs (merge_group), pushes to main, releases, manual runs (unless dispatched with
+#         tier=fast) and the weekly schedule:
 #         the whole OS x Python 3.11-3.15 matrix with every test, plus singularity, lmod,
 #         slurm and docs
 # The weekly schedule (main only) re-runs the full tier so the uv, Singularity and Slurm
@@ -29,6 +30,12 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled, edited]
   merge_group:
   workflow_dispatch:
+    inputs:
+      tier:
+        description: fast (debug and reduced cf tests, Python 3.13) or full (the whole matrix)
+        type: choice
+        options: [fast, full]
+        default: full
   schedule:
     - cron: '0 6 * * 1'  # Mondays 06:00 UTC, default branch only
 
@@ -69,9 +76,12 @@ jobs:
           LABEL: ${{ github.event.label.name }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           BASE_CHANGED: ${{ github.event.changes.base && 'true' || 'false' }}
+          TIER: ${{ github.event.inputs.tier }}
         run: |
           run=true
           full=true
+          # a manual run asks for its tier
+          [ "$TIER" = fast ] && full=false
           if [ "$EVENT" = pull_request ]; then
             full=false
             if jq -e 'index("release") or index("full-ci")' <<<"$LABELS" >/dev/null; then
@@ -152,8 +162,28 @@ jobs:
           uv tool install tox --with=tox-uv --with=tox-gh-actions
       - name: Show tox config
         run: tox c
+      # Output goes to a file, so a process a test leaks cannot hold the step's pipe open; the
+      # step's own timeout ends before the job's, so the log is always uploaded
       - name: Run tox
-        run: tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && (matrix.os == 'windows-latest' && 1500 || 900) || 300 }}
+        shell: bash
+        timeout-minutes: ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && (matrix.os == 'windows-latest' && 30 || 20) || 8 }}
+        run: |
+          rc=0
+          tox -v --exit-and-dump-after ${{ (needs.plan.outputs.full == 'true' || matrix.real || matrix.long) && (matrix.os == 'windows-latest' && 1500 || 900) || 300 }} > tox-log.txt 2>&1 || rc=$?
+          tail -n 400 tox-log.txt
+          exit $rc
+      - name: List processes left running
+        if: always()
+        shell: bash
+        run: ps -ef | grep -i [p]ython || true
+      - name: Upload the test log
+        if: always()
+        continue-on-error: true  # the log is a diagnostic: an upload outage never fails the tests
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-log-${{ matrix.os }}-${{ matrix.python-version }}-${{ matrix.dependencies }}
+          path: tox-log.txt
+          if-no-files-found: ignore
 
   test-singularity:
     needs: plan
