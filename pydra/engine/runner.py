@@ -3,6 +3,8 @@ its jobs are released, completed and marked unrunnable. Drivers (see
 :class:`~pydra.engine.submitter.Submitter`) loop over a :class:`GraphRunner`, taking the
 jobs it hands out, running them and reporting each outcome."""
 
+import asyncio
+import concurrent.futures
 import typing as ty
 from traceback import format_exc, format_exception
 import re
@@ -795,6 +797,9 @@ class GraphRunner:
         self._finished: dict[str, Outcome] = {}
         # whether the last ``ready`` found nothing to do and nothing awaits an outcome
         self._quiescent = False
+        # releases of workflow leases run off the driver's thread (`release_off_thread`)
+        self._release_pool: concurrent.futures.ThreadPoolExecutor | None = None
+        self._releases: list[concurrent.futures.Future] = []
         self._failed = False
         self._first_error: BaseException | None = None
         self._root_error: BaseException | None = None
@@ -921,10 +926,41 @@ class GraphRunner:
     def _release_lease(self, frame: _Frame) -> None:
         lease, frame.lease = frame.lease, None
         if lease is not None:
-            lease.__exit__(None, None, None)
+            if self._release_pool is not None:
+                self._releases.append(
+                    self._release_pool.submit(lease.__exit__, None, None, None)
+                )
+            else:
+                lease.__exit__(None, None, None)
         for other in self._waiting:  # a lease waited for here may be free now
             other.retry_at = None
         self._waiting.clear()
+
+    def release_off_thread(self) -> None:
+        """Release workflow leases on a helper thread from here on, so that a release the
+        storage refuses for a while (``RELEASE_PATIENCE``) does not block the driver's
+        event loop. The driver then awaits :meth:`released` once it has called
+        :meth:`close`."""
+        if self._release_pool is None:
+            self._release_pool = concurrent.futures.ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="pydra-lease-release"
+            )
+
+    async def released(self) -> None:
+        """Wait, without blocking the event loop, until every lease release begun on the
+        helper thread has ended; later releases happen in the calling thread"""
+        pool, self._release_pool = self._release_pool, None
+        pending, self._releases = self._releases, []
+        try:
+            for future in pending:
+                try:
+                    await asyncio.wrap_future(future)
+                except Exception as exc:
+                    logger.warning("A workflow lease could not be released: %s", exc)
+        finally:  # interrupted meanwhile: the rest are waited for here
+            concurrent.futures.wait(pending)
+            if pool is not None:
+                pool.shutdown(wait=False)
 
     def _succeeded(self, frame: _Frame) -> None:
         frame.state = "finished"
