@@ -291,7 +291,8 @@ class Cache:
     # being walked now (a class whose method reads an instance of the class)
     classes: ty.Dict[type, str] = attrs.field(factory=dict)
     _classes_open: ty.Set[type] = attrs.field(factory=set)
-    # objects made while hashing that the cache, keyed by their ``id``, must not outlive
+    # the objects memoised by ``id`` (here, in ``digests``, and those made while hashing),
+    # kept so that no id is reused for another object while the cache lives
     keepalive: ty.List[ty.Any] = attrs.field(factory=list, repr=False)
 
     def __getitem__(self, object_id: int) -> Hash:
@@ -349,6 +350,7 @@ def hash_single(obj: object, cache: Cache) -> Hash:
     objid = id(obj)
     if objid not in cache:
         # Handle recursion by putting a dummy value in the cache
+        cache.keepalive.append(obj)
         cache[objid] = Hash(b"\x00")
         bytes_it = bytes_repr(obj, cache)
         # Pop first element from the bytes_repr iterator and check whether it is a
@@ -1731,6 +1733,7 @@ class _CodeWalk:
                 _walk_memo.setdefault(self.root, {})[key] = memo
         self.cache.modules.update(self.modules)
         self.cache.refs.update(self.refs)
+        self.cache.keepalive.append(self.root)
         digest = self.cache.digests[id(self.root)] = sha256(
             b"".join(len(code).to_bytes(8, "big") + code for code, _ in entries)
         ).hexdigest()
