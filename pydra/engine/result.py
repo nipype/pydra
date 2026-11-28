@@ -117,6 +117,8 @@ class Runtime:
     """Peak in consumption of virtual memory."""
     cpu_peak_percent: ty.Optional[float] = None
     """Peak in cpu consumption."""
+    pool: ty.Optional[dict] = None
+    """The ``pool-facts@1`` of the pool worker that ran the job (RFC 0005 section 8), else None."""
 
 
 @attrs.define(kw_only=True)

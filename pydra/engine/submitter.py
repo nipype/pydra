@@ -22,7 +22,12 @@ from pydra.utils.general import (
 from pydra.utils.hash import PersistentCache
 from pydra.engine.audit import Audit
 from pydra.engine.drivers import drive, drive_inline
-from pydra.engine.executor import InlineExecutor, WorkerExecutor, no_result_diagnosis
+from pydra.engine.executor import (
+    Executor,
+    InlineExecutor,
+    WorkerExecutor,
+    no_result_diagnosis,
+)
 from pydra.engine.job import Job
 from pydra.engine.runner import (  # noqa: F401
     Failed,
@@ -45,7 +50,7 @@ from pydra.utils.general import atomic_write, default_run_cache_root, default_st
 from pydra.utils.storagedir import IS_WINDOWS
 from pydra.compose import workflow
 from pydra.engine.state import State
-from pydra.workers.base import Worker
+from pydra.workers.base import ExecutorWorker, Worker
 from pydra.utils.routing import DEFAULT_WORKER, Router, default_router
 from pydra.compose.base import Task, Outputs
 
@@ -232,9 +237,14 @@ class Submitter:
         :class:`~pydra.engine.store.PickleStore` slots (default ``run-cache`` there), whose
         files are unpickled, so it trusts everyone who can write to it with code execution
         as the reading user: only use caches whose writers you trust
-    worker : str or Worker, optional
+    worker : str, Worker or Executor, optional
         The worker to use, by default "cf". It runs every job the router does not send
-        elsewhere, and is available to the router under the name ``"default"``
+        elsewhere, and is available to the router under the name ``"default"``. An
+        executor object (:class:`~pydra.engine.executor.Executor`, such as a
+        :class:`~pydra.workers.pool.pool.WarmPool`) is handed each run's jobs itself, its
+        store (if any) is the submitter's, and its caller closes it. ``"pool"`` makes a
+        ``WarmPool`` over the submitter's store from ``**kwargs`` (``substrate`` defaults
+        to a ``LocalSubstrate``), closed with the submitter
     workers : dict[str, str or Worker], optional
         Further workers by name (each a worker name, class or object), for the router to
         choose between. The name ``"default"`` is reserved for ``worker``
@@ -327,6 +337,11 @@ class Submitter:
         later calls of the submitter; under ``cf`` each process holds its own
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
+
+    Raises
+    ------
+    PoolFactsWouldSplitSlots
+        A ``WarmPool`` over a store whose identity would key its pool facts.
     """
 
     cache_root: os.PathLike
@@ -397,6 +412,16 @@ class Submitter:
         elif not callable(router):
             raise TypeError(f"'router' must be callable, not {router!r}")
 
+        if _is_executor(worker):
+            pool_store = worker.store
+            if pool_store is not None:
+                if store is None or store == "portable":
+                    store = pool_store
+                elif store is not pool_store:
+                    raise ValueError(
+                        f"the executor {worker!r} publishes to {pool_store!r}, not to the "
+                        f"store given, {store!r}; give the submitter the executor's store"
+                    )
         if resolve_images not in ("best-effort", "require"):
             raise ValueError(
                 f"resolve_images must be 'best-effort' or 'require', not {resolve_images!r}"
@@ -479,13 +504,28 @@ class Submitter:
         )
         self.loop = get_open_loop()
         self._own_loop = not self.loop.is_running()
-        worker = self._make_worker(worker, kwargs)
-        worker.plugin_name()  # a worker class must name its plugin
+        if on_error is not None and on_error not in self.ON_ERROR_MODES:
+            raise ValueError(
+                f"'on_error' must be one of {self.ON_ERROR_MODES}, not {on_error!r}"
+            )
+        made: list[Worker] = []
+        try:
+            worker = self._make_worker(worker, kwargs)
+            made.append(worker)
+            worker.plugin_name()  # a worker class must name its plugin
+            extra = {}
+            for name, spec in workers.items():
+                extra[name] = self._make_worker(spec, {})
+                made.append(extra[name])
+        except BaseException:
+            for each in made:
+                each.close()
+            if self._own_loop:
+                self.loop.close()
+            raise
         self.worker = worker
         self.router = router
-        self.workers = {DEFAULT_WORKER: worker}
-        for name, spec in workers.items():
-            self.workers[name] = self._make_worker(spec, {})
+        self.workers = {DEFAULT_WORKER: worker, **extra}
         self._sync_pool = None
         # the default work directories of the attempts this submitter handed out, emptied
         # once their entries are published, removed by `close`
@@ -499,25 +539,35 @@ class Submitter:
                 stacklevel=2,
             )
         self.clean_stale_locks = False
-        if on_error is not None and on_error not in self.ON_ERROR_MODES:
-            raise ValueError(
-                f"'on_error' must be one of {self.ON_ERROR_MODES}, not {on_error!r}"
-            )
         self._on_error_arg = on_error
         self.on_error = self._loop_on_error(self.worker.is_async)
         self.errors = []
         self.entries = []
-        self.worker_kwargs = kwargs
+        # a pool made by name took its arguments (its substrate holds live handles): none kept
+        self.worker_kwargs = {} if isinstance(self.worker, ExecutorWorker) else kwargs
         for each in self.workers.values():
             each.loop = self.loop
 
-    @staticmethod
     def _make_worker(
-        worker: "str | ty.Type[Worker] | Worker", kwargs: dict[str, ty.Any]
+        self, worker: "str | ty.Type[Worker] | Worker", kwargs: dict[str, ty.Any]
     ) -> Worker:
-        """Instantiate a worker from its name or class, or pass an object through."""
+        """Instantiate a worker from its name or class, or pass an object through; an executor
+        is wrapped as an `ExecutorWorker` its caller owns, and ``"pool"`` makes a ``WarmPool``
+        over this submitter's store that the submitter owns."""
         if isinstance(worker, Worker):
             return worker
+        if _is_executor(worker):
+            return ExecutorWorker(executor=worker, owned=False)
+        if worker == "pool":
+            from pydra.workers.pool.pool import WarmPool
+            from pydra.workers.pool.substrate import LocalSubstrate
+
+            args = dict(kwargs)
+            if "substrate" not in args:
+                args["substrate"] = LocalSubstrate()
+            return ExecutorWorker(
+                executor=WarmPool(store=self.store, **args), owned=True
+            )
         if isinstance(worker, str):
             worker_cls = Worker.plugin(worker)
         elif isinstance(worker, type) and issubclass(worker, Worker):
@@ -795,11 +845,15 @@ class Submitter:
 
     def _drive_runner(self, runner: GraphRunner, raise_first: bool = True) -> None:
         if not any(w.is_async for w in self.workers.values()):
-            drive_inline(
-                runner,
-                InlineExecutor(self.worker, self.worker_for),
-                on_error=runner.on_error,
-            )
+            executor = InlineExecutor(self.worker, self.worker_for)
+            try:
+                drive_inline(
+                    runner,
+                    executor,
+                    on_error=runner.on_error,
+                )
+            finally:
+                executor.close()
         else:  # some job may run on a worker that is not inline
             self.loop.run_until_complete(self._drive(runner))
             if (
@@ -888,21 +942,33 @@ class Submitter:
 
     async def _drive(self, runner: GraphRunner) -> None:
         """Run the runner's jobs on executors for the submitter's workers, on the
-        running loop"""
-        executors = {
+        running loop: an `ExecutorWorker`'s own executor, which outlives the run, or a
+        `WorkerExecutor` made for this run and closed after it"""
+        made = {
             name: WorkerExecutor(
                 worker,
                 blocking=None if worker.is_async else self._run_blocking,
                 max_concurrent=self.max_concurrent,
             )
             for name, worker in self.workers.items()
+            if not isinstance(worker, ExecutorWorker)
         }
-        await drive(
-            runner,
-            executors,
-            self.route_name,
-            on_error=runner.on_error,
-        )
+        executors = {
+            name: (
+                worker.executor if isinstance(worker, ExecutorWorker) else made[name]
+            )
+            for name, worker in self.workers.items()
+        }
+        try:
+            await drive(
+                runner,
+                executors,
+                self.route_name,
+                on_error=runner.on_error,
+            )
+        finally:
+            for executor in made.values():
+                executor.close()
 
     def get_runnable_tasks(self, graph: DiGraph) -> list["Job[TaskType]"]:
         """Deprecated: the jobs of the released nodes of an execution graph. Use
@@ -1003,6 +1069,11 @@ class Submitter:
         else:
             self._cache_root = mkdtemp()
             self._cache_root = Path(self._cache_root).resolve()
+
+
+def _is_executor(obj: ty.Any) -> bool:
+    """Whether ``obj`` is an executor object rather than a worker name, class or object"""
+    return not isinstance(obj, (str, type, Worker)) and isinstance(obj, Executor)
 
 
 def _make_private_dir(path: Path) -> None:

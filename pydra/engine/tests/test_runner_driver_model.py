@@ -631,6 +631,9 @@ class Batching:
     def bind(self, report):
         self.report = report
 
+    def unbind(self, report):
+        pass
+
     def submit(self, jobs):
         self.calls.append([(j.name, j.state_index) for j in jobs])
         for job in jobs:

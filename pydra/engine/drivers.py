@@ -1,6 +1,7 @@
 """Drivers: the loops that run a :class:`~pydra.engine.runner.GraphRunner` to completion"""
 
 import asyncio
+import contextvars
 import time
 import typing as ty
 from collections import defaultdict, deque
@@ -31,7 +32,7 @@ def drive_inline(
     runner : GraphRunner
         The runner to drive
     executor : InlineExecutor
-        Runs each job
+        Runs each job; left open, for whoever made it to close
     on_error : "raise_at_end" | "fail_fast"
         Whether to stop at the first failure
     """
@@ -64,7 +65,6 @@ def drive_inline(
             )
     finally:
         runner.close()
-        executor.close()
 
 
 async def drive(
@@ -80,9 +80,10 @@ async def drive(
     in node order, one call per job unless the executor batches. Outcomes are reported
     onto this loop. The driver keeps no checksum table: the runner settles twins itself.
     With ``on_error="fail_fast"`` the first failure stops the run. On the way out, whether
-    complete, failed or interrupted, every open handle is cancelled, the runner's leases
-    are released (off the loop) and the executors are closed. Failures are left on
-    ``runner.errors``.
+    complete, failed or interrupted, every open handle is cancelled and the runner's leases
+    are released (off the loop). The executors are never closed: whoever made them closes
+    them, so an executor that holds warm workers (a ``WarmPool``) keeps them from one run to
+    the next. Failures are left on ``runner.errors``.
 
     The runner is asked for every ready job: the driver sets no cap. A scheduler worker's
     executor bounds its own submissions (``max_concurrent`` of `WorkerExecutor`). Under
@@ -144,14 +145,20 @@ async def drive(
         pump()
         progressed.set()
 
-    def report(job: "Job", outcome: "Outcome") -> None:
-        loop.call_soon_threadsafe(on_outcome, job, outcome)
+    context: "contextvars.Context | None" = (
+        None  # this run's, once its executors are bound
+    )
 
-    for executor in executors.values():
-        executor.bind(report)
+    def report(job: "Job", outcome: "Outcome") -> None:
+        # in this run's context (its executors' bindings), whichever thread reports
+        loop.call_soon_threadsafe(on_outcome, job, outcome, context=context)
+
     runner.release_off_thread()
     runner.read_off_thread(lambda: loop.call_soon_threadsafe(progressed.set))
     try:
+        for executor in executors.values():
+            executor.bind(report)
+        context = contextvars.copy_context()
         while True:
             rnd = runner.ready()
             if fail_fast and runner.failed:
@@ -207,4 +214,4 @@ async def drive(
             await runner.released()
         finally:
             for executor in executors.values():
-                executor.close()
+                executor.unbind(report)

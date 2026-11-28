@@ -31,6 +31,7 @@ LEASE = LeaseSettings(
 BOUND = 120.0  # seconds any wait on another process may take before the test fails
 
 TASKS = """
+import os
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -110,6 +111,27 @@ def BigGpuMark(x: int, where: str) -> int:
 def GpuMarks(xs: list, where: str) -> list:
     gpu = ComputeResources(gpus=1)
     return workflow.add(Mark(where=where).split(x=xs), name="M", resources=gpu).out
+
+
+@python.define
+def DeviceMark(x: int, where: str, devices: int) -> int:
+    # waits (a bound only) until jobs have run on ``devices`` devices, so no one worker runs every
+    # job before the others start
+    d = Path(where)
+    (d / f"{x}-{os.environ.get('CUDA_VISIBLE_DEVICES', '')}-{uuid4().hex}").touch()
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        if len({p.name.split("-")[1] for p in d.iterdir()}) >= devices:
+            break
+        time.sleep(0.05)
+    return x
+
+
+@workflow.define
+def GpuPeers(xs: list, where: str, devices: int) -> list:
+    gpu = ComputeResources(gpus=1)
+    node = DeviceMark(where=where, devices=devices).split(x=xs)
+    return workflow.add(node, name="M", resources=gpu).out
 """
 
 FAKE_NVIDIA_SMI = """#!{python}
@@ -221,7 +243,8 @@ def _submitter(tmp_path):
 
 def _drive(sub, task, executor, check=True, rerun=False, **kwargs):
     """Run ``task``'s nodes on ``executor`` through the asynchronous driver, as an external driver
-    does, and raise as `Submitter` does when jobs did not run."""
+    that owns the executor does: it closes the executor after the run (``drive`` never does). Raise as
+    `Submitter` does when jobs did not run."""
     runner = GraphRunner(
         task, sub.store, on_error="raise_at_end", submitter=sub, rerun=rerun
     )
@@ -244,15 +267,18 @@ def _drive(sub, task, executor, check=True, rerun=False, **kwargs):
         bind(recorded)
 
     executor.bind = recording_bind
-    asyncio.run(
-        drive(
-            runner,
-            {"pool": executor},
-            lambda job: "pool",
-            on_error="raise_at_end",
-            **kwargs,
+    try:
+        asyncio.run(
+            drive(
+                runner,
+                {"pool": executor},
+                lambda job: "pool",
+                on_error="raise_at_end",
+                **kwargs,
+            )
         )
-    )
+    finally:
+        executor.close()
     runner.limits, runner.reported = limits, reported
     if not check:
         return runner
@@ -294,7 +320,7 @@ def _key(sub, job):
 
 
 def _raw(root: Path):
-    """The pool at ``root``, opened afresh: ``drive`` closes its executor, and with it the pool's."""
+    """The pool at ``root``, opened afresh: `_drive` closes its executor, and with it the pool's."""
     from pydra.workers.pool.storage import PoolRoot
 
     return PoolRoot.open(root, LEASE, create=False, probe=False)
@@ -715,7 +741,8 @@ def test_one_worker_per_gpu_local(tmp_path, tasks, pools, fake_nvidia_smi):
         substrate=substrate,
         settings=_settings(unmeasured_workers=4),
     )
-    runner = _drive(sub, tasks.GpuMarks(xs=list(range(4)), where=str(marks)), pool)
+    task = tasks.GpuPeers(xs=list(range(4)), where=str(marks), devices=2)
+    runner = _drive(sub, task, pool)
     assert runner.done and not runner.failed
     assert len(substrate.handles) == 2
     assert sorted(h.devices for h in substrate.handles) == [("0",), ("1",)]
