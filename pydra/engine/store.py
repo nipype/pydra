@@ -442,6 +442,12 @@ class ResultStore(ty.Protocol):
         """Remove the success record of the job held under ``lease`` before its slot is
         rewritten; a store without records has none to remove"""
 
+    def begin_rerun(self, job: "Job") -> None:
+        """Mark ``job``, a rerun, for its commit: a store that does not replace a stored
+        result on a rerun leaves it unmarked"""
+        job.replace = False
+        job.replaces = None
+
     def holds(self, checksum: str, context: Context) -> bool:
         """Whether a result is stored for ``checksum`` in ``context`` itself"""
         return (self.cache_dir(checksum, context) / CONTEXT_FILE).exists()
