@@ -295,9 +295,11 @@ def test_python_record_shape():
 def test_shell_record_shape():
     record = task_record(shell.define("echo <text:str>")(text="hi"))
     assert record["kind"] == "shell"
-    assert record["task"] == {"refs": [], "values": []}
-    assert "executable" in record["inputs"]
-    assert record["inputs"]["executable"].startswith("py@1:")
+    assert list(record["task"]) == ["refs", "values", "template", "version"]
+    assert record["task"]["template"]["executable"] == "echo"
+    assert list(record["task"]["template"]["fields"]) == ["append_args", "text"]
+    assert record["task"]["version"] is None
+    assert "executable" not in record["inputs"]
     assert record["inputs"]["text"].startswith("py@1:")
     assert record["outputs"].startswith("type@1:")
     assert record_checksum(record).startswith("shell-")

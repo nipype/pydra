@@ -50,6 +50,24 @@ IDENTITY_SCHEME = "pydra-identity@2"
 
 Record = dict[str, ty.Any]
 
+# The digests of the definition of each shell field are kept beside the digests of the
+# inputs under ``template:<field>``, a name no field has
+TEMPLATE_PREFIX = "template:"
+
+
+# The attributes of a field that shape the command line, besides its type (RFC 0004
+# section 5.1). Documentation (``help``) is left out, and so is everything that does not
+# decide what runs.
+TEMPLATE_ATTRIBUTES = (
+    "argstr",
+    "position",
+    "sep",
+    "formatter",
+    "path_template",
+    "keep_extension",
+    "copy_mode",
+)
+
 
 def walk_classification(code_hash: str | None = None) -> dict[str, ty.Any]:
     """The classification that shapes what the code walk reaches: the ``code_hash`` tier
@@ -79,6 +97,16 @@ def field_digests(
     carried = task._carried or {}
     fields = {f.name: f for f in get_fields(task)}
     digests = {}
+    if task._task_type() == "shell":
+        for field in fields.values():
+            if field.name == "executable":
+                continue
+            key = TEMPLATE_PREFIX + field.name
+            digests[key] = (
+                carried[key][1]
+                if key in carried
+                else f"py@1:{hash_function(template_spec(field, cache), cache=cache)}"
+            )
     for name, value in inputs.items():
         if name in carried and carried[name][0] is getattr(task, name):
             if not rehashed_in_worker(fields.get(name), carried[name][0]):
@@ -98,6 +126,16 @@ def field_digests(
             k: ",".join(sorted(v)) for k, v in sorted(cache.declared.items())
         }
     return digests
+
+
+def template_spec(field: ty.Any, cache: Cache) -> dict[str, ty.Any]:
+    """The definition of a shell field that shapes the command line, which is hashed as
+    ``py@1`` (RFC 0004 section 5.1): its ``argstr``, ``position``, ``sep``, ``formatter``
+    (a function, walked like any user function), ``path_template``, ``keep_extension``,
+    ``copy_mode`` and its type as ``type@1``"""
+    spec = {a: getattr(field, a, None) for a in TEMPLATE_ATTRIBUTES}
+    spec["type"] = type_digest(field.type, cache)
+    return spec
 
 
 def rehashed_in_worker(field: ty.Any, value: ty.Any) -> bool:
@@ -158,6 +196,16 @@ def task_record(task: "Task") -> Record:
     }
     if _executor_is_code(task) and task._executor_name in digests:
         code["code"] = digests.pop(task._executor_name)
+    if task._task_type() == "shell":
+        code["template"] = {
+            "executable": _written_executable(task, digests.pop("executable", None)),
+            "fields": {
+                k.removeprefix(TEMPLATE_PREFIX): digests.pop(k)
+                for k in sorted(digests)
+                if k.startswith(TEMPLATE_PREFIX)
+            },
+        }
+        code["version"] = task._version
     return {
         "scheme": IDENTITY_SCHEME,
         "kind": task._task_type(),
@@ -168,10 +216,35 @@ def task_record(task: "Task") -> Record:
     }
 
 
+def _written_executable(task: "Task", digest: str | None) -> ty.Any:
+    """The executable as written, a string or a list of strings (RFC 0004 section 5.2);
+    any other value by its digest"""
+    value = task.executable
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (list, tuple)) and all(isinstance(v, str) for v in value):
+        return list(value)
+    return digest
+
+
 def job_record(job: "Job") -> Record:
-    """The identity record of ``job``: the task's record (the job's own fields, ``job`` and ``nodes``,
-    join it with the code that keys them, RFC 0004 section 3.1)."""
-    return task_record(job.task)
+    """The identity record of ``job``: the task's record, plus ``job`` for a shell task:
+    the environment it runs in (its identity, ``Environment.checksum``) and the version
+    the task's ``version_command`` reported when it runs natively (RFC 0004 section 3.1).
+    A python task has no ``job`` field, and a supplied checksum stands for the whole
+    record. The ``nodes`` of a workflow are added by the PR that keys them."""
+    from pydra.compose.shell.version import tool_version
+    from pydra.environments.native import Native
+
+    record = task_record(job.task)
+    if "supplied" not in record and record["kind"] == "shell":
+        environment = job.environment
+        native = environment is None or isinstance(environment, Native)
+        record["job"] = {
+            "environment": None if environment is None else environment.checksum(),
+            "tool_version": tool_version(job.task) if native else None,
+        }
+    return record
 
 
 def record_checksum(record: ty.Mapping[str, ty.Any]) -> str:
