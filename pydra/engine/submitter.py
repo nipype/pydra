@@ -216,6 +216,10 @@ class Submitter:
         is emitted when a ``FileSet`` output lies outside the cache directory). The
         ``pre_run_task``/``post_run_task`` hooks see the caller's directory, and audit
         messages without an explicit ``message_dir`` go to ``<cache_dir>/messages``
+    resolve_images : str, optional
+        What to do with a container image that cannot be resolved to a digest or a
+        local image id: "best-effort" (default) runs the tag and the result is used by
+        this process only, "require" raises ``ImageResolutionError``
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -265,6 +269,7 @@ class Submitter:
         on_error: OnError | None = None,
         telemetry: bool = True,
         chdir: bool = True,
+        resolve_images: ty.Literal["best-effort", "require"] = "best-effort",
         **kwargs,
     ):
 
@@ -284,6 +289,12 @@ class Submitter:
         elif not callable(router):
             raise TypeError(f"'router' must be callable, not {router!r}")
 
+        if resolve_images not in ("best-effort", "require"):
+            raise ValueError(
+                f"resolve_images must be 'best-effort' or 'require', not {resolve_images!r}"
+            )
+        self.resolve_images = resolve_images
+        self._resolved_refs: dict = {}  # environment references, resolved once per run
         self.chdir = chdir
         self.telemetry = telemetry
         if telemetry:

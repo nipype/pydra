@@ -229,7 +229,7 @@ def _written_executable(task: "Task", digest: str | None) -> ty.Any:
 
 def job_record(job: "Job") -> Record:
     """The identity record of ``job``: the task's record, plus ``job`` for a shell task:
-    the environment it runs in (its identity, ``Environment.checksum``) and the version
+    the environment it runs in (its resolved reference, ``Job.resolved``) and the version
     the task's ``version_command`` reported when it runs natively (RFC 0004 section 3.1).
     A python task has no ``job`` field, and a supplied checksum stands for the whole
     record. The ``nodes`` of a workflow are added by the PR that keys them."""
@@ -241,7 +241,7 @@ def job_record(job: "Job") -> Record:
         environment = job.environment
         native = environment is None or isinstance(environment, Native)
         record["job"] = {
-            "environment": None if environment is None else environment.checksum(),
+            "environment": None if environment is None else job.resolved.key,
             "tool_version": tool_version(job.task) if native else None,
         }
     return record

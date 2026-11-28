@@ -29,8 +29,9 @@ def test_identity_replaces_image_resolution(env, monkeypatch):
     assert a.checksum() != env(image="busybox", identity="sha256:2").checksum()
 
 
-@pytest.mark.parametrize("env", [docker.Docker, singularity.Singularity])
-def test_rebuilt_image_changes_checksum_via_digest(env, monkeypatch):
+def test_rebuilt_image_changes_checksum_via_digest(monkeypatch):
+    # Docker resolves its reference instead (test_env_resolution_docker.py)
+    env = singularity.Singularity
     digest = ["sha256:a"]
     monkeypatch.setattr(env, "_resolve_digest", lambda self: digest[0])
     before = env(image="busybox").checksum()
@@ -83,47 +84,6 @@ def test_default_environment_records_native_checksum(tmp_path):
         _run(tmp_path, None).result().context["environment"]
         == native.Native().checksum()
     )
-
-
-def test_digest_resolved_once_per_process(monkeypatch):
-    calls = []
-
-    def resolve(self):
-        calls.append(1)
-        return "sha256:a"
-
-    monkeypatch.setattr(docker.Docker, "_resolve_digest", resolve)
-    env = docker.Docker(image="busybox")
-    assert env.checksum() == env.checksum()
-    assert len(calls) == 1
-
-
-def test_unresolved_digest_is_not_cached(monkeypatch):
-    digests = [None, "sha256:a"]
-    monkeypatch.setattr(docker.Docker, "_resolve_digest", lambda self: digests.pop(0))
-    env = docker.Docker(image="busybox")
-    assert env.checksum() != env.checksum()
-
-
-def test_docker_digest_never_pulls_and_tolerates_no_docker(monkeypatch):
-    from pydra.environments import base
-
-    commands = []
-
-    def missing(cmd, strip=False):
-        commands.append(cmd)
-        return 1, "", "no such image"
-
-    monkeypatch.setattr(base, "execute", missing)
-    assert docker.Docker(image="busybox")._resolve_digest() is None
-    assert [c[1] for c in commands] == ["image"]
-
-    def no_docker(cmd, strip=False):
-        raise FileNotFoundError("docker")
-
-    monkeypatch.setattr(base, "execute", no_docker)
-    env = docker.Docker(image="busybox")
-    assert env.checksum() == env.checksum()
 
 
 def test_environment_checksum_recorded_under_each_worker(worker, tmp_path):

@@ -654,11 +654,12 @@ def test_execute_creates_the_slot_directory(tmp_path, monkeypatch):
     from pydra.environments import base
 
     monkeypatch.setattr(base, "execute", lambda *args, **kwargs: (0, "", ""))
+    env = docker.Environment(image=f"busybox@sha256:{'1' * 64}")
     job = Job(
         task=shell.define("whoami")(),
         name="job",
-        submitter=Submitter(store="pickle", cache_root=tmp_path),
+        submitter=Submitter(environment=env, store="pickle", cache_root=tmp_path),
     )
     assert not job.cache_dir.parent.exists()
-    docker.Environment(image="busybox").execute(job)
+    env.execute(job)
     assert job.cache_dir.is_dir()
