@@ -100,6 +100,8 @@ class FakeSlurm:
 def make(tmp_path, monkeypatch, n, split=True, plans=None, queue_cycles=3, **kwargs):
     fake = FakeSlurm(tmp_path, plans, queue_cycles)
     monkeypatch.setattr(slurm.base, "read_and_display_async", fake)
+    # a listing another test left in the process-wide cache is not this test's queue
+    monkeypatch.setattr(slurm, "_SHARED_LISTING", slurm.QueueListing())
 
     def prepare(self, job, rerun=False):
         script_dir = tmp_path / "scripts" / job.uid

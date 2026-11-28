@@ -65,6 +65,7 @@ from pydra.workers.pool.substrate import (
     Attachment,
     ExternalSubstrate,
     Substrate,
+    SubstrateError,
     WorkerHandle,
 )
 
@@ -142,6 +143,16 @@ class _Job:
     ticket: "_Ticket | None" = (
         None  # the ticket that holds it, once written or followed
     )
+
+
+def ticket_time(jobs: ty.Iterable["Job"]) -> float | None:
+    """The longest time ``jobs`` declare (``resources.time``); None when none declares one."""
+    times = [
+        j.resources.time
+        for j in jobs
+        if j.resources is not None and j.resources.time is not None
+    ]
+    return max(times, default=None)
 
 
 @attrs.define(eq=False)
@@ -225,6 +236,21 @@ def _fingerprint(job: "Job") -> str:
     if identity is not None:
         return identity.fingerprint(job.context)
     return hashlib.sha256(jcs(job.context)).hexdigest()
+
+
+def _newest_mtime(lease: Path) -> float | None:
+    """The newest mtime of a lease directory, its entries and theirs (a beater's heartbeats);
+    None when it is missing."""
+    try:
+        newest = os.lstat(lease).st_mtime
+        for entry in os.scandir(lease):
+            newest = max(newest, entry.stat(follow_symlinks=False).st_mtime)
+            if entry.is_dir(follow_symlinks=False):
+                for sub in os.scandir(entry.path):
+                    newest = max(newest, sub.stat(follow_symlinks=False).st_mtime)
+    except OSError:
+        return None
+    return newest
 
 
 class WarmPool:
@@ -331,6 +357,15 @@ class WarmPool:
         self._failed_at: dict[str, float] = {}
         self._cause: dict[str, str] = {}
         self._broken: dict[str, str] = {}
+        self._listing_failures: dict[str, int] = collections.defaultdict(int)
+        # when the substrate was last listed (or, never listed, first failed to be), and the
+        # classes a ticket of which settled since then
+        self._listed_at: float | None = None
+        self._progress: dict[str, float] = (
+            {}
+        )  # class -> when a ticket of it last settled
+        # token -> (newest mtime of its worker lease, when the follower saw it change)
+        self._lease_seen: dict[str, tuple[float | None, float]] = {}
         # (queue, residency label) a worker held in this epoch, and why
         self._held: dict[tuple[str, str], str] = {}
         self._idle: dict[str, int] = collections.defaultdict(int)
@@ -355,18 +390,20 @@ class WarmPool:
             with os.fdopen(fd, "w") as f:
                 json.dump(settings.to_json(), f)
             codec_ref = None if isinstance(codec, PrivatePickle) else _reference(codec)
-            substrate.attach(
-                Attachment(
-                    self.root,
-                    self.settings_path,
-                    self.providers,
-                    codec_ref,
-                    pool_settings=settings,
-                )
+            attachment = Attachment(
+                self.root,
+                self.settings_path,
+                self.providers,
+                codec_ref,
+                pool_id=self.pool.pool_id,
+                classes=self.classes,
+                pool_settings=settings,
             )
+            substrate.attach(attachment)
             self._await_coordinators()
             # the epoch is taken after every fallible step
             self.epoch = self.pool.take_epoch()
+            attachment.epoch = self.epoch
             # every worker reads the budgets and the classifier from the pool, however started
             self.pool.write_faults(
                 self.epoch, {"budgets": faults.to_json(), "classify": classify_ref}
@@ -499,7 +536,13 @@ class WarmPool:
             if self.epoch is not None:
                 self.pool.end_epoch(self.epoch)
                 if self._fenced is None and not self.pool.fenced(self.epoch):
-                    live = self.substrate.live()
+                    try:
+                        live = list(self.substrate.live())
+                    except Exception as err:  # stop what this coordinator started
+                        logger.warning(
+                            "listing the substrate's workers failed at close: %s", err
+                        )
+                        live = list(self._started.values())
                     if live:
                         self._stop_workers(live)
         finally:
@@ -910,6 +953,7 @@ class WarmPool:
                 jobs=entries,
                 residency=group[0].residency,
                 ladder=group[0].ladder,
+                time=ticket_time(j.job for j in group),
             )
             try:
                 digest = self.pool.put(queue, ticket)
@@ -969,6 +1013,8 @@ class WarmPool:
                 tickets = [self._tickets[t] for t in self._queues.get(queue, ())]
             for t in tickets:
                 count = settled.get(t.digest, 0)
+                if count > t.seen:
+                    self._progress[_queue_class(queue)] = now
                 if count > t.seen or (t.recheck and count > 0):
                     try:
                         found = self.pool.outcomes(
@@ -1146,7 +1192,14 @@ class WarmPool:
         return wanted
 
     def _scale(self, now: float) -> None:
-        live = self._live()
+        try:
+            live = list(self.substrate.live())
+        except Exception as err:
+            # not read as every worker gone: the next poll lists again, within a budget
+            self._listing_failed(err, now)
+            return
+        self._listing_failures.clear()
+        self._listed_at = now
         live_ids = {id(h) for h in live}
         for token, h in list(self._started.items()):
             if id(h) in live_ids:
@@ -1188,7 +1241,23 @@ class WarmPool:
                 for _ in range(want - len(mine)):
                     if self.substrate.can_start(cls) is not True:
                         break
-                    for h in self.substrate.start(cls, 1):
+                    try:
+                        handles = self.substrate.start(cls, 1)
+                    except Exception as err:  # a refused submission: a failed start
+                        if isinstance(err, SubstrateError):
+                            for h in err.started:
+                                self._started[h.token] = h
+                        self._failures[name] += 1
+                        self._failed_at[name] = now
+                        self._cause[name] = f"{type(err).__name__}: {err}"
+                        logger.warning(
+                            "starting a worker of class %r failed (%s): failed start %d",
+                            name,
+                            self._cause[name],
+                            self._failures[name],
+                        )
+                        break
+                    for h in handles:
                         self._started[h.token] = h
             elif len(mine) > want:
                 pending = [h for h in mine if h.token not in self._ready]
@@ -1199,6 +1268,58 @@ class WarmPool:
                     self._stopped.update(h.token for h in surplus)
                     self._stop_workers(surplus)
 
+    def _listing_failed(self, err: Exception, now: float) -> None:
+        """Count a failed listing against each class with work that shows no progress: no live
+        ready worker (one whose worker lease moved within ``stale_after``) and no ticket settled
+        within ``stale_after``. Once ``listing_failures`` polls in a row have failed and
+        ``stale_after`` has passed since the last good listing, such a class is broken, so its
+        jobs are held rather than left waiting. Everything is read from storage."""
+        logger.warning("listing the substrate's workers failed: %s", err)
+        stale = self.settings.lease.stale_after
+        if self._listed_at is None:
+            self._listed_at = now
+        ready = set()
+        for token, h in self._started.items():
+            if token not in self._ready:
+                if not self.pool.worker_record(token, "ready.json"):
+                    continue
+                self._ready.add(token)
+            if self._lease_moved(token, now) < stale:
+                ready.add(h.worker_class)
+        for token in set(self._lease_seen) - set(self._started):
+            del self._lease_seen[token]
+        wanted = self._demand()
+        started = {h.worker_class for h in self._started.values()}
+        for cls in self.classes:
+            name = cls.name
+            if name in self._broken or not (wanted.get(name) or name in started):
+                continue
+            settled = now - self._progress.get(name, float("-inf")) < stale
+            if name in ready or settled:  # progressing: the run is not stuck
+                self._listing_failures.pop(name, None)
+                continue
+            self._listing_failures[name] += 1
+            n = self._listing_failures[name]
+            down = now - self._listed_at
+            if n >= self.faults.listing_failures and down >= stale:
+                self._break(
+                    cls,
+                    f"listing the substrate's workers failed {n} times in a row over "
+                    f"{down:.0f}s: {type(err).__name__}: {err}",
+                )
+
+    def _lease_moved(self, token: str, now: float) -> float:
+        """Seconds, on the follower's clock, since the worker's lease was last seen to move; a
+        missing lease never moved. Mtimes are compared only with each other."""
+        newest = _newest_mtime(self.root / "workers" / token / "lease")
+        last = self._lease_seen.get(token)
+        if newest is None:
+            return float("inf")
+        if last is None or last[0] != newest:
+            self._lease_seen[token] = (newest, now)
+            return 0.0
+        return now - last[1]
+
     def _may_start(self, name: str, now: float) -> bool:
         failures = self._failures[name]
         if not failures:
@@ -1206,12 +1327,16 @@ class WarmPool:
         backoff = self.settings.poll_s * 2 ** (failures - 1)
         return now - self._failed_at.get(name, 0.0) >= backoff
 
-    def _break(self, cls: WorkerClass) -> None:
+    def _break(self, cls: WorkerClass, cause: str | None = None) -> None:
         from pydra.workers.pool.worker import class_record
 
+        if cause is None:
+            cause = (
+                f"{self._failures[cls.name]} consecutive failed starts; the latest: "
+                f"{self._cause.get(cls.name)}"
+            )
         why = (
-            f"worker class {cls.name!r} is broken: {self._failures[cls.name]} consecutive "
-            f"failed starts; the latest: {self._cause.get(cls.name)}; class "
+            f"worker class {cls.name!r} is broken: {cause}; class "
             f"{json.dumps(class_record(cls), sort_keys=True)}"
         )
         logger.error(why)

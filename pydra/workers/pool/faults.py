@@ -196,6 +196,9 @@ class FaultBudgets:
         which it is ``failed`` (``JobCrashedWorker``).
     start_failures : int
         Consecutive failed starts after which a worker class is broken and its jobs are held.
+    listing_failures : int
+        Consecutive polls whose listing of the substrate's workers failed after which every class
+        with work is broken and its jobs are held.
     """
 
     content_attempts: int = 1
@@ -203,6 +206,7 @@ class FaultBudgets:
     infrastructure_replacements: int = 3
     crashes_charged: int = 2
     start_failures: int = 7
+    listing_failures: int = 7
 
     def __attrs_post_init__(self) -> None:
         low = [
@@ -212,6 +216,7 @@ class FaultBudgets:
                 "infrastructure_replacements",
                 "crashes_charged",
                 "start_failures",
+                "listing_failures",
             )
             if getattr(self, name) < 1
         ]

@@ -729,6 +729,7 @@ def test_ticket_carries_ladder_and_moves_up_it(tmp_path):
     new = pool.ticket("gpu-h100-80", moved)
     assert new.ladder == ("gpu-b200",) and new.queue == "gpu-h100-80"
     assert pool.charges(job.checksum, job.fingerprint) == {
+        "preemptions": 0,
         "crashes": 0,
         "infrastructure": 0,
         "resource_moves": 1,
@@ -1191,3 +1192,18 @@ def test_a_record_being_replaced_is_read_again_on_windows(
     else:
         with pytest.raises(PermissionError):
             pool_storage._read(d, "rec")
+
+
+def test_a_ticket_carries_its_jobs_declared_time():
+    assert Ticket.from_json(_ticket("t", time=3600.0).to_json()).time == 3600.0
+    assert _ticket("u").time is None
+
+
+def test_a_claim_passes_over_a_ticket_longer_than_the_time_left(tmp_path):
+    pool = _pool(tmp_path)
+    pool.put("cpu", _ticket("long", time=3600.0))
+    pool.put("cpu", _ticket("short", time=60.0))
+    claim = pool.claim("cpu", max_time=600.0)
+    assert claim is not None and claim.ticket.time == 60.0
+    assert pool.claim("cpu", max_time=600.0) is None
+    assert pool.claim("cpu").ticket.time == 3600.0

@@ -79,6 +79,9 @@ __all__ = [
 STOP_MARK = "stop.json"
 """The worker record a coordinator writes to stop a worker, which drains on it as on SIGTERM."""
 
+EXIT_MARK = "exit.json"
+"""The worker record a worker writes as it exits, read where its process is not visible."""
+
 POOL_FORMAT = "pool@1"
 TICKET_FORMAT = "pool-ticket@1"
 OUTCOME_FORMAT = "pool-outcome@1"
@@ -329,6 +332,8 @@ class Ticket:
         Binding roots the jobs read.
     ladder : tuple of str
         The rest of the jobs' placement order: the classes a claim holder moves them up to.
+    time : float or None
+        The longest time its jobs declare, in seconds; None when none declares one.
     """
 
     queue: str
@@ -338,6 +343,7 @@ class Ticket:
     batch: int | None = None
     roots: tuple[str, ...] = attrs.field(default=(), converter=_tuple)
     ladder: tuple[str, ...] = attrs.field(default=(), converter=_tuple)
+    time: float | None = None
 
     def __attrs_post_init__(self) -> None:
         queue_label(self.queue)
@@ -358,6 +364,7 @@ class Ticket:
             "batch": self.batch,
             "roots": list(self.roots),
             "ladder": list(self.ladder),
+            "time": self.time,
             "jobs": [j.to_json() for j in self.jobs],
         }
 
@@ -381,6 +388,7 @@ class Ticket:
                 batch=record.get("batch"),
                 roots=record.get("roots", ()),
                 ladder=record.get("ladder", ()),
+                time=record.get("time"),
             )
         except (AttributeError, KeyError, TypeError, ValueError) as err:
             raise CorruptTicket(f"not a ticket: {err}") from err
@@ -1025,12 +1033,24 @@ class PoolRoot:
         with d:
             return _read_record(d, f"{g}.started")
 
+    def drained(self, checksum: str, fingerprint: str, g: int) -> bool:
+        """Whether a job's attempt ``g`` was cut short by its worker's drain (`Claim.drained`)."""
+        d = self._follow((checksum, fingerprint))
+        if d is None:
+            return False
+        with d:
+            return _read_record(d, f"{g}.drained") is not None
+
     def charges(self, checksum: str, fingerprint: str) -> dict[str, int]:
         """A job's crash count (generations with ``charged``), its ``resource_moves``
         (``ladder`` generations at the ``call`` phase) and its infrastructure requeues
         (``restart`` generations at the ``call`` or ``load`` phase, `Claim.restart`)."""
-        gens = [r for _, r in self.generations(checksum, fingerprint)]
+        numbered = self.generations(checksum, fingerprint)
+        gens = [r for _, r in numbered]
         return {
+            "preemptions": sum(
+                1 for g, _ in numbered if self.drained(checksum, fingerprint, g)
+            ),
             "crashes": sum(1 for r in gens if r.get("charged") is True),
             "infrastructure": sum(
                 1
@@ -1138,7 +1158,7 @@ class PoolRoot:
                     ):
                         continue
                     for g in numbers[:-1]:
-                        for member in (f"{g}.started", str(g)):
+                        for member in (f"{g}.started", f"{g}.drained", str(g)):
                             with contextlib.suppress(FileNotFoundError):
                                 d.unlink(member)
                                 removed += 1
@@ -1711,6 +1731,7 @@ class PoolRoot:
         beat: ty.Literal["thread", "external"] = "thread",
         epoch: int | None = None,
         max_jobs: int | None = None,
+        max_time: float | None = None,
     ) -> "Claim | None":
         """Claim the oldest claimable ticket of ``queue``; None when there is none.
 
@@ -1730,6 +1751,9 @@ class PoolRoot:
             The coordinator epoch whose holds count; default the newest.
         max_jobs : int, optional
             Pass over tickets of more jobs than this (a warm worker gathering one-job tickets).
+        max_time : float, optional
+            Pass over tickets declaring a longer time than this, in seconds (the time left in
+            the claimant's allocation).
         """
         q = self.queue(queue)
         # judged ticket by ticket: a class's queue may carry several residencies (a
@@ -1755,6 +1779,8 @@ class PoolRoot:
                         continue
                     ticket = self._claimable(q, digest)
                     if ticket is None or (held and ticket.residency_label in held):
+                        continue
+                    if max_time is not None and (ticket.time or 0) > max_time:
                         continue
                     claim = self._take(q, digest, ticket, (seq, n), beat)
                     if claim is not None:
@@ -2040,6 +2066,16 @@ class Claim:
         if by is not None:
             fields["by"] = by
         return self.outcome(job, attempt, "withdrawn", **fields)
+
+    def drained(self, job: TicketJob, worker: str) -> None:
+        """Mark the job's current attempt cut short by this worker's drain (its scheduler preempted
+        or stopped it): its taker places it again uncharged, within the preemption budget.
+        """
+        current = self.current(job)
+        if current is None:
+            return
+        with self.pool._follow(job.key, create=True) as d:
+            _create(d, f"{current[0]}.drained", jcs({"worker": worker}))
 
     def takeover(self, job: TicketJob, *, charged: bool = False) -> str:
         """Place a lost job again in this ticket under a fresh ``takeover`` generation, ``prior`` the
