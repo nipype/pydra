@@ -467,6 +467,40 @@ def store_adopt(root, old_entries, header_spec, identity, entry_format, check, t
         sys.exit(1)  # adopted; each misfiled entry is quarantined when it is read
 
 
+@cli.group(context_settings=CONTEXT_SETTINGS)
+def pool():
+    """Warm worker pools (RFC 0005)."""
+
+
+@pool.command("probe", context_settings=CONTEXT_SETTINGS)
+@click.argument("root", type=click.Path(exists=True, file_okay=False))
+@click.option(
+    "--attribute-delay",
+    type=float,
+    default=None,
+    help="Seconds a client may see a directory change late; default the pool's own "
+    "(from pool.json), else the lease default.",
+)
+def pool_probe(root, attribute_delay):
+    """Check that ROOT has the primitives a worker pool needs and measure how late a
+    second process sees a directory change; print the result as JSON and exit with 1
+    if the root is refused."""
+    from pydra.engine.lease import ATTRIBUTE_DELAY
+    from pydra.workers.pool.probe import probe, refusal
+
+    if attribute_delay is None:
+        attribute_delay = ATTRIBUTE_DELAY
+        header = Path(root) / "pool.json"
+        if header.is_file():
+            attribute_delay = json.loads(header.read_bytes())["lease"][
+                "attribute_delay"
+            ]
+    result = probe(root, limit=attribute_delay + 1.0)
+    why = refusal(result, attribute_delay)
+    click.echo(json.dumps({**result.to_json(), "refused": why}, sort_keys=True))
+    sys.exit(1 if why else 0)
+
+
 def _task_class(spec: str):
     module, sep, name = spec.partition(":")
     if not sep or not module or not name:
