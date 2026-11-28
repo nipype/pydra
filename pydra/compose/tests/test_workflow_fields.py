@@ -302,6 +302,32 @@ def test_construct_lazy_graph_not_reused_for_concrete_task(tmp_path: Path):
     assert outputs.out == 2
 
 
+def test_construct_rebuilt_when_input_changes(tmp_path: Path):
+
+    @python.define
+    def Fast(x: int) -> int:
+        return x + 1
+
+    @python.define
+    def Slow(x: int) -> int:
+        return x + 2
+
+    @workflow.define
+    def Inner(x: int, mode: str) -> int:
+        if mode == "fast":
+            node = workflow.add(Fast(x=x), name="fast")
+        else:
+            node = workflow.add(Slow(x=x), name="slow")
+        return node.out
+
+    task = Inner(x=1, mode="slow")
+    assert task(cache_root=tmp_path).out == 3
+    task.mode = "fast"
+    assert [n.name for n in task.construct().nodes] == ["fast"]
+    assert task(cache_root=tmp_path).out == 2
+    assert Inner(x=1, mode="fast")(cache_root=tmp_path).out == 2
+
+
 def test_direct_access_of_workflow_object():
 
     @python.define(inputs={"x": float}, outputs={"z": float})
