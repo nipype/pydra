@@ -18,6 +18,7 @@ from pydra.engine.runner import GraphRunner
 from pydra.engine.store import PickleStore
 from pydra.engine.submitter import Submitter
 from pydra.utils.hash import hash_function
+from pydra.utils.identity import record_checksum
 
 # -- tasks -------------------------------------------------------------------------------------------
 
@@ -313,7 +314,7 @@ def test_suffix_unhashed_field(submitter):
     runner.complete(a, run_inline(a))
     (e,) = runner.ready().dispatch
     assert e.absent == [("msg", -1, "negative")]
-    assert e.unsuffixed_checksum == e.task._checksum
+    assert e.unsuffixed_checksum == record_checksum(e.record)
     assert e.checksum == e.unsuffixed_checksum + absence_suffix(e.absent)
     runner.close()
 
@@ -395,8 +396,12 @@ def test_absent_in_workflow_outputs(tmp_path):
     with Submitter(worker="debug", store=store) as sub:
         task = Passthrough(x=-1)
         assert sub(task).outputs.out == Absent("negative", "Maybe")
-        # the workflow's result is committed, and served on a second run
-        assert ("commit", task._checksum) in store.calls
+        # the workflow's result is committed under the key it was looked up by, and
+        # served on a second run
+        (looked_up,) = [
+            c for op, c in store.calls if op == "lookup" and c.startswith("workflow-")
+        ]
+        assert ("commit", looked_up) in store.calls
         assert sub(task).outputs.out == Absent("negative", "Maybe")
 
 
