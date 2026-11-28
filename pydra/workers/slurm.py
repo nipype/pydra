@@ -42,7 +42,7 @@ class SlurmWorker(base.Worker):
         ``max_array_size - 1``, so keep it below the site's ``MaxArraySize``). ``0``
         turns arrays off, and each job is then its own ``sbatch``. Arrays are also not
         used when ``sbatch_args`` set ``--output``, ``--error`` or ``--array``, and only
-        elements that reach the worker in the same scheduling pass are grouped.
+        the elements of one ``submit_many`` call (one round of the runner) are grouped.
     squeue_failures
         Consecutive failed ``squeue`` polls (non-zero exit, controller error or
         timeout) tolerated before the waiting jobs are failed. A failed poll is
@@ -52,13 +52,13 @@ class SlurmWorker(base.Worker):
 
     Notes
     -----
-    An array is submitted, and accepted or refused, as one request. On a partition whose
-    QOS limits the jobs a user may have submitted (``MaxSubmitPU``, which counts every
-    array task), an array larger than the limit is rejected whole
-    (``QOSMaxSubmitJobPerUserLimit``), where separate submissions would have had the
-    first ``MaxSubmitPU`` accepted. Set ``max_array_size`` at or below the site's
-    per-user submit limit, or to ``0``. There is no automatic fallback.
+    An array is accepted or refused as one request: on a partition whose QOS caps a user's
+    submitted jobs (``MaxSubmitPU``, counting every array task) a larger array is rejected
+    whole. Set ``max_array_size`` at or below that limit, or to ``0``.
     """
+
+    batches = True
+    reports_done = True
 
     _cmd = "sbatch"
     _requeue_states = ("TIMEOUT", "PREEMPTED", "NODE_FAIL", "BOOT_FAIL")
@@ -78,9 +78,6 @@ class SlurmWorker(base.Worker):
     _poller: ty.Any = attrs.field(default=None, init=False, repr=False)
     _poll_loop: ty.Any = attrs.field(default=None, init=False, repr=False)
     _waiters: list = attrs.field(factory=list, init=False, repr=False)
-    _pending: dict = attrs.field(factory=dict, init=False, repr=False)
-    _pending_loop: ty.Any = attrs.field(default=None, init=False, repr=False)
-    _flushes: set = attrs.field(factory=set, init=False, repr=False)
     _active: int = attrs.field(default=0, init=False, repr=False)
     _retired: list = attrs.field(factory=list, init=False, repr=False)
 
@@ -89,9 +86,6 @@ class SlurmWorker(base.Worker):
         "_poller",
         "_poll_loop",
         "_waiters",
-        "_pending",
-        "_pending_loop",
-        "_flushes",
         "_active",
         "_retired",
     )
@@ -106,10 +100,8 @@ class SlurmWorker(base.Worker):
     def __setstate__(self, state: dict[str, ty.Any]):
         """Set state for unpickling."""
         state["error"] = {}
-        state["_poller"] = state["_poll_loop"] = state["_pending_loop"] = None
+        state["_poller"] = state["_poll_loop"] = None
         state["_waiters"] = []
-        state["_pending"] = {}
-        state["_flushes"] = set()
         state["_active"] = 0
         state["_retired"] = []
         super().__setstate__(state)
@@ -200,11 +192,88 @@ class SlurmWorker(base.Worker):
         """Worker submission API."""
         self._active += 1
         try:
-            return await self._run(job, rerun)
+            jobid, error_file = await self._submit_single(job, rerun)
+            return await self._wait(job, jobid, error_file)
         finally:
-            self._active -= 1
-            if not self._active:  # the last job is gone: stop polling the queue
-                self._stop_poller()
+            self._release(1)
+
+    def _release(self, count):
+        self._active -= count
+        if not self._active:  # the last job is gone: stop polling the queue
+            self._stop_poller()
+
+    async def submit_many(self, jobs, done=None):
+        """Submit the jobs of one round together and wait for all of them.
+
+        The elements of a split node that share a name, resources, cache root and
+        rerun flag go to ``sbatch --array`` in chunks of at most ``max_array_size``; any
+        other job is its own ``sbatch``. Returns, in order, ``True`` for a job that
+        completed and the exception that ended it otherwise.
+
+        Parameters
+        ----------
+        jobs : Sequence[Job]
+            The jobs of the round
+        done : Callable[[Job, bool | Exception], None], optional
+            Called as each job ends, before the others have
+        """
+        jobs = list(jobs)
+        self._active += len(jobs)
+        try:
+            placed = await self._place(jobs)
+
+            async def finish(job, place):
+                try:
+                    if isinstance(place, Exception):
+                        raise place
+                    outcome = await self._wait(job, *place)
+                except Exception as exc:
+                    outcome = exc
+                if done is not None:
+                    done(job, outcome)
+                return outcome
+
+            return list(
+                await asyncio.gather(*(finish(j, p) for j, p in zip(jobs, placed)))
+            )
+        finally:
+            self._release(len(jobs))
+
+    async def _place(self, jobs):
+        """Submit the jobs; the (id, error file) of each, or the exception it met"""
+        groups: dict = {}
+        chunks = []
+        for i, job in enumerate(jobs):
+            if self._array_eligible(job):
+                key = (
+                    job.name,
+                    repr(job.resources),
+                    str(job.cache_root),
+                    bool(job.rerun),
+                )
+                groups.setdefault(key, []).append(i)
+            else:
+                chunks.append([i])
+        for indices in groups.values():
+            size = self.max_array_size
+            chunks += [indices[k : k + size] for k in range(0, len(indices), size)]
+
+        placed: list = [None] * len(jobs)
+
+        async def submit(indices):
+            chunk = [jobs[i] for i in indices]
+            try:
+                if len(chunk) == 1:
+                    results = [await self._submit_single(chunk[0], chunk[0].rerun)]
+                else:
+                    results = await self._submit_array(chunk, chunk[0].rerun)
+            except Exception as exc:
+                results = [exc] * len(chunk)
+            for i, result in zip(indices, results):
+                placed[i] = result
+
+        await asyncio.gather(*(submit(c) for c in chunks))
+        return placed
 
     def _stop_poller(self):
         poller, self._poller = self._poller, None
@@ -224,11 +293,8 @@ class SlurmWorker(base.Worker):
                     asyncio.gather(*retired, return_exceptions=True)
                 )
 
-    async def _run(self, job: "Job[base.TaskType]", rerun: bool = False) -> "Result":
-        if self._array_eligible(job):
-            jobid, error_file = await self._submit_grouped(job, rerun)
-        else:
-            jobid, error_file = await self._submit_single(job, rerun)
+    async def _wait(self, job, jobid, error_file):
+        """Poll a submitted job to its end, requeueing it within the budget"""
         self.error[jobid] = error_file
         requeues = 0
         # intermittent polling
@@ -325,46 +391,6 @@ class SlurmWorker(base.Worker):
             ):
                 return False
         return True
-
-    async def _submit_grouped(self, job, rerun):
-        """Queue ``job`` with the same-shaped jobs of this scheduling tick.
-
-        The jobs of one tick are submitted together after every coroutine already
-        scheduled has taken its first step, so the elements of a split node reach
-        here before the group is flushed.
-        """
-        loop = asyncio.get_running_loop()
-        if self._pending_loop is not loop:
-            self._pending, self._pending_loop = {}, loop
-        key = (job.name, repr(job.resources), str(job.cache_root), bool(rerun))
-        group = self._pending.setdefault(key, [])
-        future = loop.create_future()
-        group.append((job, future))
-        if len(group) == 1:
-            task = loop.create_task(self._flush_group(key, rerun))
-            self._flushes.add(task)
-            task.add_done_callback(self._flushes.discard)
-        return await future
-
-    async def _flush_group(self, key, rerun):
-        group = self._pending.pop(key, [])
-        size = self.max_array_size
-        for start in range(0, len(group), size):
-            chunk = group[start : start + size]
-            jobs = [job for job, _ in chunk]
-            try:
-                if len(jobs) == 1:
-                    results = [await self._submit_single(jobs[0], rerun)]
-                else:
-                    results = await self._submit_array(jobs, rerun)
-            except Exception as exc:
-                for _, future in chunk:
-                    if not future.done():
-                        future.set_exception(exc)
-                continue
-            for (_, future), result in zip(chunk, results):
-                if not future.done():
-                    future.set_result(result)
 
     async def _submit_array(self, jobs, rerun):
         """Submit ``jobs`` as one ``sbatch --array``; return (id, error file) per job.

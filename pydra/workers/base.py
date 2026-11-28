@@ -26,6 +26,10 @@ class Worker(metaclass=abc.ABCMeta):
     """A base class for execution of tasks."""
 
     loop: asyncio.AbstractEventLoop = None
+    batches: ty.ClassVar[bool] = False
+    """Whether the worker has ``submit_many(jobs)``, which places a round of jobs together"""
+    reports_done: ty.ClassVar[bool] = False
+    """Whether ``submit_many`` also takes ``done(job, outcome)``, called as each job ends"""
 
     def __getstate__(self) -> dict[str, ty.Any]:
         """Return state for pickling."""
