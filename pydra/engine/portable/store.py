@@ -124,7 +124,7 @@ _ERROR = "_error.json"
 _KEPT_ENTRY = "_entry"
 _OUTPUTS = "_outputs.pklz"
 _COMMITTED_FORMAT = "pydra-committed@1"
-_ATTEMPT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
+_ATTEMPT = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 RECORD_CAP = 1 << 20
 """Most bytes of a ``_committed.json`` that are read: its fields are a fixed set of names and
 digests, and the cap only bounds a hostile file. An ``_error.json`` is read whole."""
@@ -1982,14 +1982,26 @@ class PortableStore(ResultStore):
             if not path.is_absolute():
                 raise ValueError(f"work_dir must return an absolute path, got {path}")
             return path
+        address = f"{cdir_for(checksum)}/{fingerprint}".encode()
         if attempt == "resume":
-            address = f"{cdir_for(checksum)}/{fingerprint}".encode()
             name = _RESUME + hashlib.sha256(address).hexdigest()
+        elif "." in attempt and _ATTEMPT.fullmatch(attempt):
+            # an attempt allocated outside the runner, such as a pool's <pool id>.<g>, is unique
+            # per job only, so its directory is qualified by the job's address
+            name = f"{attempt}-{hashlib.sha256(address).hexdigest()[:24]}"
         elif _ATTEMPT.fullmatch(attempt):
             name = attempt
         else:
             raise ValueError(f"attempt {attempt!r} is not usable as a directory name")
         return Path(self.path) / _WORK / name
+
+    def work_path(self, checksum: str, fingerprint: str, attempt: str) -> Path:
+        """The work directory of ``attempt`` of the job at ``(checksum, fingerprint)``: a pure
+        function of the three (RFC 0003 section 5.4). An attempt allocated outside the runner,
+        such as a pool's ``<pool id>.<g>``, is unique per job only; the default layout qualifies
+        it by the job's address, and a ``work_dir`` function must use the address too.
+        """
+        return self._work_path(checksum, fingerprint, attempt)
 
     def work_dir(self, job: "Job") -> Path:
         """The directory ``job`` runs in and writes ``_committed.json``, ``_error.json``, its

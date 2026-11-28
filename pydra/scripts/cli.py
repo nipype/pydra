@@ -501,6 +501,50 @@ def pool_probe(root, attribute_delay):
     sys.exit(1 if why else 0)
 
 
+@pool.command("worker", context_settings=CONTEXT_SETTINGS)
+@click.option(
+    "--root",
+    required=True,
+    type=click.Path(exists=True, file_okay=False),
+    help="The pool directory.",
+)
+@click.option("--class", "cls", required=True, help="The worker class to serve.")
+@click.option(
+    "--settings",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="A JSON file of PoolSettings; default the defaults.",
+)
+@click.option(
+    "--provider",
+    multiple=True,
+    help="A provider as module:qualname, before the jobs' own and the entry points.",
+)
+@click.option(
+    "--substrate",
+    is_flag=True,
+    help="Started by a substrate: exit when no coordinator has been live for orphan_after_s.",
+)
+def pool_worker(root, cls, settings, provider, substrate):
+    """Run a warm worker of class CLS on the pool at ROOT until it is idle, orphaned or
+    stopped (RFC 0005 section 4.3). Exits 3 when its lease settings differ from the
+    pool's, 4 when the hardware does not match the class, 5 when it recycles."""
+    import logging
+
+    from pydra.workers.pool.settings import PoolSettings
+    from pydra.workers.pool.worker import run_worker
+
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
+    )
+    loaded = PoolSettings()
+    if settings is not None:
+        loaded = PoolSettings.from_json(json.loads(Path(settings).read_text()))
+    sys.exit(
+        run_worker(root, cls, providers=provider, settings=loaded, substrate=substrate)
+    )
+
+
 def _task_class(spec: str):
     module, sep, name = spec.partition(":")
     if not sep or not module or not name:
