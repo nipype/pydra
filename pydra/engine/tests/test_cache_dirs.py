@@ -21,12 +21,15 @@ def test_task_state_cachelocations(worker, tmp_path):
     cache_root2.mkdir()
 
     nn = FunAddTwo(a=3).split("a", a=[3, 5])
-    with Submitter(worker=worker, cache_root=cache_root) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root) as sub:
         sub(nn)
 
     nn2 = FunAddTwo(a=3).split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_root=cache_root2, readonly_caches=cache_root
+        worker=worker,
+        store="pickle",
+        cache_root=cache_root2,
+        readonly_caches=cache_root,
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results2.errors["error message"])
@@ -53,12 +56,15 @@ def test_task_state_cachelocations_forcererun(worker, tmp_path):
     cache_root2.mkdir()
 
     nn = FunAddTwo(a=3).split("a", a=[3, 5])
-    with Submitter(worker=worker, cache_root=cache_root) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root) as sub:
         sub(nn)
 
     nn2 = FunAddTwo(a=3).split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_root=cache_root2, readonly_caches=cache_root
+        worker=worker,
+        store="pickle",
+        cache_root=cache_root2,
+        readonly_caches=cache_root,
     ) as sub:
         results2 = sub(nn2, rerun=True)
 
@@ -88,12 +94,15 @@ def test_task_state_cachelocations_updated(worker, tmp_path):
     cache_root2.mkdir()
 
     nn = FunAddTwo().split("a", a=[3, 5])
-    with Submitter(worker=worker, cache_root=cache_root) as sub:
+    with Submitter(worker=worker, store="pickle", cache_root=cache_root) as sub:
         sub(nn)
 
     nn2 = FunAddTwo().split("a", a=[3, 5])
     with Submitter(
-        worker=worker, cache_root=cache_root2, readonly_caches=cache_root1
+        worker=worker,
+        store="pickle",
+        cache_root=cache_root2,
+        readonly_caches=cache_root1,
     ) as sub:
         results2 = sub(nn2)
     assert not results2.errored, "\n".join(results2.errors["error message"])

@@ -123,6 +123,15 @@ def submitter(tmp_path):
 
 
 @pytest.fixture
+def pickle_submitter(tmp_path):
+    """Over a `PickleStore`, whose success records the test removes"""
+    with Submitter(
+        worker="debug", cache_root=tmp_path / "cache", store="pickle"
+    ) as sub:
+        yield sub
+
+
+@pytest.fixture
 def memory(tmp_path):
     return MemoryStore(tmp_path / "mem")
 
@@ -312,7 +321,8 @@ def test_drive_holds_no_checksum_table():
 
 
 @pytest.mark.parametrize("path", ["success-record", "under-the-lease"])
-def test_workflow_stored_settled(submitter, path):
+def test_workflow_stored_settled(pickle_submitter, path):
+    submitter = pickle_submitter
     submitter(Outer(x=1))
     if path == "under-the-lease":
         shutil.rmtree(Path(submitter.cache_root) / SUCCESS_DIR)
@@ -530,7 +540,8 @@ def test_upstream_maps_fields(submitter):
     assert runner.upstream(a1) == {}
 
 
-def test_lookup_before_dispatch_hides_hits(submitter):
+def test_lookup_before_dispatch_hides_hits(pickle_submitter):
+    submitter = pickle_submitter
     drive_by_hand(runner_for(submitter, Chain(x=1)), lambda job: job.run())
     shutil.rmtree(Path(submitter.cache_root) / SUCCESS_DIR)  # stored, without records
     plain = runner_for(submitter, Chain(x=1)).ready()
@@ -818,6 +829,8 @@ def test_read_back_reads_a_settled_result():
     found = object()
 
     class Reported:
+        _has_work_dir = True
+
         def result(self, settled=False):
             calls.append(settled)
             return found

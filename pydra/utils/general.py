@@ -64,6 +64,14 @@ def default_run_cache_root() -> Path:
     return user_cache_root() / "run-cache"
 
 
+def default_store_root() -> Path:
+    """The root of the default `~pydra.engine.portable.store.PortableStore` of a `Submitter`
+    given no ``cache_root``, ``store`` within `user_cache_root`. It is not the run cache,
+    which holds `~pydra.engine.store.PickleStore` slots that a portable root does not admit
+    """
+    return user_cache_root() / "store"
+
+
 CACHE_FILE_MODE = 0o644
 """Mode requested for cache files; the process umask is applied on top, so the
 result is ``0o644 & ~umask``"""

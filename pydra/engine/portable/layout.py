@@ -343,12 +343,21 @@ def _publish(root: StorageDir, tmp: str) -> bool:
     return True
 
 
+# the names a PickleStore cache holds: its success records and its ``<kind>-<checksum>`` slots
+_PICKLE_CACHE = re.compile(r"\.pydra-succeeded|[a-z][a-z0-9_]*-[0-9a-f]{32}")
+
+
 def _legacy(root: StorageDir, others: list[str]) -> StoreUnavailable:
+    listed = f"{', '.join(sorted(others)[:3])}{', ...' if len(others) > 3 else ''}"
+    if any(_PICKLE_CACHE.fullmatch(name) for name in others):
+        return LegacyLayout(
+            f"{root.path} is a PickleStore cache (it holds {listed} and no {HEADER_NAME}): "
+            'pass store="pickle" to keep using it, or give an empty directory as the '
+            "cache_root of the portable store"
+        )
     return LegacyLayout(
-        f"{root.path} has names ({', '.join(sorted(others)[:3])}"
-        f"{', ...' if len(others) > 3 else ''}) but no {HEADER_NAME}: it is a PickleStore "
-        "cache or another tool's directory; migrate it (RFC 0003 section 8). A new root "
-        "must be an empty directory"
+        f"{root.path} holds {listed} and no {HEADER_NAME}: the root of a portable store "
+        "must be an empty directory or a pydra store"
     )
 
 

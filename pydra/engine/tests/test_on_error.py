@@ -362,7 +362,9 @@ def test_on_error_unresolvable_input_fail_fast(worker, tmp_path):
     marks = tmp_path / "marks"
     marks.mkdir()
     task = BadInput(xs=[0, 1, 2], marks=str(marks))
-    with Submitter(worker=worker, on_error="fail_fast", cache_root=tmp_path) as sub:
+    with Submitter(
+        worker=worker, on_error="fail_fast", cache_root=tmp_path / "cache"
+    ) as sub:
         with pytest.raises(WorkflowError, match=r"B\[1,0\]"):
             sub(task, raise_errors=True)
 

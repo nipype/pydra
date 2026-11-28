@@ -32,7 +32,9 @@ GPU = ComputeResources(gpus=1, tags=("gpu",))
 
 @pytest.fixture
 def submitter(tmp_path):
-    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+    with Submitter(
+        worker="debug", store="pickle", cache_root=tmp_path / "cache"
+    ) as sub:
         yield sub
 
 
@@ -289,7 +291,9 @@ def stale_run(tmp_path, do_plan, *, errored_slot, rerun):
     """Siblings(xs=[1, 2]) stored; A[1] is handed out and held while the run goes on; plan()
     is (or is not) called; A[1] then completes. Returns what B read and how the run ended.
     """
-    with Submitter(worker="debug", cache_root=tmp_path / f"c{do_plan}") as sub:
+    with Submitter(
+        worker="debug", store="pickle", cache_root=tmp_path / f"c{do_plan}"
+    ) as sub:
         sub(Siblings(xs=[1, 2]))
         runner = runner_for(sub, Siblings(xs=[1, 2]), rerun=rerun)
         if errored_slot:  # an earlier attempt at A[1] failed
@@ -527,7 +531,7 @@ def test_plan_defaults_executors_to_the_submitters_workers(tmp_path):
 
 
 def test_plan_counts_lookups_on_a_pickle_store_with_read_only_caches(tmp_path):
-    with Submitter(worker="debug", cache_root=tmp_path / "old") as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=tmp_path / "old") as sub:
         sub(Chain(x=1))
     store = PickleStore(tmp_path / "new", readonly_caches=[tmp_path / "old"])
     with Submitter(worker="debug", store=store) as sub:

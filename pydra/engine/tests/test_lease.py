@@ -595,7 +595,7 @@ def TakenOverMidRun(root: str) -> int:
 @pytest.mark.timeout(60)
 def test_suspended_holder_does_not_overwrite_the_takers_result(tmp_path):
     root = tmp_path / "cache"
-    with Submitter(worker="debug", cache_root=root) as sub:
+    with Submitter(worker="debug", store="pickle", cache_root=root) as sub:
         with pytest.raises(Exception) as excinfo:
             sub(TakenOverMidRun(root=str(root)), raise_errors=True)
     assert isinstance(excinfo.value, LeaseLost)

@@ -517,6 +517,13 @@ class Job(ty.Generic[TaskType]):
             return self
         return self if self.persist_pickle or result.errored else None
 
+    def _take_attempt(self) -> None:
+        """Give a job that is run without having been handed out by a runner (``job.run()``
+        called directly) an attempt of its own, so that under a store with work directories
+        it has one to run in."""
+        if self.attempt is None and self._has_work_dir:
+            self.attempt = uuid4().hex
+
     def _acquire(self):
         """The lease guarding the job; a resumable job's work directory is stable across
         runs, so a store with work directories guards it whatever its de-duplication."""
@@ -531,13 +538,27 @@ class Job(ty.Generic[TaskType]):
         the job runs), anything else clears the mark. A work directory's ``_committed.json``
         is the outcome of an earlier run and is never served to a new one."""
         if self.store.finds:
-            found = self.store.find(self)
-            self.verify = found.candidate
-            result = found.result
+            result = self.accept_found(self.store.find(self), errored=True)
             if result is not None:  # a reader in another process finds what was served
                 self.store.record_served(self, result)
             return result
         return self.result()
+
+    def accept_found(self, found: ty.Any, *, errored: bool = False) -> Result | None:
+        """Take what the store's ``find`` answered for the job (None: the store could not
+        be read): the candidate of a `Verify` as `verify`, cleared otherwise, and the
+        result of a `Hit`, keeping its `Committed`; an errored result only with
+        ``errored``. None when there is no result to serve."""
+        if found is None:
+            self.verify = None
+            return None
+        self.verify = found.candidate
+        result = found.result
+        if result is None or (result.errored and not errored):
+            return None
+        if result.committed is not None:
+            self.committed = result.committed
+        return result
 
     def _begin_rerun(self, rerun: bool) -> None:
         """Under a store that replaces a stored result on a rerun (`PortableStore`), mark the
@@ -666,6 +687,7 @@ class Job(ty.Generic[TaskType]):
 
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
+        self._take_attempt()
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         with lease:
@@ -749,6 +771,7 @@ class Job(ty.Generic[TaskType]):
         """
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
+        self._take_attempt()
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         async with lease:
@@ -1055,6 +1078,7 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
         raise
 
     portable = job._has_work_dir
+    job._take_attempt()  # a job pickled before a runner handed it out
     resultfile = job.cache_dir / "_result.pklz"
     try:
         if job.is_async:
