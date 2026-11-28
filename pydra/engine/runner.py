@@ -28,6 +28,7 @@ from pydra.utils.general import attrs_values
 from pydra.engine.lazy import LazyField, LazyOutField
 from pathlib import Path
 from pydra.engine.job import Job
+from pydra.engine.resident import UnregisteredProvider
 from pydra.engine.absent import (
     NOT_ROUTED,
     WHOLE,
@@ -1104,7 +1105,7 @@ class NodeExecution(ty.Generic[TaskType]):
                 return
             self.queued[index] = job
             job._awaiting_run = True
-        except GateTypeError:
+        except (UnregisteredProvider, GateTypeError):
             raise  # a wiring error, not an error of the element
         except Exception as exc:
             if self.is_partial:

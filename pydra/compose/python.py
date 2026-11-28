@@ -274,6 +274,8 @@ class PythonTask(base.Task[PythonOutputsType]):
         # Prepare the inputs to the function
         inputs = asdict(self)
         del inputs["function"]
+        # A provided field is handed the state its provider loaded from the spec
+        inputs.update(getattr(job, "provided_values", None) or {})
         # Run the actual function
         returned = self.function(**inputs)
         # Collect the outputs and save them into the job.return_values dictionary

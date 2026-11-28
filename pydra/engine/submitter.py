@@ -150,6 +150,7 @@ def check_identity_marker(root: Path) -> None:
 
 if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
+    from pydra.engine.resident import Provider, ResidentSet
     from pydra.engine.hooks import TaskHooks
     from pydra.environments.base import Environment
 
@@ -319,6 +320,11 @@ class Submitter:
         image id or a ``.sif`` content digest, or Lmod modules that cannot be resolved to
         full names: "best-effort" (default) runs the reference as written and the result
         is used by this process only, "require" raises ``ImageResolutionError``
+    providers : iterable of Provider, optional
+        Providers of the task fields marked ``provided`` (see
+        :mod:`pydra.engine.resident`), besides those registered under the
+        ``pydra.providers`` entry point group. Under ``debug`` loaded state is reused by
+        later calls of the submitter; under ``cf`` each process holds its own
     **kwargs : dict
         Keyword arguments to pass on to the worker initialisation
     """
@@ -347,6 +353,8 @@ class Submitter:
 
     ON_ERROR_MODES = ty.get_args(OnError)
     STORE_NAMES = ("portable", "pickle")
+    # a copy unpickled in a worker process, which holds one resident set
+    _worker_copy = False
 
     def __init__(
         self,
@@ -369,6 +377,7 @@ class Submitter:
         telemetry: bool = True,
         chdir: bool = True,
         resolve_images: ty.Literal["best-effort", "require"] = "best-effort",
+        providers: "ty.Iterable[Provider] | None" = None,
         **kwargs,
     ):
 
@@ -395,6 +404,8 @@ class Submitter:
         self.resolve_images = resolve_images
         self._resolved_refs: dict = {}  # environment references, resolved once per run
         self.chdir = chdir
+        self.providers = tuple(providers) if providers is not None else ()
+        self._resident_set = None
         self.telemetry = telemetry
         if telemetry:
             Job.check_etelemetry()
@@ -591,6 +602,9 @@ class Submitter:
             )
 
         task._check_rules()
+        from pydra.engine.resident import check_task
+
+        check_task(task, self)  # a wiring error is raised before anything runs
         if isinstance(self.store, PickleStore):
             check_identity_marker(self.store.cache_root)
         # If the outer job is split, create an implicit workflow to hold the split nodes
@@ -739,16 +753,29 @@ class Submitter:
         else:
             worker.run(job, rerun=rerun)
 
+    def resident_set(self) -> "ResidentSet":
+        """The set of resident state of this submitter, created on first use"""
+        if self._resident_set is None:
+            from pydra.engine.resident import ResidentSet
+
+            self._resident_set = ResidentSet()
+        return self._resident_set
+
     def __getstate__(self):
         state = self.__dict__.copy()
         # Remove the unpicklable entries or those that should not be pickled
         # When unpickled (in another process) the submitter can't be called
         state["loop"] = None
+        state["_resident_set"] = None
         state["_sync_pool"] = None
         return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        self.__dict__.setdefault("providers", ())
+        self.__dict__.setdefault("_resident_set", None)
+        # an unpickled submitter lives in a worker process, which holds one set
+        self._worker_copy = True
         # Restore the loop and workers
         self.loop = get_open_loop()
         for worker in self.workers.values():
@@ -929,6 +956,12 @@ class Submitter:
         if self._sync_pool is not None:
             self._sync_pool.shutdown()
             self._sync_pool = None
+        if self._resident_set is not None:
+            try:
+                self._resident_set.close()
+            except Exception as e:
+                errors.append(e)
+            self._resident_set = None
         for worker in {id(w): w for w in self.workers.values()}.values():
             try:
                 worker.close()
