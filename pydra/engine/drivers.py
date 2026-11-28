@@ -150,6 +150,7 @@ async def drive(
     for executor in executors.values():
         executor.bind(report)
     runner.release_off_thread()
+    runner.read_off_thread(lambda: loop.call_soon_threadsafe(progressed.set))
     try:
         while True:
             rnd = runner.ready()
@@ -173,11 +174,17 @@ async def drive(
                 rnd.settled or rnd.unrunnable or rnd.absent_nodes or rnd.loops
             ) and not rnd.dispatch:
                 continue  # their readers may be ready now
-            if not in_flight and not rnd.dispatch and rnd.retry_after is None:
+            reading = runner.reading
+            if (
+                not in_flight
+                and not rnd.dispatch
+                and rnd.retry_after is None
+                and not reading
+            ):
                 raise RuntimeError(
                     runner.stuck() or "Nothing can progress, but the run is not done"
                 )
-            if in_flight or rnd.retry_after is not None:
+            if in_flight or rnd.retry_after is not None or reading:
                 # the next outcome, or the next attempt at a workflow lease; no timeout
                 # context is entered, which needs a current task (none under
                 # nest_asyncio)

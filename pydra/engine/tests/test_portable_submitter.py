@@ -444,10 +444,149 @@ def test_ready_find_miss_costs_no_find(tmp_path, monkeypatch):
         assert calls == [("A", {})]
 
 
+def test_a_hit_is_read_off_the_event_loop(tmp_path, monkeypatch):
+    """Under the asynchronous driver a hit's read and verification run on a helper
+    thread: a read that waits for the loop to run a coroutine three times finishes, which
+    it could not if it held the loop (it gives up, bounded, and the test fails)."""
+    from pydra.engine.drivers import drive
+    from pydra.workers.debug import DebugWorker
+
+    store = make(tmp_path)
+    _populate(tmp_path, store)
+    released = threading.Event()
+    gave_up, threads = [], []
+    real = store.find
+
+    def slow_find(job, **kw):
+        threads.append(threading.current_thread())
+        if not released.wait(10):
+            gave_up.append(job.name)
+        return real(job, **kw)
+
+    monkeypatch.setattr(store, "find", slow_find)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = GraphRunner(Two(x=1), store, on_error="raise_at_end", submitter=sub)
+
+        async def main():
+            ticks = 0
+
+            async def ticker():
+                nonlocal ticks
+                while not released.is_set():
+                    ticks += 1
+                    if ticks >= 3:
+                        released.set()
+                    await asyncio.sleep(0)
+
+            task = asyncio.ensure_future(ticker())
+            await drive(
+                runner,
+                {"default": WorkerExecutor(DebugWorker())},
+                lambda job: "default",
+                on_error="raise_at_end",
+            )
+            await task
+            return threading.current_thread()
+
+        loop_thread = asyncio.run(main())
+    assert gave_up == [] and loop_thread not in threads
+    assert runner.done and not runner.failed
+    assert runner.exec_graph["B"].job(None).result().outputs.out == 3
+
+
 @workflow.define
 def Fan(xs: list[int]) -> list[int]:
     a = workflow.add(Add1().split(x=xs), name="A")
     return a.out
+
+
+class CountingPortable(PortableStore):
+    """Counts its existence checks and finds; ``present_always`` sends every job to a read
+    off the thread"""
+
+    present_always = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.presents = self.finds_read = 0
+
+    def present(self, job):
+        self.presents += 1
+        return True if self.present_always else super().present(job)
+
+    def find(self, job, **kw):
+        self.finds_read += 1
+        return super().find(job, **kw)
+
+
+@pytest.mark.parametrize("present_always", [False, True])
+@pytest.mark.parametrize("n", [20, 80])
+def test_a_job_held_back_by_the_limit_is_not_read_again_off_the_thread(
+    tmp_path, n, present_always
+):
+    """A job read off the thread with nothing to serve (its address empty, or a Miss) is
+    not read again while ``ready(limit)`` holds it back"""
+    store = CountingPortable(tmp_path / "root", trust=TRUST)
+    store.present_always = present_always
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = GraphRunner(
+            Fan(xs=list(range(n))), store, on_error="raise_at_end", submitter=sub
+        )
+        runner.read_off_thread()
+        while not runner.done:
+            for job in runner.ready(1).dispatch:
+                runner.complete(job, job.run())
+            for future in list(runner._reading.values()):
+                future.result(timeout=30)
+        runner.close()
+    assert not runner.failed
+    assert store.presents <= 2 * n and store.finds_read <= 2 * n
+
+
+class RaisesOnTheReadThread(Scripted):
+    """A hook that fails while the runner reads off its thread, and only there."""
+
+    def verdict(self, candidate, current, task):
+        if threading.current_thread().name.startswith("pydra-store-read"):
+            raise RuntimeError("the hook failed")
+        return super().verdict(candidate, current, task)
+
+
+@pytest.mark.parametrize("hook", ["verify", "raises"])
+def test_a_job_read_without_a_hit_is_handed_out_under_a_limit(tmp_path, hook):
+    """Jobs whose off-thread read serves nothing (a Verify, a hook that raises) are
+    handed out even when a driver's ``ready(limit)`` holds some of them back for later
+    rounds."""
+    from pydra.engine.executor import InlineExecutor
+    from pydra.workers.debug import DebugWorker
+
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        assert sub(Fan(xs=[1, 2, 3])).outputs.out == [2, 3, 4]
+    reuse = Scripted({None: Verdict.VERIFY}) if hook == "verify" else None
+    reuse = reuse or RaisesOnTheReadThread()
+    store = PortableStore(tmp_path / "cache", trust="private", pickle=True, reuse=reuse)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "cache") as sub:
+        runner = GraphRunner(
+            Fan(xs=[1, 2, 3]), store, on_error="raise_at_end", submitter=sub
+        )
+        read = threading.Event()
+        runner.read_off_thread(read.set)
+        executor = InlineExecutor(DebugWorker())
+        executor.bind(runner.complete)
+        try:
+            while not runner.done:
+                rnd = runner.ready(1)
+                for job in rnd.dispatch:
+                    executor.submit([job])
+                if not rnd.dispatch and not rnd.settled:
+                    assert runner.reading, runner.stuck()
+                    assert read.wait(60)  # a bound only
+                    read.clear()
+        finally:
+            runner.close()
+    assert not runner.failed
+    node = runner.exec_graph["A"]
+    assert [node.job(i).result().outputs.out for i in range(3)] == [2, 3, 4]
 
 
 @pytest.mark.parametrize("task", ["leaf", "workflow"])
