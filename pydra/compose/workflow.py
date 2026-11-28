@@ -360,8 +360,6 @@ class WorkflowTask(base.Task[WorkflowOutputsType]):
 
     RESERVED_FIELD_NAMES = base.Task.RESERVED_FIELD_NAMES + ("construct",)
 
-    _constructed = attrs.field(default=None, init=False, repr=False, eq=False)
-
     def _run(self, job: "Job[WorkflowTask]", rerun: bool) -> None:
         """Run the workflow."""
         job.submitter.expand_workflow(job, rerun)
@@ -373,10 +371,7 @@ class WorkflowTask(base.Task[WorkflowOutputsType]):
     def construct(self) -> "Workflow":
         from pydra.engine.workflow import Workflow
 
-        if self._constructed is not None:
-            return self._constructed
-        self._constructed = Workflow.construct(self)
-        return self._constructed
+        return Workflow.construct(self)
 
 
 # Alias WorkflowTask to Task so we can refer to it as workflow.Task
