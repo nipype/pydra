@@ -4,7 +4,7 @@ import asyncio
 import typing as ty
 import attrs
 from pydra.engine.lease import LeaseSettings
-from pydra.engine.runner import Failed
+from pydra.engine.runner import Failed, NotRun
 from pydra.utils.general import is_workflow
 from pydra.utils.retry import Backoff
 
@@ -41,9 +41,13 @@ class Handle:
 class Executor(ty.Protocol):
     """Where the jobs a runner releases run
 
-    Every job submitted, and not cancelled, is reported once through the callable given to
-    :meth:`bind`, as a ``Result`` or :class:`~pydra.engine.runner.Failed`. The callable
-    may be invoked from any thread.
+    Every job submitted is reported exactly once through the callable given to
+    :meth:`bind`, as a ``Result``, a :class:`~pydra.engine.runner.Failed` or a
+    :class:`~pydra.engine.runner.NotRun` (a job the worker cancelled). The callable may
+    be invoked from any thread. :meth:`cancel` is called only as the run ends, after
+    ``runner.close()``: the jobs of a cancelled handle are not reported, and are recorded
+    ``"stopped"`` where their workflow failed. Cancelling in the middle of a run is not
+    supported.
     """
 
     batches: bool
@@ -59,7 +63,8 @@ class Executor(ty.Protocol):
         """Start the jobs; an executor with ``batches = False`` gets one per call"""
 
     def cancel(self, handle: Handle) -> None:
-        """Stop the jobs of the handle that have not finished"""
+        """Stop the jobs of the handle that have not finished, as the run ends; they are
+        not reported"""
 
     def close(self) -> None:
         """Release what the executor holds"""
@@ -95,7 +100,8 @@ class InlineExecutor:
 
     def submit(self, jobs: "ty.Sequence[Job]") -> Handle:
         """Run the jobs in order and report each outcome; an exception a job raises is
-        reported as :class:`~pydra.engine.runner.Failed` and does not stop the rest"""
+        reported as :class:`~pydra.engine.runner.Failed` and does not stop the rest, a
+        ``CancelledError`` the worker raises as :class:`~pydra.engine.runner.NotRun`"""
         if self._report is None:
             raise RuntimeError("bind() a report callable before submitting jobs")
         handle = Handle(self, tuple(jobs), set(jobs))
@@ -103,6 +109,8 @@ class InlineExecutor:
             try:
                 worker = self.worker_for(job) if self.worker_for else self.worker
                 outcome: "Outcome" = worker.run(job, rerun=job.rerun)
+            except asyncio.CancelledError as exc:
+                outcome = cancelled(exc)
             except Exception as exc:
                 outcome = Failed(exc)
             handle.open.discard(job)
@@ -115,6 +123,11 @@ class InlineExecutor:
 
     def close(self) -> None:
         """Nothing to release"""
+
+
+def cancelled(exc: BaseException) -> NotRun:
+    """The outcome of a job its worker cancelled: not run, and not held by infrastructure"""
+    return NotRun(reason=f"cancelled by its worker: {exc!r}", held=False)
 
 
 def no_result_diagnosis(job: "Job") -> str:
@@ -183,7 +196,8 @@ class WorkerExecutor:
         self._reports_done = worker.reports_done
         self._report: "ty.Callable[[Job, Outcome], None] | None" = None
         self._tasks: "dict[Job, asyncio.Task]" = {}
-        self._submissions: "dict[Handle, asyncio.Task]" = {}
+        # the submit_many calls of each handle
+        self._submissions: "dict[Handle, set[asyncio.Task]]" = {}
         self._pending: "dict[Job, asyncio.Future]" = {}
 
     def bind(self, report: "ty.Callable[[Job, Outcome], None]") -> None:
@@ -201,21 +215,22 @@ class WorkerExecutor:
             for job in placed:
                 self._pending[job] = loop.create_future()
             if placed:
-                self._submissions[handle] = loop.create_task(
-                    self._submit_many(placed, handle)
-                )
+                task = loop.create_task(self._submit_many(placed, handle))
+                self._submissions.setdefault(handle, set()).add(task)
         for job in handle.jobs:
             task = loop.create_task(self._run(job, handle), name=job.checksum)
             self._tasks[job] = task
         return handle
 
     async def _submit_many(self, jobs: "list[Job]", handle: Handle) -> None:
-        """Give the worker the round; each job's future is set as the job ends"""
+        """Give the worker a round; each job's future is set as the job ends"""
 
-        def ended(job: "Job", outcome: "bool | Exception") -> None:
+        def ended(job: "Job", outcome: "bool | BaseException") -> None:
             future = self._pending.get(job)
             if future is not None and not future.done():
-                if isinstance(outcome, Exception):
+                if isinstance(outcome, asyncio.CancelledError):
+                    future.set_result(cancelled(outcome))  # the worker cancelled it
+                elif isinstance(outcome, Exception):
                     future.set_exception(outcome)
                 else:
                     future.set_result(outcome)
@@ -230,19 +245,32 @@ class WorkerExecutor:
                     f"{type(self.worker).__name__}.submit_many returned "
                     f"{len(outcomes)} outcomes for {len(jobs)} jobs"
                 )
-        except asyncio.CancelledError:
-            raise
+        except asyncio.CancelledError as exc:
+            task = asyncio.current_task()
+            if task not in self._submissions.get(handle, ()) or (
+                task is not None and task.cancelling()
+            ):
+                self._forget_submission(handle, task)
+                raise  # cancelled by cancel() or by the loop: not reported
+            outcomes = [exc] * len(jobs)  # raised by the worker: its jobs did not run
         except Exception as exc:
             outcomes = [exc] * len(jobs)
         finally:
-            self._submissions.pop(handle, None)
+            self._forget_submission(handle, asyncio.current_task())
         for job, outcome in zip(jobs, outcomes):
             ended(job, outcome)
 
+    def _forget_submission(self, handle: Handle, task) -> None:
+        tasks = self._submissions.get(handle)
+        if tasks is not None:
+            tasks.discard(task)
+            if not tasks:
+                del self._submissions[handle]
+
     def cancel(self, handle: Handle) -> None:
-        """Cancel the jobs of the handle that are still running; they are not reported"""
-        submission = self._submissions.pop(handle, None)
-        if submission is not None:
+        """Cancel the jobs of the handle that are still running; they are not reported
+        (the driver cancels only as the run ends)"""
+        for submission in self._submissions.pop(handle, ()):
             submission.cancel()
         for job in list(handle.open):
             task = self._tasks.pop(job, None)
@@ -261,7 +289,7 @@ class WorkerExecutor:
             task = asyncio.current_task()
             if job not in handle.open or (task is not None and task.cancelling()):
                 raise  # cancelled by cancel() or by the loop: not reported
-            outcome = Failed(exc)  # raised by the worker: the job's outcome
+            outcome = cancelled(exc)  # raised by the worker: not run
         except Exception as exc:
             outcome = Failed(exc)
         self._tasks.pop(job, None)
@@ -291,7 +319,9 @@ class WorkerExecutor:
     async def _read_back(self, job: "Job") -> "Outcome":
         tries = READ_BACK.tries(self.visibility_timeout)
         while True:
-            result = job.result()
+            # reported complete: under a store with work directories a result not found
+            # is an errored one naming the work directory (RFC 0003 section 7.2)
+            result = job.result(settled=True)
             if result is not None:
                 return result
             wait = tries.next_wait()

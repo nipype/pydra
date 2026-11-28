@@ -93,9 +93,7 @@ class Job(ty.Generic[TaskType]):
     # The names of the nested workflows that hold the job, outermost first, with the
     # element's index where one is split; set by the graph runner
     workflow_path: tuple[str, ...] = ()
-    # The id of this attempt at the job, set by the graph runner when it starts to
-    # expand a workflow job and by ``Submitter`` for its outer job; "resume" if the
-    # job can resume
+    # The id of this attempt at the job (see the attribute's docstring below)
     attempt: str | None = None
     # Whether the audit of a workflow job was started by the runner, so that it is
     # finalised with the job
@@ -106,9 +104,12 @@ class Job(ty.Generic[TaskType]):
     _run_start_time: datetime | None
 
     attempt: str | None = None
-    """The id the runner gives this job when it hands it out (RFC 0003 section 5.4), which
-    names its work directory under a store that has ``work_dir``. A task that can resume
-    uses ``"resume"``. Assigned by the runner; None for a job never handed out."""
+    """The id of this attempt at the job (RFC 0003 section 5.4): a fresh UUID each time the
+    runner hands it out (again after ``retry``), given to a workflow job when its expansion
+    starts and to ``Submitter``'s outer job when it is created. Under a store that has
+    ``work_dir`` it names the job's work directory, except for a task that can resume, whose
+    directory is the stable ``work/resume-<hash>`` of its address; its outcome files there
+    carry the attempt. None for a job never handed out (settled or stored)."""
     committed: "Committed | None" = None
     """What this process's `PortableStore` publish returned for the job."""
 

@@ -368,7 +368,8 @@ class ResultStore(ty.Protocol):
 
     A job is identified by its checksum and the context it runs in. Each pair has
     its own slot, so results recorded in different contexts never overwrite each other.
-    An implementation subclasses it to inherit the defaults of its optional members.
+    An implementation subclasses it to inherit the defaults of its optional members,
+    which the graph runner calls directly.
     """
 
     identity: "StoreIdentity | None" = None
@@ -432,6 +433,10 @@ class ResultStore(ty.Protocol):
         """The result ``job``'s run committed as ``committed``; None by default: the result
         the run returned is the one to read"""
         return None
+
+    def forget_committed(self, job: "Job") -> None:
+        """Drop what the store keeps of ``job``'s outcome for readers in other processes,
+        now that the runner holds it; by default it keeps nothing"""
 
     def read_result(self, job: "Job", *, settled: bool = False) -> Result | None:
         """The result of ``job``, None if there is none; ``settled``: one is expected (a
