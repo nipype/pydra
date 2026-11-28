@@ -13,7 +13,7 @@ from pathlib import Path
 from pydra.engine.context import RECORD
 from pydra.engine.lease import DirectoryLease, Lease, LeaseLost, LeaseSettings
 from pydra.utils.storage import CLOCK_PREFIX, PROBE_PREFIX
-from pydra.engine.result import Result, load_result, save
+from pydra.engine.result import Result, load_result, record_error, save
 from pydra.utils.general import CACHE_FILE_MODE, ensure_list, atomic_write
 from pydra.utils.retry import Backoff
 
@@ -294,7 +294,9 @@ def check_declared_code(
     Returns the stored contexts it read, to be passed to ``lookup`` as ``stored``, or
     None if it read none."""
     code = context.get("code")
-    if not code or (store.cache_dir(checksum, context) / CONTEXT_FILE).exists():
+    if not code:
+        return None
+    if store.holds(checksum, context) or not store.enumerates_contexts:
         return None
     stored = list(store.stored_contexts(checksum))
     moved: dict[str, set[str]] = {}
@@ -303,17 +305,7 @@ def check_declared_code(
             moved.setdefault(identity, set()).add(digest)
     if not moved:
         return stored
-    reuse = getattr(store, "reuse", None)
-    first = next(
-        (
-            other
-            for _, other in stored
-            if reuse is not None
-            and type(reuse) is not ExactReuse
-            and reuse.accept(other, context, task)
-        ),
-        None,
-    )
+    first = store.declared_code_reuse(stored, context, task)
     reused = first is not None and bool(_moved(first, code))
     name = type(task).__name__ if task is not None else "A task"
     changes = "; ".join(
@@ -381,6 +373,83 @@ class ResultStore(ty.Protocol):
 
     identity: "StoreIdentity | None" = None
     """The identity that supplies a job's context; None: `job_context`"""
+    reuse: "ReusePolicy | None" = None
+    """The policy by which `lookup` reuses a result of another context; None: none"""
+    enumerates_contexts: ty.ClassVar[bool] = True
+    """Whether `stored_contexts` lists every context a checksum is stored under"""
+    has_work_dirs: ty.ClassVar[bool] = False
+    """Whether jobs run in work directories of their own (`work_dir`), apart from the
+    entries the store commits"""
+
+    def work_dir(self, job: "Job") -> Path:
+        """The directory ``job`` runs in, under a store with `has_work_dirs`"""
+        raise NotImplementedError(f"{type(self).__name__} runs jobs in their slots")
+
+    def begin_run(self, job: "Job") -> None:
+        """Prepare the directory ``job`` runs in (``job.cache_dir``): by default it is made,
+        and emptied first unless the job resumes"""
+        if not job.can_resume and job.cache_dir.exists():
+            remove_from_cache(job.cache_dir)
+        job.cache_dir.mkdir(parents=True, exist_ok=job.can_resume)
+
+    def error_file(self, job: "Job") -> Path:
+        """Where a failure of ``job`` is recorded: by default ``_error.pklz`` in its
+        directory"""
+        return job.cache_dir / "_error.pklz"
+
+    def record_error(
+        self, job: "Job", error: ty.Any, exception: BaseException | None = None
+    ) -> Path:
+        """Record ``error`` (a formatted traceback) and ``exception`` as the failure of
+        ``job``; the file written (`error_file`)"""
+        return record_error(job.cache_dir, error=error, exception=exception)
+
+    def audit_dir(self, job: "Job") -> Path | None:
+        """Where ``job``'s audit messages and resource logs go; None: its own directory"""
+        return None
+
+    def make_audit_dir(self, job: "Job") -> Path | None:
+        """Make `audit_dir` for ``job`` and return it; None when it has none"""
+        return None
+
+    def read_own(self, job: "Job") -> Result | None:
+        """The stored result of ``job`` itself, read under its lease; by default `lookup`"""
+        return self.lookup(job.checksum, job.context, task=job.task)
+
+    def record_served(self, job: "Job", result: Result) -> None:
+        """Note that ``result``, found in the store, was served to ``job``, for readers in
+        other processes; by default nothing is noted"""
+
+    def read_committed(self, job: "Job", committed: ty.Any) -> Result | None:
+        """The result ``job``'s run committed as ``committed``; None by default: the result
+        the run returned is the one to read"""
+        return None
+
+    def read_result(self, job: "Job", *, settled: bool = False) -> Result | None:
+        """The result of ``job``, None if there is none; ``settled``: one is expected (a
+        store with work directories may wait for it). By default `lookup`."""
+        return self.lookup(job.checksum, job.context, task=job.task)
+
+    def withdraw_success(self, lease: Lease) -> None:
+        """Remove the success record of the job held under ``lease`` before its slot is
+        rewritten; a store without records has none to remove"""
+
+    def holds(self, checksum: str, context: Context) -> bool:
+        """Whether a result is stored for ``checksum`` in ``context`` itself"""
+        return (self.cache_dir(checksum, context) / CONTEXT_FILE).exists()
+
+    def declared_code_reuse(
+        self,
+        stored: "list[tuple[Path, Context]]",
+        context: Context,
+        task: "Task | None",
+    ) -> "Context | None":
+        """The first of the ``stored`` contexts that ``lookup`` would reuse for ``context``,
+        or None"""
+        reuse = self.reuse
+        if reuse is None or type(reuse) is ExactReuse:
+            return None
+        return next((o for _, o in stored if reuse.accept(o, context, task)), None)
 
     def cache_dir(self, checksum: str, context: Context) -> Path:
         """The directory the job identified by ``checksum`` runs in under ``context``."""
@@ -410,10 +479,14 @@ class ResultStore(ty.Protocol):
         """The path of the lease guarding the job identified by ``checksum`` under
         ``context``. It exists while the lease is held."""
 
-    def acquire(self, checksum: str, context: Context) -> Lease:
+    def acquire(
+        self, checksum: str, context: Context, *, resumable: bool = False
+    ) -> Lease:
         """Return the lease guarding the job identified by ``checksum`` under
         ``context``, not yet entered. A store whose storage cannot carry its lease
-        raises `~pydra.utils.storage.StorageUnsupported` when the lease is entered."""
+        raises `~pydra.utils.storage.StorageUnsupported` when the lease is entered.
+        ``resumable``: the job keeps its directory across runs, so the lease must exclude
+        other takers whatever the store's de-duplication."""
 
     def commit(self, lease: Lease, result: Result, job: "Job | None" = None) -> None:
         """Store ``result``, and ``job`` if given, as those of the job held under ``lease``.
@@ -584,7 +657,9 @@ class PickleStore(ResultStore):
         name = lease.lockfile.name[: -len(LEASE_SUFFIX)]
         return lease.lockfile.parent / SUCCESS_DIR / name
 
-    def acquire(self, checksum: str, context: Context) -> DirectoryLease:
+    def acquire(
+        self, checksum: str, context: Context, *, resumable: bool = False
+    ) -> DirectoryLease:
         return DirectoryLease(
             checksum,
             self.cache_dir(checksum, context),

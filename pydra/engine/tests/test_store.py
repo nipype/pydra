@@ -65,6 +65,23 @@ def AddTwoWf(a: int) -> int:
     return node.out
 
 
+class WorkDirStore(PickleStore):
+    """A store that runs each job in a directory of its own and implements nothing else
+    the work-directory protocol offers, so the job relies on the declared defaults"""
+
+    has_work_dirs = True
+
+    def work_dir(self, job):
+        return Path(self.cache_root) / "work" / job.checksum
+
+
+def test_a_store_with_work_dirs_needs_only_the_declared_members(tmp_path):
+    store = WorkDirStore(tmp_path / "cache")
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "cache") as sub:
+        result = sub(FunAddTwo(a=1))
+    assert not result.errored and result.outputs.out == 3
+
+
 def test_picklestore_is_resultstore(tmp_path):
     assert isinstance(PickleStore(tmp_path), ResultStore)
 

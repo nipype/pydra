@@ -34,11 +34,6 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ): "in the base branch, unchanged here",
     (
         "engine/job.py",
-        "self.store",
-        "withdraw_success",
-    ): "in the base branch, unchanged here",
-    (
-        "engine/job.py",
         "self.task",
         "__checksum__",
     ): "in the base branch, unchanged here",
@@ -106,7 +101,6 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ("engine/store.py", "lease", "lost"): "in the base branch, unchanged here",
     ("engine/store.py", "lease", "prove"): "in the base branch, unchanged here",
     ("engine/store.py", "raised", "winerror"): "Windows only",
-    ("engine/store.py", "store", "reuse"): "in the base branch, unchanged here",
     (
         "engine/submitter.py",
         "store",
