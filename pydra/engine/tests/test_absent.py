@@ -720,10 +720,10 @@ def PerElement(ns: list[int]):
     return b.out
 
 
-def test_absent_block_of_a_partial_node_is_one_absent_element(submitter):
-    # the block an upstream element's Absent opens is one element, which propagates
+def test_absent_block_of_a_partial_node_has_no_element(submitter):
+    # an upstream element's Absent gives its sub-state no elements (test_absent_split)
     result = submitter(PerElement(ns=[2, -1]))
-    assert result.outputs.out == [1, 2, Absent("no-list", "MaybeList")]
+    assert result.outputs.out == [1, 2]
 
 
 @workflow.define

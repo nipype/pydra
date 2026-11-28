@@ -404,6 +404,14 @@ class PartialExpansion:
         self._cursors: dict[str, tuple] = {}
         self._reverse: dict[str, dict] = {}
         self.groups: dict[tuple, list[tuple]] = {}
+        # blocks an inner element's ``Absent`` left with no elements (RFC 0002 section
+        # 2.3(a)), each with that ``Absent`` and the checksum of the job it came from
+        self.absent_blocks: dict[tuple, tuple[Absent, str | None]] = {}
+        self._group_blocks: dict[tuple, set] = defaultdict(set)  # group -> its blocks
+        # own and inherited absent sub-states, as (ident, the fields they fix in this
+        # node's path space, (Absent, producer)), for the groups readers combine them in
+        self.absent: list[tuple[ty.Any, dict, tuple[Absent, str | None]]] = []
+        self._inherited_absent: dict[tuple, tuple[Absent, str | None]] = {}
         self.closed: set[tuple] = set()
         self.open_groups: dict[tuple, dict] = {}  # open group key -> its fields
         self._open_index = _Index()
@@ -557,6 +565,86 @@ class PartialExpansion:
                     ex.unrunnable[block] = [source]
                 self.failed.append((("from", name, ident), prefixed))
                 self.version += 1
+            for ident, fields, record in source._absent_substates():
+                if (name, ident) in self.inherited:
+                    continue
+                self.inherited.add((name, ident))
+                prefixed = {("_" + name,) + p: c for p, c in fields.items()}
+                self.absent.append((("from", name, ident), prefixed, record))
+                self.version += 1
+                if self.spec.group_paths is not None:
+                    self._absent_groups(name, prefixed, record)
+
+    def _absent_groups(self, name: str, prefixed: dict, record: tuple) -> None:
+        """Form the groups of this node that only an absent sub-state of source ``name``
+        would fill: the group paths it fixes, each combined with every coordinate of this
+        node's own static split entries on the paths it does not. A group that keeps an
+        axis inside the absent sub-state has no such group. A group that keeps an axis
+        of another source cannot be enumerated, so it is refused as a block error
+        (``AbsentGroupError``) and the node never seals"""
+        from pydra.engine.runner import AbsentGroupError, error_entry
+
+        ex, spec = self.ex, self.spec
+        prefix = "_" + name
+
+        def owner(path: tuple) -> str:
+            head = path[0]
+            if head in spec.inner:
+                return "_" + spec.inner[head]._node.name
+            return head
+
+        unfixed = [p for p in spec.group_paths if p not in prefixed]
+        if any(owner(p) == prefix for p in unfixed):
+            return  # it keeps an axis of the absent sub-state, which has no elements
+        groups = None
+        if not unfixed:
+            groups = [tuple(prefixed[p] for p in spec.group_paths)]
+        else:
+            skeleton = dict(self.static_entries)
+            kept = {owner(p) for p in unfixed}
+            for term in rpn_terms(spec.rpn):
+                if term in skeleton:
+                    continue
+                head = owner((term,))
+                if head == prefix:
+                    base = {p: c for p, c in prefixed.items() if p[0] == prefix}
+                    skeleton[term] = [Entry(base, {}, {})]
+                elif head in kept:
+                    break  # another source's axis is kept: not enumerable
+                else:
+                    skeleton[term] = [Entry({}, {}, {})]
+            else:
+                try:
+                    found = expand_rpn(spec.rpn, skeleton)
+                    if all(all(p in e.fields for p in unfixed) for e in found):
+                        groups = sorted(
+                            {
+                                tuple(
+                                    prefixed[p] if p in prefixed else e.fields[p]
+                                    for p in spec.group_paths
+                                )
+                                for e in found
+                            },
+                            key=sort_key,
+                        )
+                except Exception:
+                    groups = None
+        if groups is None:
+            exc = AbsentGroupError(
+                f"Node {ex.name!r} combines an absent sub-state of {name!r} but keeps an "
+                "axis of another source: the groups its reader must receive as the "
+                "Absent cannot be enumerated"
+            )
+            self.block_errors.append(f"Job {ex.name!r}, errored:\n{exc}")
+            ex._resolution_errors.append(self.block_errors[-1])
+            ex._resolution_entries.append(
+                error_entry(ex.name, None, exc, phase="expansion")
+            )
+            self.failed.append((("absent", name, len(self.failed)), dict(prefixed)))
+            return
+        for group in groups:
+            self._add_group(group)
+            self._inherited_absent.setdefault(group, record)
 
     @staticmethod
     def _fixes_final_key(source: "NodeExecution", fields: dict) -> bool:
@@ -672,6 +760,7 @@ class PartialExpansion:
                     ex._become_absent(value)
                     return
                 _check_splittable(ex.name, term, value)
+        absent = None
         try:
             for term in rpn_terms(spec.rpn):
                 if term in spec.inner:
@@ -681,7 +770,13 @@ class PartialExpansion:
                     value = lf._get_value(
                         workflow=ex.workflow, graph=self.graph, state_index=key
                     )
-                    items = list(value) if is_sequence(value) else [value]
+                    if isinstance(value, Absent):
+                        # the upstream element's sub-state has no elements
+                        if absent is None:
+                            absent = (value, self._producer(lf, key))
+                        items = []
+                    else:
+                        items = list(value) if is_sequence(value) else [value]
                     base = {p: c for p, c in block.fields.items() if p[0] == "_" + u}
                     terms = {u: key} if u in spec.linked else {}
                     entries[term] = [
@@ -695,7 +790,7 @@ class PartialExpansion:
                     entries[term] = skeleton[term] = [
                         Entry(base, {}, {name: positions[name]})
                     ]
-            elements = expand_rpn(spec.rpn, entries)
+            elements = [] if absent is not None else expand_rpn(spec.rpn, entries)
         except Exception as exc:
             label = f"{ex.name}[block {key_text(bkey)}]"
             try:
@@ -711,9 +806,14 @@ class PartialExpansion:
             )
             self._set_status(bkey, "errored")
             return
+        if absent is not None:
+            self.absent_blocks[bkey] = absent
+            self.absent.append((("block", bkey), dict(block.fields), absent))
         if spec.group_paths is not None and spec.group_by_block:
             for entry in expand_rpn(spec.rpn, skeleton):
-                self._add_group(tuple(entry.fields[p] for p in spec.group_paths))
+                group = tuple(entry.fields[p] for p in spec.group_paths)
+                self._add_group(group)
+                self._group_blocks[group].add(bkey)
         for entry in elements:
             key = tuple(entry.fields[p] for p in spec.elem_paths)
             ex._tasks[key] = None
@@ -741,6 +841,41 @@ class PartialExpansion:
         state)"""
         positions = dict(zip(self.spec.sources, self.block_of[key]))
         return {term: positions[lf._node.name] for term, lf in self.spec.inner.items()}
+
+    def _producer(self, lf: LazyOutField, key: ty.Any) -> str | None:
+        """The unsuffixed checksum of the upstream job whose ``Absent`` a block read at
+        ``key``, None if no one job produced it"""
+        source = self.graph.node(lf._node.name)
+        elements = source._read_elements(source._read_indices(key))
+        if len(elements) == 1:
+            return source.job(elements[0]).unsuffixed_checksum
+        if not elements and source.is_partial:
+            return source._partial.absent_producer(key)
+        return None
+
+    def _absent_record(self, group: ty.Any) -> "tuple[Absent, str | None] | None":
+        """The ``(Absent, producer)`` of the first block of a group whose every block an
+        inner element's ``Absent`` left with no elements, None for any other group"""
+        if not isinstance(group, tuple):
+            return None
+        if self.groups.get(group):
+            return None
+        blocks = self._group_blocks.get(group)
+        if not blocks:  # a group only an upstream node's absent sub-state would fill
+            return self._inherited_absent.get(group)
+        if all(b in self.absent_blocks for b in blocks):
+            return self.absent_blocks[min(blocks, key=sort_key)]
+        return None
+
+    def group_absent(self, group: tuple) -> "Absent | None":
+        """The ``Absent`` of an absent group (see :meth:`_absent_record`), else None"""
+        record = self._absent_record(group)
+        return record[0] if record is not None else None
+
+    def absent_producer(self, group: ty.Any) -> str | None:
+        """The producer recorded for an absent group (see :meth:`_absent_record`)"""
+        record = self._absent_record(group)
+        return record[1] if record is not None else None
 
     def _add_group(self, group: tuple) -> None:
         if group in self.groups:
@@ -885,12 +1020,17 @@ class PartialExpansion:
             if not spec.group_paths:
                 return [retrieve(ex.job(k)) for k in self.keys_by_rank]
             return StateArray(
-                [retrieve(ex.job(m)) for m in sorted(self.groups[g])]
-                for g in sorted(self.groups)
+                self._group_value(retrieve, g) for g in sorted(self.groups)
             )
         if spec.group_paths is None:
             return retrieve(ex.job(state_index))
-        return [retrieve(ex.job(m)) for m in sorted(self.groups[state_index])]
+        return self._group_value(retrieve, state_index)
+
+    def _group_value(self, retrieve: ty.Callable[["Job"], ty.Any], group: tuple):
+        """The members of a group, or its ``Absent`` if the group is absent"""
+        if (absent := self.group_absent(group)) is not None:
+            return absent
+        return [retrieve(self.ex.job(m)) for m in sorted(self.groups[group])]
 
     # ------------------------------------------------------------------------------
     # Today's ``State`` for a barrier reader
