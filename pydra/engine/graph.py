@@ -39,6 +39,8 @@ class DiGraph(ty.Generic[NodeType]):
 
         """
         self.name = name
+        # counts the changes of the node order, so a reader knows a cached order is stale
+        self.sort_version = 0
         self._nodes = []
         self.nodes = nodes
         self._edges = []
@@ -59,6 +61,7 @@ class DiGraph(ty.Generic[NodeType]):
         """
         cls = self.__class__
         new_graph = cls.__new__(cls)
+        new_graph.sort_version = self.sort_version
         new_graph._nodes = self._nodes[:]
         new_graph._node_wip = self._node_wip[:]
         new_graph._edges = self._edges[:]
@@ -147,6 +150,15 @@ class DiGraph(ty.Generic[NodeType]):
             el["outputs"] = list(set(el["outputs"]))
             el["outputs"].sort()
         return self._nodes_details
+
+    @property
+    def _sorted_nodes(self):
+        return self.__sorted
+
+    @_sorted_nodes.setter
+    def _sorted_nodes(self, nodes) -> None:
+        self.__sorted = nodes
+        self.sort_version += 1
 
     @property
     def sorted_nodes(self):
