@@ -55,6 +55,10 @@ class PoolSettings:
         ``SLURM_JOB_END_TIME``.
     recheck_fraction : float
         Fraction of settled jobs re-run alone and compared (RFC 0005 section 4.4); 0: none.
+    start_deadline_s : float, optional
+        Seconds of a failure streak after which a class with waiting jobs is broken; None: never.
+    start_deadline_failures : int
+        Failed attempts a streak needs, with ``start_deadline_s``, to break a class.
     """
 
     lease: LeaseSettings = attrs.field(factory=LeaseSettings)
@@ -71,6 +75,8 @@ class PoolSettings:
     preemption_budget: int = attrs.field(default=3, validator=attrs.validators.ge(0))
     squeue_timeout: float = attrs.field(default=60.0, validator=_positive)
     recheck_fraction: float = attrs.field(default=0.0, validator=_fraction)
+    start_deadline_s: float | None = attrs.field(default=120.0, validator=_positive)
+    start_deadline_failures: int = attrs.field(default=3, validator=_positive)
 
     def to_json(self) -> dict:
         record = attrs.asdict(self, recurse=False)

@@ -427,8 +427,9 @@ jobs:
         docker exec slurm bash -c "uv pip install --python /opt/venv/bin/python -e /pydra[test,psij] && /opt/venv/bin/python -c 'import pydra.engine; print(pydra.utils.__version__)'"
     - name: Run pytest
       run: |
-        # test_pool_cluster.py: its CPU cases on this one-node cluster (the GPU and multi-node ones skip)
-        docker exec slurm bash -c "cd /pydra; mkdir -p /tmp/pydra-cluster; PYDRA_TEST_SHARED_DIR=/tmp/pydra-cluster PYDRA_TEST_ATTRIBUTE_DELAY=0 /opt/venv/bin/pytest pydra/workers/tests/test_worker.py pydra/engine/tests/test_executor.py pydra/workers/tests/test_submit_many.py pydra/workers/tests/test_pool_slurm.py pydra/workers/tests/test_pool_cluster.py --only-worker=slurm --color=yes"
+        # test_pool_cluster.py: its CPU cases on this one-node cluster (the GPU and multi-node ones skip);
+        # its shared directory is not under /tmp, where a SlurmSubstrate refuses a pool
+        docker exec slurm bash -c "cd /pydra; mkdir -p /srv/pydra-cluster; PYDRA_TEST_SHARED_DIR=/srv/pydra-cluster PYDRA_TEST_ATTRIBUTE_DELAY=0 /opt/venv/bin/pytest pydra/workers/tests/test_worker.py pydra/engine/tests/test_executor.py pydra/workers/tests/test_submit_many.py pydra/workers/tests/test_pool_slurm.py pydra/workers/tests/test_pool_cluster.py --only-worker=slurm --color=yes"
     - name: Return ownership of the uv cache to the runner
       if: always()
       run: docker exec slurm bash -c "chown -R $(id -u):$(id -g) /root/.cache/uv"
