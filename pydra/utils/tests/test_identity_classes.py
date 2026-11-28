@@ -533,11 +533,13 @@ def test_dict_argument_order_matters():
     assert td(dict[str, int]) != td(dict[int, str])
 
 
-def test_annotated_carries_its_metadata():
-    assert td(ty.Annotated[int, "a"]) != td(int)
-    assert td(ty.Annotated[int, "a"]) != td(ty.Annotated[int, "b"])
-    assert td(ty.Annotated[int, "a", "b"]) != td(ty.Annotated[int, "b", "a"])
-    assert td(ty.Annotated[int, "a"]) == td(ty.Annotated[int, "a"])
+def test_annotated_is_its_type():
+    """``Annotated[T, *meta]`` is ``T``'s digest, as upstream #887"""
+    assert td(ty.Annotated[int, "a"]) == td(int)
+    assert td(ty.Annotated[int, "a"]) == td(ty.Annotated[int, "b"])
+    assert td(ty.Annotated[ty.Annotated[int, "a"], "b"]) == td(int)
+    assert td(list[ty.Annotated[int, "a"]]) == td(list[int])
+    assert td(ty.Annotated[int, "a"]) != td(str)
 
 
 def test_typevar_digest():
@@ -656,7 +658,7 @@ TYPE_GOLDEN = {
     "callable": "type@1:4276e45ee787cda0315bd3035354efc79c9837abd4698a593bb5cca533ffe6ff",
     "path": "type@1:cb095e6d923c102e7b09b757ee563dc8a46b9dcd4560e044a323edc7c5cf55eb",
     "dict": "type@1:c08369faf3402b5e78ad9a1b046fd82830467b64870cde40ecbb0fe07ab74a30",
-    "annotated": "type@1:fc1a2abc46d4b9d5bbc596308bd8c11021dce8ca09082b08cc82ac5beb9f07b6",
+    "annotated": "type@1:201b7421badf40e8eb7da5965b86464c1ba804afbcbe82871a907abb86cf3cf7",
 }
 
 

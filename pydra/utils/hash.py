@@ -625,21 +625,16 @@ _UNION_ORIGINS = (ty.Union, types.UnionType)
 def bytes_repr_type(klass: ty.Any, cache: Cache) -> Iterator[bytes]:
     """The bytes of a type (``type@1``, RFC 0004 section 5.1), which are the same on
     every Python minor: unions and ``Literal`` are order-free and ``Optional[X]`` is
-    ``X | None``; a user class is its name and `class_digest`"""
-    from pydra.utils.digest import digest
-
+    ``X | None``; ``Annotated[T, *meta]`` is ``T``; a user class is its name and
+    `class_digest`"""
+    while ty.get_origin(klass) is ty.Annotated:
+        klass = ty.get_args(klass)[0]
     yield b"type:("
     if klass is None:
         klass = type(None)
     origin = ty.get_origin(klass)
     args = ty.get_args(klass)
-    if origin is ty.Annotated:
-        yield b"annotated:("
-        yield from bytes_repr_type(args[0], cache)
-        yield b"),metadata:("
-        yield b",".join(digest(m).encode() for m in klass.__metadata__)
-        yield b")"
-    elif origin in _UNION_ORIGINS:
+    if origin in _UNION_ORIGINS:
         yield b"union:("
         yield b",".join(sorted({_type_token(m, cache) for m in _union_members(args)}))
         yield b")"
