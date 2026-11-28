@@ -8,6 +8,7 @@ import typing as ty
 
 import attrs
 
+from pydra.engine.absent import absence_suffix
 from pydra.engine.context import RECORDED_FIELDS, job_context
 from pydra.utils.digest import jcs
 from pydra.utils.identity import IDENTITY_SCHEME, record_checksum
@@ -19,7 +20,6 @@ __all__ = [
     "Context",
     "KeyRecord",
     "StoreIdentity",
-    "PydraIdentityV1",
     "PydraIdentityV2",
 ]
 
@@ -86,7 +86,9 @@ class PydraIdentityV1:
     the job, so both phases return it, and the fingerprint
     (``pydra-context@1``) is the full sha256 of the RFC 8785 canonical JSON of the context
     without the ``recorded_only`` fields. ``recorded_only`` always holds
-    ``environment_repository`` and ``environment_facts``, whatever else is given."""
+    ``environment_repository`` and ``environment_facts``, whatever else is given. It is the
+    reader of roots written before ``pydra-identity@2`` (`migrate`) and the base of
+    `PydraIdentityV2`; no store writes it by default."""
 
     recorded_only: frozenset[str] = attrs.field(factory=frozenset, converter=_fields)
     name: ty.ClassVar[str] = "pydra-identity@1"
@@ -136,15 +138,67 @@ class PydraIdentityV2(PydraIdentityV1):
 
     def key(self, job: "Job") -> KeyRecord:
         """The job's record as carried with it from the submitting process, never rebuilt
-        from the task (a worker may be unable to read the function's source)."""
-        return job.record
+        from the task (a worker may be unable to read the function's source). A job whose
+        checksum carries an absence suffix (RFC 0002 section 2.3(a)) adds its ``absent``
+        triples (`absent_form`)."""
+        triples = job.absent
+        if not triples:
+            return job.record
+        return {**job.record, ABSENT_KEY: absent_form(triples)}
 
     def check_key(self, checksum: str, key: KeyRecord) -> bool:
         """Whether ``key`` is a ``pydra-identity@2`` record that digests to ``checksum``,
-        or a supplied record whose ``supplied`` is ``checksum``."""
+        or a supplied record whose ``supplied`` is ``checksum``. A record with ``absent``
+        triples digests to the digest of the record without them plus their
+        `~pydra.engine.absent.absence_suffix`; ``checksum`` itself is never parsed."""
         if not isinstance(key, ty.Mapping) or key.get("scheme") != IDENTITY_SCHEME:
             return False
+        base = {k: v for k, v in key.items() if k != ABSENT_KEY}
         try:
-            return record_checksum(key) == checksum
+            suffix = ""
+            if ABSENT_KEY in key:
+                triples = absent_triples(key[ABSENT_KEY])
+                if not triples or absent_form(triples) != key[ABSENT_KEY]:
+                    return False  # an empty or unsorted list is never written
+                suffix = absence_suffix(triples)
+            return record_checksum(base) + suffix == checksum
         except (KeyError, TypeError, ValueError):
             return False
+
+
+ABSENT_KEY = "absent"
+"""The field of a ``pydra-identity@2`` key holding a job's absence triples"""
+
+
+def absent_form(triples: ty.Iterable[tuple[str, int, str]]) -> list[list[ty.Any]]:
+    """The JSON form of absence triples, the one `~pydra.engine.absent.absence_suffix`
+    digests: ``[field, {"$int": "<index>"}, cause]`` each, sorted"""
+    return [[f, {"$int": str(int(i))}, c] for f, i, c in sorted(triples)]
+
+
+def absent_triples(form: ty.Any) -> list[tuple[str, int, str]]:
+    """The ``(field, index, cause)`` triples of a key's ``absent`` (see `absent_form`).
+
+    Raises
+    ------
+    ValueError
+        ``form`` is not a list of ``[str, {"$int": str}, str]``.
+    """
+    if not isinstance(form, list):
+        raise ValueError(f"absent is a list of triples, got {form!r}")
+    triples = []
+    for item in form:
+        if not (
+            isinstance(item, list)
+            and len(item) == 3
+            and isinstance(item[0], str)
+            and isinstance(item[2], str)
+            and isinstance(item[1], dict)
+            and set(item[1]) == {"$int"}
+            and isinstance(item[1]["$int"], str)
+        ):
+            raise ValueError(
+                f"an absence triple is [field, {{'$int': index}}, cause], got {item!r}"
+            )
+        triples.append((item[0], int(item[1]["$int"]), item[2]))
+    return triples

@@ -135,10 +135,11 @@ def _stub(attempt, checksum="python-abc", context=CTX, can_resume=False):
 SCRIPT = textwrap.dedent("""
     import json, sys
     from types import SimpleNamespace
+    from pydra.engine.portable.identity import PydraIdentityV1
     from pydra.engine.portable.store import PortableStore
 
     root, trust, attempt, checksum, resume = sys.argv[1:6]
-    store = PortableStore(root, trust=trust)
+    store = PortableStore(root, trust=trust, identity=PydraIdentityV1())  # as `make`
     job = SimpleNamespace(name="j", checksum=checksum, context=json.loads(sys.argv[6]),
                           attempt=attempt or None, can_resume=resume == "1")
     print(store.work_dir(job))
@@ -212,10 +213,11 @@ def test_stored_false_read_by_other_process_via_committed_json(tmp_path):
     script = textwrap.dedent("""
         import json, sys
         from types import SimpleNamespace
+        from pydra.engine.portable.identity import PydraIdentityV1
         from pydra.engine.portable.store import PortableStore
 
         root, trust, attempt, checksum, context = sys.argv[1:6]
-        store = PortableStore(root, trust=trust)
+        store = PortableStore(root, trust=trust, identity=PydraIdentityV1())  # as `make`
         job = SimpleNamespace(name="j", checksum=checksum, context=json.loads(context),
                               attempt=attempt, can_resume=False, committed=None, task=None)
         r = store.read_result(job, settled=True)

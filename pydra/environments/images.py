@@ -150,7 +150,7 @@ def image_cache() -> Path:
     """
     from pydra.utils.general import user_cache_root
 
-    if os.environ.get(IMAGE_CACHE_ENV_VAR):
+    if os.environ.get(IMAGE_CACHE_ENV_VAR):  # an empty value is unset
         return Path(os.environ[IMAGE_CACHE_ENV_VAR])
     for var in ("APPTAINER_CACHEDIR", "SINGULARITY_CACHEDIR"):
         if os.environ.get(var):

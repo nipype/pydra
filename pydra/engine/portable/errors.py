@@ -15,6 +15,7 @@ __all__ = [
     "MisfiledEntry",
     "EntryFormatUnknown",
     "EntryNotTrusted",
+    "KeyMismatch",
     "UnencodableOutput",
 ]
 
@@ -36,6 +37,11 @@ class EntryFormatUnknown(StoreUnavailable):
 class EntryNotTrusted(StoreUnavailable):
     """An entry holds a pickle member that the root's trust does not admit (RFC 0003 section
     6.4). It is left in place and not served."""
+
+
+class KeyMismatch(ValueError):
+    """A publish was given a key record that the store's identity refuses for its checksum,
+    so every read of the entry would refuse it too. Nothing is written."""
 
 
 class UnencodableOutput(TypeError):

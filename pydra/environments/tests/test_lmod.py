@@ -64,7 +64,7 @@ def commandspath(tmp_path: Path) -> Path:
 @pytest.fixture
 def cache_root(tmp_path: Path):
     cache_root = tmp_path / "cache"
-    cache_root.mkdir()
+    cache_root.mkdir(mode=0o700)  # a portable root must be private, whatever the umask
     return cache_root
 
 

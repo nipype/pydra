@@ -44,12 +44,32 @@ uv run --no-sync pytest pydra/environments/tests/test_env_resolution_hpc.py \
     -m "lmod or singularity" --timeout=300 -v -s -rs 2>&1 | tee new.log
 gate new.log 3
 
+# test_singularity_1, test_singularity_1_subm (removed by the test_singularity_1 prefix)
+# and test_singularity_st_1 need --fakeroot; a node whose user has
+# no subuid mapping cannot give it, so probe a SIF the tests above cached, else
+# docker://alpine, which the apptainer cache holds from the tests above
+sif=$( (find "$PYDRA_IMAGE_CACHE" -name '*.sif' -type f 2>/dev/null || true) | head -1)
+probe=${sif:-docker://alpine}
+deselect=()
+expected=43
+if singularity exec --fakeroot "$probe" true >/dev/null 2>&1; then
+    echo "O3 mode: fakeroot, probed $probe (all $expected regression cases)"
+else
+    deselect=(
+        --deselect pydra/environments/tests/test_environments.py::test_singularity_1
+        --deselect pydra/environments/tests/test_singularity.py::test_singularity_st_1
+    )
+    expected=38
+    echo "O3 mode: no fakeroot, probed $probe; the two fakeroot tests deselected," \
+        "$expected regression cases"
+fi
+
 # regression: every real-runtime case in the touched modules
 uv run --no-sync pytest pydra/environments/tests/test_env_resolution_hpc.py \
     pydra/environments/tests/test_singularity.py pydra/environments/tests/test_lmod.py \
-    pydra/environments/tests/test_environments.py \
+    pydra/environments/tests/test_environments.py ${deselect[@]+"${deselect[@]}"} \
     -m "lmod or singularity" --only-worker=debug --timeout=300 -v -rs 2>&1 | tee regression.log
-gate regression.log 43
+gate regression.log "$expected"
 
 # (a) timing and (c) module -t list comparison, hierarchical tree with a sticky module
 uv run --no-sync python benchmarks/rfc_0004/lmod_resolution.py --runs 20 \

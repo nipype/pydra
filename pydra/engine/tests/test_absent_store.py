@@ -15,7 +15,7 @@ from pydra.engine.submitter import Submitter
 from .test_absent import Chain, Keyed, Maybe
 from .test_gates import Fanout
 from .test_portable_submitter import nonpickling
-from .test_portable_store import make
+from .test_portable_store import make_v2 as make
 
 
 def entry_docs(root: Path) -> list[dict]:

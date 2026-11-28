@@ -171,6 +171,7 @@ See the full reference documentation for Pydra
    :hidden:
 
    reference/api
+   reference/identity-v2
    genindex
    modindex
    reference/glossary

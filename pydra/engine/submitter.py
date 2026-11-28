@@ -6,6 +6,7 @@ import stat
 import typing as ty
 import warnings
 import os
+import re
 from pathlib import Path
 from tempfile import mkdtemp
 from uuid import uuid4
@@ -40,7 +41,7 @@ from pydra.engine.store import (
     forget_outcome,
 )
 from pydra.utils.messenger import AuditFlag, Messenger
-from pydra.utils.general import default_run_cache_root, default_store_root
+from pydra.utils.general import atomic_write, default_run_cache_root, default_store_root
 from pydra.utils.storagedir import IS_WINDOWS
 from pydra.compose import workflow
 from pydra.engine.state import State
@@ -49,6 +50,90 @@ from pydra.utils.routing import DEFAULT_WORKER, Router, default_router
 from pydra.compose.base import Task, Outputs
 
 logger = logging.getLogger("pydra.submitter")
+
+IDENTITY_MARKER = ".pydra-identity"
+"""The file at the root of a `PickleStore` naming the identity scheme its slots are
+keyed under (RFC 0004 section 9.1)"""
+
+
+_MARKER_WARNED: set[str] = set()  # the roots a marker line was logged for
+
+
+_SCHEME = re.compile(r"[a-z][a-z0-9_-]*@[0-9]+")
+
+
+def _scheme_version(named: str) -> int | None:
+    """``N`` of ``pydra-identity@N``, else None"""
+    prefix, _, version = named.partition("@")
+    if prefix != "pydra-identity" or not version.isdigit():
+        return None
+    return int(version)
+
+
+def _warn_once(root: Path, message: str, *args: ty.Any) -> None:
+    key = os.fspath(root)
+    if key not in _MARKER_WARNED:
+        _MARKER_WARNED.add(key)
+        logger.warning(message, root, *args)
+
+
+def check_identity_marker(root: Path) -> None:
+    """Read ``<root>/.pydra-identity``. When it names an older scheme, or is missing from a
+    root that holds slots, log one line (their results are recomputed once) and write it. A
+    marker naming a newer or an unknown scheme is left as it is, with one line; an empty or
+    garbled one (not ``<name>@<N>``) counts as missing. A root that cannot be written is left
+    as it is. Each root is logged at most once per process."""
+    from pydra.utils.identity import IDENTITY_SCHEME
+
+    path = Path(root) / IDENTITY_MARKER
+    try:
+        with open(path, encoding="utf-8") as f:
+            named: str | None = f.read(256).strip()
+    except FileNotFoundError:
+        named = None
+    except (OSError, UnicodeDecodeError):
+        return
+    if named == IDENTITY_SCHEME:
+        return
+    if named is not None and not _SCHEME.fullmatch(named):
+        named = None  # empty or garbled: a write cut short
+    if named is None:
+        try:
+            with os.scandir(root) as entries:
+                held = any(e.name != IDENTITY_MARKER for e in entries)
+        except OSError:
+            held = False
+        if held:
+            _warn_once(
+                root,
+                "%s holds results keyed before %s: every job runs again once, and its "
+                "results are then reused",
+                IDENTITY_SCHEME,
+            )
+    else:
+        version = _scheme_version(named)
+        if version is None or version >= _scheme_version(IDENTITY_SCHEME):
+            _warn_once(
+                root,
+                "%s is marked as keyed under %s, which this pydra (%s) does not write: "
+                "its results are not reused here, and the marker is left as it is",
+                named or "an unnamed scheme",
+                IDENTITY_SCHEME,
+            )
+            return
+        _warn_once(
+            root,
+            "%s holds results keyed under %s, not %s: every job runs again once, and "
+            "its results are then reused",
+            named,
+            IDENTITY_SCHEME,
+        )
+    try:
+        with atomic_write(path, "w") as f:
+            f.write(IDENTITY_SCHEME + "\n")
+    except OSError:
+        pass
+
 
 if ty.TYPE_CHECKING:
     from pydra.engine.result import Result
@@ -493,6 +578,8 @@ class Submitter:
             )
 
         task._check_rules()
+        if isinstance(self.store, PickleStore):
+            check_identity_marker(self.store.cache_root)
         # If the outer job is split, create an implicit workflow to hold the split nodes
         if task._splitter:
             state = State(

@@ -32,7 +32,7 @@ from pydra.engine.portable.errors import (
 from pydra.engine.portable.identity import (
     Context,
     KeyRecord,
-    PydraIdentityV1,
+    PydraIdentityV2,
     StoreIdentity,
 )
 from pydra.engine.portable.layout import FINGERPRINT, cdir_for
@@ -206,7 +206,7 @@ class PydraEntryV1:
         pickle, whatever the header says, and refuses a naive datetime.
     """
 
-    identity: StoreIdentity = attrs.field(factory=PydraIdentityV1)
+    identity: StoreIdentity = attrs.field(factory=PydraIdentityV2)
     pickle: bool = False
     trust: Trust = attrs.field(default="shared")
     name: ty.ClassVar[str] = FORMAT

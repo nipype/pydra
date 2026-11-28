@@ -365,6 +365,7 @@ FRESH_READER = textwrap.dedent("""
     import sys
     from pathlib import Path
     from pydra.engine.portable.entry import PydraEntryV1
+    from pydra.engine.portable.identity import PydraIdentityV1
     from pydra.utils.storagedir import StorageDir, StorePolicy
 
     path, trust, checksum, fingerprint, entry_dir = sys.argv[1:]
@@ -373,7 +374,7 @@ FRESH_READER = textwrap.dedent("""
     for part in Path(entry_dir).relative_to(path).parts:
         entry = entry.child(part)
     with entry:
-        out = PydraEntryV1(pickle=False, trust=trust).read(
+        out = PydraEntryV1(identity=PydraIdentityV1(), pickle=False, trust=trust).read(
             entry, checksum, fingerprint, None, trust, root=handle
         ).outputs
     for name in sorted(out):
