@@ -86,6 +86,8 @@ jobs:
             full=false
             if jq -e 'index("release") or index("full-ci")' <<<"$LABELS" >/dev/null; then
               full=true
+            elif [ "$BASE" = main ] && [ "$DRAFT" != true ]; then
+              full=true   # ready-for-review PRs into main always get the full tier
             fi
             # a label other than `release` or `full-ci`, or an edit that keeps the base branch,
             # changes nothing to test: run no tests, and the gate repeats the previous verdict
@@ -619,9 +621,9 @@ jobs:
         path: docs/build/html
 
   deploy:
-    needs: [build, build-docs, test, test-singularity, test-slurm, test-lmod]
+    needs: gate
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: ${{ !cancelled() && needs.gate.result == 'success' && github.event_name == 'release' }}
     permissions:
       attestations: write
       id-token: write
@@ -635,9 +637,9 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
 
   deploy-docs:
-    needs: [build-docs, deploy]
+    needs: gate
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: ${{ !cancelled() && needs.gate.result == 'success' && github.event_name == 'release' }}
     steps:
     - name: Download docs
       uses: actions/download-artifact@v8
