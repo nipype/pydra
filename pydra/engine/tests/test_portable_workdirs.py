@@ -20,7 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from pydra.compose import python
+from pydra.compose import python, workflow
+from pydra.engine.runner import GraphRunner
 from pydra.engine.job import Job
 from pydra.engine.lease import LeaseSettings, _describe
 from pydra.engine.portable.entry import CorruptEntry, EntryNotTrusted
@@ -489,6 +490,69 @@ def test_errored_job_writes_error_json_not_entry(tmp_path):
     assert failed.errored and failed.errors["error message"] == doc["error message"]
     assert not any(p.iterdir() for p in results(tmp_path / "root"))
     assert staging_names(tmp_path / "root") == []
+
+
+# -- the default work directories of the attempts a submitter hands out -------------------------------
+
+
+@workflow.define
+def _TwoIncs(a: int) -> int:
+    first = workflow.add(_Inc(a=a), name="A")
+    return workflow.add(_Inc(a=first.out), name="B").out
+
+
+def test_the_emptied_work_directories_of_a_run_are_removed(tmp_path):
+    store = make(tmp_path)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        assert sub(_TwoIncs(a=1)).outputs.out == 3
+    work = tmp_path / "root" / "work"
+    assert not work.exists() or list(work.iterdir()) == []
+
+
+def test_forgetting_an_outcome_keeps_the_work_directory(tmp_path):
+    """Jobs on threads change the one process working directory, so one may restore it to
+    another job's work directory; forgetting that job's outcome must not remove the
+    directory under the process"""
+    store = make(tmp_path)
+    here = os.getcwd()
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = GraphRunner(
+            _TwoIncs(a=1), store, on_error="raise_at_end", submitter=sub
+        )
+        (a,) = runner.ready().dispatch
+        result = a.run()
+        wd = store.work_dir(a)
+        try:
+            os.chdir(wd)
+            runner.complete(a, result)
+            assert os.getcwd() and wd.is_dir()
+            assert list(wd.iterdir()) == []
+            sub.store.release_attempts()  # as on close: not the directory the process is in
+            assert wd.is_dir()
+        finally:
+            os.chdir(here)
+    assert not wd.exists()  # removed by the submitter's close, once nothing is in it
+
+
+def test_forgetting_spares_a_directory_a_running_job_returns_to(tmp_path):
+    from pydra.utils.general import hold_dir, release_dir
+
+    store = make(tmp_path)
+    with Submitter(worker="debug", store=store, cache_root=tmp_path / "pc") as sub:
+        runner = GraphRunner(
+            _TwoIncs(a=1), store, on_error="raise_at_end", submitter=sub
+        )
+        (a,) = runner.ready().dispatch
+        result = a.run()
+        wd = store.work_dir(a)
+        hold_dir(wd)
+        try:
+            runner.complete(a, result)
+            assert wd.is_dir() and list(wd.iterdir()) == []
+        finally:
+            release_dir(wd)
+        store.forget_committed(a)
+        assert not wd.exists()
 
 
 @python.define

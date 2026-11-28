@@ -490,6 +490,7 @@ class Submitter:
             hooks=hooks,
         )
         job.attempt = uuid4().hex
+        self.store.note_attempt(job)
         self.errors = []
         self.entries = []
         try:
@@ -725,6 +726,7 @@ class Submitter:
 
         """
         errors = []
+        self.store.release_attempts()
         if self._sync_pool is not None:
             self._sync_pool.shutdown()
             self._sync_pool = None

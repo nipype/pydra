@@ -447,6 +447,7 @@ class PortableStore(ResultStore):
         self.legacy = tuple(legacy)
         self.dedupe = trust != "shared" if dedupe is None else bool(dedupe)
         self._work_fn = work_dir
+        self._attempts: set[Path] = set()
         self.reuse: Reuse = as_reuse(reuse)
         self.on_commit = on_commit
         self.visibility_timeout = LeaseSettings().visibility_timeout
@@ -2004,7 +2005,9 @@ class PortableStore(ResultStore):
 
     def forget_committed(self, job: "Job") -> None:
         """Remove ``_committed.json`` once the runner holds the job's outcome (RFC 0003 section
-        5.4), and a default work directory that is then empty."""
+        5.4), and a default work directory that is then empty, unless the process working
+        directory is inside it or a running job will return to it (`dir_held`): it is then
+        left for `release_attempts` or `collect`."""
         path = self._maybe_work_dir(job)
         if path is None:
             return
@@ -2014,9 +2017,29 @@ class PortableStore(ResultStore):
                     handle.unlink(_COMMITTED)
         except FileNotFoundError:
             return
-        if self._work_fn is None:
-            with contextlib.suppress(OSError):
-                os.rmdir(path)
+        if self._work_fn is None:  # not if held, or not empty (a failure, kept outputs)
+            from pydra.utils.general import remove_if_unheld
+
+            remove_if_unheld(path)
+        if not path.exists():  # removed: nothing left for release_attempts
+            self._attempts.discard(path)
+
+    def note_attempt(self, job: "Job") -> None:
+        if self._work_fn is not None:  # a directory the caller names is the caller's
+            return
+        try:
+            self._attempts.add(Path(self.work_dir(job)))
+        except ValueError:  # no attempt
+            pass
+
+    def release_attempts(self) -> None:
+        from pydra.utils.general import dir_held, remove_if_unheld
+
+        for path in list(self._attempts):
+            if dir_held(path):
+                continue  # tried again at the next release
+            self._attempts.discard(path)
+            remove_if_unheld(path)  # checked again with the removal, under one lock
 
     def _empty_work_dir(self, path: Path) -> None:
         """Empty a default work directory except ``_committed.json``. What cannot be removed

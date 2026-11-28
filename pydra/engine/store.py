@@ -462,6 +462,13 @@ class ResultStore(ty.Protocol):
         """Remove the success record of the job held under ``lease`` before its slot is
         rewritten; a store without records has none to remove"""
 
+    def note_attempt(self, job: "Job") -> None:
+        """Remember the default work directory of an attempt handed out, removed by
+        `release_attempts` once empty"""
+
+    def release_attempts(self) -> None:
+        """Remove the noted work directories that are empty and not in use"""
+
     def begin_rerun(self, job: "Job") -> None:
         """Mark ``job``, a rerun, for its commit: a store that does not replace a stored
         result on a rerun leaves it unmarked"""
