@@ -42,6 +42,11 @@ class StorageUnsupported(OSError):
     primitive and the root."""
 
 
+class PlatformUnsupported(StorageUnsupported):
+    """The platform, not a storage primitive, cannot give what a root was asked for. The
+    message names the platform and the root."""
+
+
 @attrs.frozen
 class StorageCapabilities:
     """What a root does, as measured by `probe_capabilities`.
