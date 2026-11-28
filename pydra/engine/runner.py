@@ -28,6 +28,7 @@ from pydra.engine.lazy import LazyField, LazyOutField
 from pathlib import Path
 from pydra.engine.job import Job
 from pydra.engine.absent import (
+    NOT_ROUTED,
     WHOLE,
     Absent,
     AbsentNotAccepted,
@@ -319,7 +320,8 @@ class NodeExecution(ty.Generic[TaskType]):
         job._accepted_absent = accepted
         if propagated is not None:
             # its identity is the absence record: the task's checksum is never computed
-            job._propagated_absent, identity = propagated
+            job._propagated_absent, identity, how = propagated
+            job._gated = how == "gated"
             job._unsuffixed_checksum = job._checksum = identity
         return job
 
@@ -653,7 +655,8 @@ class NodeExecution(ty.Generic[TaskType]):
 
     def _lazy_reads(self, index: ty.Any) -> ty.Iterator[tuple[str, LazyField, ty.Any]]:
         """The lazy inputs of one element that are read from upstream (i.e. are not
-        state values), with the state index each is read at
+        state values), with the state index each is read at, followed by the node's gates
+        (``"_when"``, ``"_unless"``), which the element waits for as it does for its inputs
 
         Parameters
         ----------
@@ -667,7 +670,8 @@ class NodeExecution(ty.Generic[TaskType]):
         else:
             vals = self.state.states_val[index] if index is not None else {}
             inputs_ind = self.state.inputs_ind[index] if index is not None else {}
-        for name, value in attrs_values(self.node._task).items():
+        reads = list(attrs_values(self.node._task).items())
+        for name, value in reads + list(self.node.gates.items()):
             state_key = f"{self.name}.{name}"
             if isinstance(value, LazyField) and state_key not in vals:
                 yield name, value, inputs_ind.get(state_key)
@@ -684,14 +688,15 @@ class NodeExecution(ty.Generic[TaskType]):
         """
         return self._resolve(index)[0]
 
-    def _resolve(
-        self, index: ty.Any
-    ) -> tuple[
-        "Task[OutputType]", tuple[Absent, str] | None, list[tuple[str, int, str]]
+    def _resolve(self, index: ty.Any) -> tuple[
+        "Task[OutputType]",
+        tuple[Absent, str, str] | None,
+        list[tuple[str, int, str]],
     ]:
-        """Resolve the task of one element, applying each input field's ``absent`` mode
-        (RFC 0002 section 2.3(a)). A whole-value ``Absent`` propagates under ``"drop"``
-        too, as it has no elements to drop.
+        """Resolve the task of one element, applying first its gates (RFC 0002 section
+        2.3(b)) and then each input field's ``absent`` mode (section 2.3(a)). A
+        whole-value ``Absent`` propagates under ``"drop"`` too, as it has no elements to
+        drop.
 
         Parameters
         ----------
@@ -704,10 +709,12 @@ class NodeExecution(ty.Generic[TaskType]):
         task : Task
             The element's task, a ``"drop"`` field's combined value without its absent
             elements and a ``"fill"`` field's with each replaced by the fill
-        propagated : tuple[Absent, str] or None
-            The ``Absent`` the element completes with, of the first propagating field in
-            declaration order, and the job's identity
-            (:func:`~pydra.engine.absent.absence_identity`); None if it runs
+        propagated : tuple[Absent, str, str] or None
+            The ``Absent`` the element completes with, the job's identity
+            (:func:`~pydra.engine.absent.absence_identity`) and how: ``"gated"`` with
+            ``Absent("not-routed")`` when a gate switches it off, ``"absent"`` with the
+            ``Absent`` of a gate that is one, or else of the first propagating field in
+            declaration order; None if it runs
         accepted : list[tuple[str, int, str]]
             The ``(field, element index, cause)`` of every accepted, replaced or filled
             ``Absent``
@@ -717,9 +724,60 @@ class NodeExecution(ty.Generic[TaskType]):
         AbsentNotAccepted
             An ``Absent`` is left inside the value of a field that does not accept it.
         """
+        # step 1, the gates, read before any data input is resolved: a gated-off
+        # element is never looked up, shared or committed, nor are its data coerced
+        reads = {}
+        gates = {n: v for n, v in self.node.gates.items() if isinstance(v, bool)}
+        data = []
+        for name, value, state_index in self._lazy_reads(index):
+            reads[name] = (value, state_index)
+            if name not in self.node.gates:
+                data.append(name)
+                continue
+            gates[name] = value._get_value(
+                workflow=self.workflow, graph=self.graph, state_index=state_index
+            )
+        for name, value in gates.items():
+            if not isinstance(value, (bool, Absent)):
+                raise GateTypeError(
+                    f"The gate {name[1:]!r} of node {self.name!r} resolved to a "
+                    f"{type(value).__name__} ({value!r}): a gate must be a bool or an "
+                    "Absent, not a reference to one"
+                )
+            if isinstance(value, Absent):
+                absent, how, cause = value, "absent", value.cause
+            elif value is not (name == "_when"):
+                path = "/".join((*self.path, self.name))
+                absent, how, cause = (
+                    Absent(NOT_ROUTED, source=path),
+                    "gated",
+                    NOT_ROUTED,
+                )
+            else:
+                continue
+            # the task keeps its static inputs and its static split values; its data
+            # inputs and the split values taken from an upstream output, which are never
+            # read, hold the Absent it completes with
+            values = dict.fromkeys(data, absent)
+            if index is not None:
+                if self.is_partial:
+                    vals = self._partial.vals[index]
+                else:
+                    vals = self.state.states_val[index]
+                for field in self.node.input_names:
+                    if (state_key := f"{self.name}.{field}") in vals:
+                        upstream = isinstance(self.node._task[field], LazyOutField)
+                        values[field] = absent if upstream else vals[state_key]
+            with resolving():
+                task = attrs.evolve(self.node._task, **values)
+            identity = absence_identity(
+                task_definition(task),
+                self._producer(reads.get(name), WHOLE),
+                (name, WHOLE, cause),
+            )
+            return task, (absent, identity, how), []
         resolved = {}
         combined = set()
-        reads = {}
         with resolving():
             if index is not None:
                 if self.is_partial:
@@ -729,15 +787,17 @@ class NodeExecution(ty.Generic[TaskType]):
                 for name in self.node.input_names:
                     if (state_key := f"{self.name}.{name}") in vals:
                         resolved[name] = vals[state_key]
-            for name, value, state_index in self._lazy_reads(index):
-                reads[name] = (value, state_index)
+            for name in data:
+                value, state_index = reads[name]
                 resolved[name] = value._get_value(
                     workflow=self.workflow, graph=self.graph, state_index=state_index
                 )
                 if self._reads_combined(value, state_index):
                     combined.add(name)
             task = attrs.evolve(self.node._task, **resolved)
-        propagated, accepted, replaced = None, [], {}
+        propagated = None
+        # step 2, propagation of Absent inputs
+        accepted, replaced = [], {}
         modes = {}
         for field in get_fields(task):
             value = getattr(task, field.name)
@@ -778,7 +838,7 @@ class NodeExecution(ty.Generic[TaskType]):
             identity = absence_identity(
                 task_definition(task), producer, (name, element, absent.cause)
             )
-            return task, (absent, identity), []
+            return task, (absent, identity, "absent"), []
         if replaced:
             with resolving():
                 task = attrs.evolve(task, **replaced)
@@ -953,6 +1013,8 @@ class NodeExecution(ty.Generic[TaskType]):
                 return
             self.queued[index] = job
             job._awaiting_run = True
+        except GateTypeError:
+            raise  # a wiring error, not an error of the element
         except Exception as exc:
             if self.is_partial:
                 name = element_label(self.name, None, index)
@@ -1013,6 +1075,13 @@ def _check_splittable(node: str, state_key: str, value: ty.Any) -> None:
         f"{type(value).__name__} ({value!r}): a value a splitter splits over must be a "
         "real sequence, not a reference to one"
     )
+
+
+class GateTypeError(TypeError):
+    """A gate that resolved to a value other than a ``bool`` or an ``Absent``, such as a
+    reference an external driver completed the predicate's job with (RFC 0002 section
+    3.5). It is raised from :meth:`GraphRunner.ready`, not recorded as the element's
+    resolution error"""
 
 
 def _has_failed(node: NodeExecution, indices: ty.Any) -> bool:
@@ -1164,14 +1233,16 @@ class Settled:
         ``"stored"`` (its result was read from the store), ``"shared"`` (it has the
         checksum of a job that was handed out, whose outcome it takes),
         ``"workflow-stored"`` (a workflow job whose stored result was used, so it was not
-        expanded), ``"absent"`` (a propagating input held an ``Absent``, which is every
-        output of its result; it was never looked up, shared or committed)
+        expanded), ``"gated"`` (a gate switched it off, so every output of its result
+        is ``Absent("not-routed")``), ``"absent"`` (a propagating input or its gate held
+        an ``Absent``, which is every output of its result). A gated or absent job was
+        never looked up, shared or committed
     result : Result
         Its result
     """
 
     job: Job
-    how: ty.Literal["stored", "shared", "absent", "workflow-stored"]
+    how: ty.Literal["stored", "shared", "gated", "absent", "workflow-stored"]
     result: "Result"
 
 
@@ -1692,7 +1763,8 @@ class GraphRunner:
                 for job in node.pop_absent():
                     self._handed.add(job)
                     self._frame_of[job] = frame
-                    self._settled.append(Settled(job, "absent", job._held))
+                    how = "gated" if job._gated else "absent"
+                    self._settled.append(Settled(job, how, job._held))
             for job in jobs:
                 if is_workflow(job.task):
                     self._enter(job, frame)
@@ -2166,13 +2238,36 @@ class GraphRunner:
     def done(self) -> bool:
         """Whether every node of the graph has completed (and, if the runner owns the
         workflow job, it is committed), or nothing else can progress and jobs remain
-        :class:`NotRun` (an incomplete run: see :attr:`not_run`)"""
+        :class:`NotRun` (an incomplete run: see :attr:`not_run`). It stays False while a
+        settled job, an unrunnable element or an absent node has not yet been reported by
+        :meth:`ready`, such as a twin shared by the last :meth:`complete`"""
         root = self._root
         if root.owned:
             finished = root.state == "finished"
         else:
             finished = self._done_upto(root.graph) == len(root.graph.sorted_nodes)
+        if self._unreported():
+            return False
         return finished or (bool(self._not_run) and self._quiescent)
+
+    def _unreported(self) -> bool:
+        """Whether :meth:`ready` has records it has not returned yet"""
+        if self._settled:
+            return True
+        for frame in self._frames:
+            if frame.graph is None:
+                continue
+            for node in frame.graph.nodes:
+                if any(
+                    (id(node), index) not in self._reported_unrunnable
+                    for index in node.unrunnable
+                ):
+                    return True
+                if node.absent is not None and (
+                    id(node) not in self._reported_absent_nodes
+                ):
+                    return True
+        return False
 
     @property
     def entries(self) -> list[JobErrorEntry]:

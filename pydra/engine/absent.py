@@ -52,6 +52,10 @@ ABSENT_MODES = ("propagate", "accept", "drop", "fill")
 # The element index of the triple of an ``Absent`` that is a field's whole value
 WHOLE = -1
 
+# The cause of the ``Absent`` outputs of an element a gate switches off, and of a
+# ``select`` none of whose gates is true (RFC 0002 section 2.3(b)(c))
+NOT_ROUTED = "not-routed"
+
 
 @attrs.frozen
 class Absent:
