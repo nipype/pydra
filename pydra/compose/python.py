@@ -103,8 +103,7 @@ def define(
     code_hash: str | None = None,
     checksum: ty.Callable[["Task", dict[str, ty.Any]], str] | None = None,
 ) -> "Task":
-    """
-    Create an interface for a function or a class.
+    """Create an interface for a function or a class.
 
     Parameters
     ----------
@@ -123,19 +122,15 @@ def define(
         the name of the current field. If this list includes None, then none of the
         fields need to be set.
     version: str, optional
-        Declared version of the task. When given, the checksum uses the function's
-        module, name and this version in place of the code it reaches (see
-        ``code_hash``), so the version must be changed whenever a change to the code
-        changes its results. The values the code reads (closure cells, globals and
-        the defaults of the functions it calls) are still hashed. The digest of the
-        code (`pydra.utils.hash.code_digest`) is recorded beside each result, and a
-        `pydra.engine.store.DeclaredVersionWarning` is issued when a stored result of
-        the same version was computed from other code, also for workflows and splits
-        reaching the task, which hash it by its version too; ``reuse="exact"`` then
-        recomputes it, other policies reuse it. ``pydracli check-versions`` checks
-        versions against a committed table of digests. Functions defined in ``__main__`` or
-        inside another function are identified only by name, version and the values
-        they read, so a warning is issued for them.
+        Declared version of the task: the checksum uses the function's module, name and
+        this version in place of the code it reaches, so change it whenever a code change
+        changes results. The values the code reads are still hashed. A
+        `pydra.engine.store.DeclaredVersionWarning` is issued when a stored result of the
+        same version was computed from other code (``reuse="exact"`` then recomputes it);
+        ``pydracli check-versions`` checks versions against a committed table of digests.
+        A function defined in ``__main__`` or inside another function is identified only by
+        its name, version and the values it reads; ``define`` warns (``UserWarning``) when
+        such a function is given a version.
     resources: ComputeResources, optional
         What the task asks of a scheduler worker (Slurm, SGE); never part of the checksum
     code_hash: str, optional
@@ -144,7 +139,8 @@ def define(
         ``"module"`` adds the functions and classes it reaches in its own module;
         ``"user"`` adds all reachable code that is not library code (the standard
         library, installed distributions and pydra; see ``PYDRA_USER_PACKAGES`` in
-        `pydra.utils.hash`). Library code is identified by its qualified name. By
+        `pydra.utils.hash`). Library code is identified by its qualified name and the
+        version of the distribution that owns it. By
         default the ``PYDRA_CODE_HASH`` environment variable, otherwise ``"user"``.
     checksum: callable, optional
         A function of the task and its inputs, ``checksum(task, inputs) -> str``, used

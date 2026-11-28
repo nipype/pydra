@@ -24,11 +24,15 @@ from pydra.utils.hash import (
     LIBRARY_PACKAGES,
     USER_PACKAGES_ENV_VAR,
     Cache,
+    is_unversioned,
+    _module_is_library,
     _package_overrides,
     check_code_hash,
     code_hash_default,
     hash_function,
+    owner_of,
 )
+from pydra.utils.general import get_fields
 
 if ty.TYPE_CHECKING:
     from pydra.compose.base import Task
@@ -73,6 +77,7 @@ def field_digests(
     digests["Outputs"] = f"type@1:{hash_function(task.Outputs, cache=cache)}"
     if collect:
         task._code_modules = frozenset(cache.modules)
+        task._code_refs = sorted(cache.refs)
         task._declared_code = {
             k: ",".join(sorted(v)) for k, v in sorted(cache.declared.items())
         }
@@ -85,13 +90,39 @@ def _executor_is_code(task: "Task") -> bool:
     return task._executor_name is not None and task._task_type() != "shell"
 
 
+def library_values(task: "Task") -> list[str]:
+    """The distributions that own the library types of the input values of ``task``, as
+    sorted ``dist:{dist}=={identity}`` strings (RFC 0004 section 4.1). A type of the standard
+    library or the engine, of user code, or of no single distribution (the context records it
+    as unknown) is left out."""
+    from pydra.engine.context import _value_modules
+
+    modules: set[str] = set()
+    for field in get_fields(task):
+        if field.name != task._executor_name:
+            _value_modules(getattr(task, field.name), modules)
+    owners = {
+        o
+        for m in modules
+        if isinstance(m, str)
+        and m != "__main__"
+        and not is_unversioned(m)
+        and _module_is_library(m)
+        and (o := owner_of(m)) is not None
+    }
+    return sorted(f"dist:{dist}=={identity}" for dist, identity in owners)
+
+
 def task_record(task: "Task") -> Record:
     """The identity record of ``task`` without the fields of the job that runs it."""
     if hasattr(task, "__checksum__"):
         return {"scheme": IDENTITY_SCHEME, "supplied": task._supplied_checksum()}
     digests = dict(task._compute_hashes()[1])
     outputs = digests.pop("Outputs")
-    code = {}
+    code: dict[str, ty.Any] = {
+        "refs": list(task._code_refs or ()),
+        "values": library_values(task),
+    }
     if _executor_is_code(task) and task._executor_name in digests:
         code["code"] = digests.pop(task._executor_name)
     return {

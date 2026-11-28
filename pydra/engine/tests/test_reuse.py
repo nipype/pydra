@@ -435,11 +435,11 @@ def test_tasks_without_hook_keep_checksums(monkeypatch):
     for task, checksum in [
         (
             python.define(inc_one, version="1")(a=1),
-            "python-91edb5e2d2191124f45fe74aad4ea709696c2da38cfb8f2a4868e1667b792168",
+            "python-7d2cd4ae7cea130651bd76272a8cc6d270d2fb7332a42ba66caa16591902c5dc",
         ),
         (
             shell.define("echo <text:str>")(text="hi"),
-            "shell-4ff5573110d302212f87b85b0bc0f31b05c102712ae2f557d493e32e86501599",
+            "shell-0fd48034c7e10861bc1255bb2173d1f325ed7ad89abd323d1f4e27cf84aa7f35",
         ),
     ]:
         assert not hasattr(task, "__checksum__")
@@ -460,8 +460,8 @@ def test_code_hashed_tasks_keep_checksums(monkeypatch):
     module.AddOne = AddOne
     monkeypatch.setitem(sys.modules, module.__name__, module)
     assert (AddOne(a=1)._checksum, GoldenWf(a=1)._checksum) == (
-        "python-c8931026c836d9acea3ac1888dbed7457ec2b0020996b215cec9fc25a97b583e",
-        "workflow-a79cb7670bf8dcdd4a041adf5cbce58e8b011192bdabbe32b9f8e0fa2329cef9",
+        "python-cc04df8d59ab2d72861bd36976dd08d50c088fc7054953221596e677f44cc402",
+        "workflow-7b84ad5301455d2d31e39e258809e738bfc6d5d34d718411961579d7a649af58",
     )
 
 
