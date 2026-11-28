@@ -39,7 +39,11 @@ ALLOWED: dict[tuple[str, str, str], str] = {
         "readonly_caches",
     ): "in the base branch, unchanged here",
     ("engine/lease.py", "errno", "ESTALE"): "not defined on every platform",
+    ("engine/lease.py", "fn", "__module__"): "a callable may have no module",
+    ("engine/lease.py", "fn", "__qualname__"): "a callable may have no qualified name",
     ("engine/lease.py", "os", "getuid"): "POSIX only",
+    ("engine/lease.py", "os", "register_at_fork"): "POSIX only",
+    ("engine/lease.py", "signal", "SIGKILL"): "POSIX only",
     (
         "engine/portable/errors.py",
         "type",
