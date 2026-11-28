@@ -428,6 +428,11 @@ class ResultStore(ty.Protocol):
         """
         raise TypeError(f"{type(self).__name__} has no collect")
 
+    def stored(self, checksum: str) -> list:
+        """The entries stored for ``checksum``, as ``(ref, context, digest)``, under a
+        store that `finds`; none by default"""
+        return []
+
     def present(self, job: "Job") -> bool:
         """Whether the job's own address may hold an entry, one existence check; True by default (read
         to know). A runner without ``lookup_before_dispatch`` calls `find` only for the jobs it

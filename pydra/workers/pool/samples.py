@@ -1,4 +1,5 @@
-"""What a pool worker measures: its hardware and a `Sample` per settled job (RFC 0005 section 4.3)."""
+"""What a pool worker reads of its hardware and memory (RFC 0005 section 4.3); the `Sample` it records
+per settled job is `pydra.workers.pool.calibration.Sample`."""
 
 from __future__ import annotations
 
@@ -15,10 +16,11 @@ import attrs
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "CallMeter",
     "Gpu",
     "HardwareClass",
-    "Sample",
     "device_memory",
+    "process_rss",
     "host_memory",
     "read_hardware",
 ]
@@ -224,66 +226,116 @@ def host_memory() -> tuple[int | None, int | None]:
     return current, peak
 
 
-def device_memory() -> int | None:
-    """Device bytes held by every compute process on the visible devices (the co-tenancy baseline),
-    None without ``nvidia-smi``."""
+def device_memory(pids: "ty.Iterable[int] | None" = None) -> int | None:
+    """Device bytes held by the compute processes ``pids`` (every one when None); None without
+    ``nvidia-smi``, and None when ``pids`` match no row while CUDA is initialised in this process
+    (``nvidia-smi`` lists pids of another namespace, as in a container: its 0 would be false).
+    """
     from pydra.engine.procgroup import gpu_memory_by_pid
 
-    held = gpu_memory_by_pid()
-    return None if held is None else sum(held.values())
+    held = gpu_memory_by_pid(pids)
+    if held is None:
+        return None
+    if pids is not None and not held and _torch_cuda() is not None:
+        return None
+    return sum(held.values())
 
 
-@attrs.frozen
-class Sample:
-    """What a worker measured for one settled job.
+def _status_kb(field: str, pid: "int | str" = "self") -> int | None:
+    """A ``kB`` field of ``/proc/<pid>/status``, in bytes; None off Linux or when unreadable."""
+    try:
+        with open(f"/proc/{pid}/status") as f:
+            for line in f:
+                if line.startswith(field + ":"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
 
-    Attributes
-    ----------
-    wall_s : float
-        Seconds of the call that ran the job.
-    claim_s : float
-        Seconds the worker spent claiming the tickets it ran with.
-    batch_size : int
-        Jobs in the call.
-    units : float, optional
-        The job's units (padded units of the call, when batched).
-    baseline_bytes : int, optional
-        The worker's resident bytes at start, before any provider loaded.
-    resident_bytes, peak_bytes : int, optional
-        The worker's resident bytes after the call, and its peak so far.
-    device_baseline_bytes : int, optional
-        Device-wide bytes before the worker's first claim on a CUDA class.
-    device_bytes : int, optional
-        Device-wide bytes, read once per claim on a CUDA class.
-    load_s : float
-        Seconds loading the residency for this job (0 when it was resident).
-    cold : bool
-        Whether this job's residency was loaded for it.
-    since_load : int
-        Jobs this worker ran on the residency since it was loaded, before this one.
-    reload : bool
-        Whether the residency was reloaded after a resource fault.
-    worker : str
-        The worker's token.
-    ended : float
-        ``time.time()`` when the job settled.
+
+def _reset_hwm(pid: "int | str") -> bool:
+    """Reset ``pid``'s resident-set high-water mark (Linux ``clear_refs`` 5); False when it cannot
+    be."""
+    try:
+        with open(f"/proc/{pid}/clear_refs", "w") as f:
+            f.write("5")
+        return True
+    except OSError:
+        return False
+
+
+def process_rss(pid: int) -> int | None:
+    """``pid``'s resident bytes: ``/proc``, else psutil; None when neither says."""
+    rss = _status_kb("VmRSS", pid)
+    if rss is not None:
+        return rss
+    try:
+        import psutil  # optional
+
+        return int(psutil.Process(pid).memory_info().rss)
+    except Exception:
+        return None
+
+
+def _torch_cuda() -> ty.Any:
+    """``torch.cuda`` when torch is already imported in this process and CUDA initialised there;
+    torch is never imported here."""
+    torch = sys.modules.get("torch")
+    if torch is None:
+        return None
+    try:
+        cuda = torch.cuda
+        return cuda if cuda.is_available() and cuda.is_initialized() else None
+    except Exception:
+        return None
+
+
+class CallMeter:
+    """The per-call memory peaks a worker reads around one call, where they are cheap: on Linux, the
+    resident-set high-water mark of each of the worker's own processes (``clear_refs`` before the
+    call), and torch's caching-allocator peak when torch is imported and CUDA initialised in the
+    worker. `stop` returns each peak above what was held just before the call, None where it is
+    not read.
     """
 
-    wall_s: float
-    claim_s: float
-    batch_size: int
-    units: float | None
-    baseline_bytes: int | None
-    resident_bytes: int | None
-    peak_bytes: int | None
-    device_baseline_bytes: int | None
-    device_bytes: int | None
-    load_s: float
-    cold: bool
-    since_load: int
-    reload: bool
-    worker: str
-    ended: float
+    def start(
+        self, pids: "ty.Sequence[int] | None" = None
+    ) -> tuple[dict[int, int] | None, int | None]:
+        own = list(pids) if pids else [os.getpid()]
+        host: dict[int, int] | None = {}
+        for pid in own:
+            rss = _status_kb("VmRSS", pid) if _reset_hwm(pid) else None
+            if rss is None:
+                host = None
+                break
+            host[pid] = rss
+        device = None
+        cuda = _torch_cuda()
+        if cuda is not None:
+            try:
+                cuda.reset_peak_memory_stats()
+                device = cuda.memory_reserved()
+            except Exception:
+                device = None
+        return host, device
 
-    def to_json(self) -> dict[str, ty.Any]:
-        return attrs.asdict(self)
+    def stop(
+        self, state: tuple[dict[int, int] | None, int | None]
+    ) -> tuple[int | None, int | None]:
+        before, device0 = state
+        host = device = None
+        if before is not None:
+            peaks = {pid: _status_kb("VmHWM", pid) for pid in before}
+            if all(v is not None for v in peaks.values()):
+                host = sum(max(0, ty.cast(int, peaks[p]) - before[p]) for p in before)
+        if device0 is not None:
+            cuda = _torch_cuda()
+            try:
+                device = (
+                    None
+                    if cuda is None
+                    else max(0, cuda.max_memory_reserved() - device0)
+                )
+            except Exception:
+                device = None
+        return host, device
