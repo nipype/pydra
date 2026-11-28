@@ -31,7 +31,7 @@ from pydra.engine.submitter import Submitter
 from pydra.scripts.cli import crash
 from pydra.utils.storagedir import IS_WINDOWS, StoreAges, StorePolicy
 
-from .test_portable_quarantine import age, aged_store, skew  # noqa: F401
+from .test_portable_quarantine import SKEW, age, aged_store, skew  # noqa: F401
 from .test_portable_store import (
     CTX,
     CTX2,
@@ -743,6 +743,29 @@ def test_collect_removes_old_default_work_dirs_only(tmp_path, skew):  # noqa: F8
     assert committed.exists() and young.exists() and foreign.exists()
     assert any(str(old) == r for r in report.removed)
     assert any(str(committed) == w and "younger" in why for w, why in report.kept)
+
+
+def test_collect_spares_a_resume_dir_whose_lease_is_live(tmp_path, skew):  # noqa: F811
+    """A resumable job's directory is old while its job runs (nothing is written at its top);
+    the lease of the same hash, renewed by its holder, keeps it"""
+    store = aged_store(tmp_path, work=100)
+    # the skewed clock makes everything at least SKEW old; a lease is stale after more
+    store._lease_settings = LeaseSettings(
+        holder="anonymous", stale_after=10 * SKEW, timeout=20 * SKEW
+    )
+    job = _stub(None, can_resume=True)
+    path = store.begin_run(job)
+    (path / "_job.pklz").write_bytes(b"x")
+    for p in (*path.iterdir(), path):
+        age(p, 200)
+    lease = store.acquire(job.checksum, job.context, resumable=True)
+    assert lease.lockfile.name == path.name[len("resume-") :] + ".lock"
+    with lease:
+        report = store.collect()
+        assert path.exists()
+        assert any(str(path) == w and "lease" in why for w, why in report.kept)
+    store.collect()
+    assert not path.exists()
 
 
 def test_collect_never_touches_a_caller_named_work_dir(tmp_path, skew):  # noqa: F811
