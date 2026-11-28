@@ -23,6 +23,7 @@ import uuid
 import warnings
 from pathlib import Path
 
+from fileformats.core.exceptions import FormatMismatchError
 from fileformats.core.fileset import FileSet
 
 from pydra.engine.absent import Absent
@@ -41,6 +42,7 @@ from pydra.utils.digest import (
     fileset_digest,
     is_canonical_array,
     jcs,
+    lookup_fileset_tag,
     lookup_tag,
     np,
     npformat,
@@ -223,16 +225,16 @@ class Encoder(FormWalker):
         return os.fspath(value) if stored is None else stored
 
     def fallback(self, value: ty.Any) -> JSON:
-        if isinstance(value, FileSet):
-            tag = fileformats_tag(type(value))
-            if tag is None:  # a file set is never pickled (RFC 0003 section 6.4)
-                raise UnencodableOutput(
-                    self._field,
-                    type(value),
-                    "a file set is stored only under a registered tag or the MIME-like "
-                    "name of a fileformats class, and is never pickled",
-                )
-            return self._fileset(value, tag, self._field)
+        if isinstance(value, FileSet):  # never pickled (RFC 0003 section 6.4)
+            try:
+                tag_text = f"its tag {value.mime_like!r} does not resolve to a class"
+            except Exception:
+                tag_text = "it has no tag: its class has no mime_like"
+            raise UnencodableOutput(
+                self._field,
+                type(value),
+                f"a file set is never pickled; {tag_text}; register one",
+            )
         return self._pickle(value, self._field)
 
     def _pickle(self, value: ty.Any, field: str) -> JSON:
@@ -438,6 +440,14 @@ def _tag_keys(doc: dict) -> list[str]:
     return [k for k in doc if k.startswith("$") and not k.startswith("$$")]
 
 
+def _fileset_classes(tp: ty.Any) -> ty.Iterator[type]:
+    """The ``FileSet`` classes a declared type names, at any depth of its arguments."""
+    if isinstance(tp, type) and issubclass(tp, FileSet):
+        yield tp
+    for arg in ty.get_args(tp):
+        yield from _fileset_classes(arg)
+
+
 class Decoder:
     """Decodes the JSON of an entry's outputs.
 
@@ -468,11 +478,24 @@ class Decoder:
         self.entry_path = entry_path
         self.allow_pickle = allow_pickle
         self.referenced: set[str] = set()
+        self.declared: tuple[type, ...] = ()
+        """The file set classes the field being decoded declares, which a shared tag
+        decodes to."""
         self.trees: list[tuple[str, list[str]]] = []
         """The file sets decoded: each one's set name and its top-level names."""
 
-    def decode_outputs(self, outputs: ty.Mapping[str, JSON]) -> dict[str, ty.Any]:
-        return {name: self.decode(doc) for name, doc in outputs.items()}
+    def decode_outputs(
+        self,
+        outputs: ty.Mapping[str, JSON],
+        declared: ty.Mapping[str, ty.Any] | None = None,
+    ) -> dict[str, ty.Any]:
+        """``declared`` maps an output field to its declared type."""
+        out = {}
+        for name, doc in outputs.items():
+            self.declared = tuple(_fileset_classes((declared or {}).get(name)))
+            out[name] = self.decode(doc)
+        self.declared = ()
+        return out
 
     def decode(self, doc: JSON, hashable: bool = False) -> ty.Any:
         """The value of ``doc``. ``hashable`` is set for a set element or a dict key, where a
@@ -669,14 +692,14 @@ class Decoder:
             ) from err
 
     def _fileset(self, doc: dict, body: JSON, hashable: bool) -> ty.Any:
-        codec = lookup_tag(body) if isinstance(body, str) else None
-        cls = codec.type if codec is not None and codec.fileset else None
-        if codec is None and isinstance(body, str):
-            cls = fileformats_class(body)
-        if cls is None:
+        codec = (
+            lookup_fileset_tag(body, self.declared) if isinstance(body, str) else None
+        )
+        if codec is None or not codec.fileset:
             raise EntryFormatUnknown(
                 f"file set tag {body!r} is not registered in this process"
             )
+        cls = codec.type
         listing = doc["files"]
         if not isinstance(listing, list) or not listing:
             raise ValueError("a file set lists its files")
@@ -729,6 +752,11 @@ class Decoder:
                     ignore_hidden_files=False, ignore_hidden_dirs=False
                 )
             )
+        except FormatMismatchError as err:
+            # the members verified: the reader's registry, not the entry, disagrees
+            raise EntryFormatUnknown(
+                f"files/{set_hex} does not form a {codec.type.__name__} here: {err}"
+            ) from err
         except Exception as err:
             raise CorruptEntry(
                 f"files/{set_hex} does not form a {cls.__name__}: {err}"
@@ -737,6 +765,11 @@ class Decoder:
             raise CorruptEntry(
                 f"files/{set_hex} has keys {found}, the entry records {keys}"
             )
+        # the members are sealed read-only and were just checked against the entry: a
+        # downstream input takes its digest from here, with no settle window
+        from pydra.utils.hash import prime_fileset_members
+
+        prime_fileset_members(value, list(zip(keys, shas)))
         return value
 
 

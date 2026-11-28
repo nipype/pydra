@@ -7,7 +7,9 @@ checksum. ``job_record(job)`` is the record of a job: the task's, plus the field
 belong to the job and not to the task.
 
 The digest strings of the record are ``code@1`` (the walk of the executor), ``type@1``
-(the ``Outputs`` class) and ``py@1`` (an input).
+(the ``Outputs`` class) and, for each input, its typed digest from ``pydra.utils.digest``
+(``json@1``, ``npy@1``, ``file@1``, a registered one, or ``py@1`` for what has no digest
+form).
 
 A job's record is built once, in the submitting process, and carried with the job:
 ``Job.record``, ``Job.checksum`` and the store identity's ``key`` never rebuild it in a
@@ -24,7 +26,8 @@ import hashlib
 import os
 import typing as ty
 
-from pydra.utils.digest import jcs
+from pydra.utils.digest import digest, jcs
+from pydra.utils.general import add_exc_note
 from pydra.utils.hash import (
     LIBRARY_PACKAGES,
     USER_PACKAGES_ENV_VAR,
@@ -112,8 +115,10 @@ def field_digests(
             if not rehashed_in_worker(fields.get(name), carried[name][0]):
                 digests[name] = carried[name][1]
                 continue
-        tag = "code@1" if name == code_name else "py@1"
-        digests[name] = f"{tag}:{hash_function(value, cache=cache)}"
+        if name == code_name:
+            digests[name] = f"code@1:{hash_function(value, cache=cache)}"
+        else:
+            digests[name] = _input_digest(name, value, cache)
     digests["Outputs"] = (
         carried["Outputs"][1]
         if "Outputs" in carried
@@ -153,6 +158,18 @@ def rehashed_in_worker(field: ty.Any, value: ty.Any) -> bool:
         or isinstance(value, FileSet)
         or hasattr(value, "__bytes_repr__")
     )
+
+
+def _input_digest(name: str, value: ty.Any, cache: Cache) -> str:
+    """The typed digest of the input ``name`` (RFC 0004 section 6.2); an error names the
+    field."""
+    try:
+        return digest(value, cache)
+    except ValueError as err:  # includes UnicodeEncodeError: no JCS form
+        raise ValueError(f"cannot digest input field {name!r}: {err}") from err
+    except Exception as err:
+        add_exc_note(err, f"while digesting input field {name!r}")
+        raise
 
 
 def _executor_is_code(task: "Task") -> bool:
