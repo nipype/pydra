@@ -89,6 +89,7 @@ from pydra.utils.storagedir import (
     WrongKindError,
     is_reparse,
     copy_hashed,
+    is_within,
 )
 
 if ty.TYPE_CHECKING:
@@ -109,6 +110,7 @@ _CONTENDED = (
     object()
 )  # another writer's progress changed what this one saw: walk down again
 _CLEARED = object()  # a corrupt occupant was set aside: place again
+_REFUSED = object()  # the reuse hook gave REFUSE, which ends the lookup
 _OURS = object()  # the occupant carries this writer's token
 _RERANKS = 4
 """Most re-rankings of a reuse lookup whose ranked entry changed under it: each follows a
@@ -353,6 +355,27 @@ def _rebuild(args: dict[str, ty.Any]) -> "PortableStore":
     return PortableStore(**args)
 
 
+def _check_legacy(root: os.PathLike, legacy: tuple[Root, ...]) -> None:
+    """Refuse a ``legacy=`` root that is not a `Root`, is declared ``shared``, or holds the
+    store's own root (a legacy root is never written, RFC 0003 section 8.1)."""
+    own = os.path.realpath(os.fspath(root))
+    for item in legacy:
+        if not isinstance(item, Root):
+            raise TypeError(f"a legacy root is a Root, got {item!r}")
+        if item.trust == "shared":
+            raise ValueError(
+                f"the legacy root {os.fspath(item.path)!r} is declared shared; reading a "
+                "PickleStore cache unpickles its results, so a legacy root is read only when "
+                "declared private or trusted (RFC 0003 section 8.1)"
+            )
+        path = os.path.realpath(os.fspath(item.path))
+        if is_within(own, path):
+            raise ValueError(
+                f"the legacy root {path!r} holds the store's root {own!r}; a legacy root is "
+                "never written"
+            )
+
+
 def _record_of(key: KeyRecord) -> "dict[str, ty.Any] | None":
     """``Result.record`` of an entry: its key record (``pydra-identity@2``), or None for an
     identity whose key is None"""
@@ -388,8 +411,10 @@ class PortableStore(ResultStore):
         one entry, so it must be idempotent; it must not add members to ``staged``
         (`CommitHookError`) and writes through `write_sidecar` or the audit directory. If
         it raises, nothing is committed.
-    legacy
-        Accepted and not yet used.
+    legacy : sequence of Root
+        `PickleStore` cache roots read in place (RFC 0003 section 8.1), each ``"private"``
+        or ``"trusted"``; never written. A job none of this store's roots serves is looked
+        up there, and a usable result published into ``root`` and served from it.
     dedupe : bool, optional
         Whether two submitters of one job compute it once, through a lease at
         ``<root>/leases/`` (RFC 0003 section 5.3). Default True unless ``trust`` is
@@ -449,6 +474,8 @@ class PortableStore(ResultStore):
                 "a shared root needs work_dir=: a work directory holds a job's pickles and crash "
                 "file, which other users of the root must not read (RFC 0003 section 5.4)"
             )
+        legacy = tuple(legacy)
+        _check_legacy(root, legacy)
         self._args = dict(
             root=root,
             trust=trust,
@@ -466,6 +493,19 @@ class PortableStore(ResultStore):
             shard=shard,
             dirs=dirs,
         )
+        missing = [
+            m
+            for m in (
+                *StoreIdentity.__annotations__,
+                *(n for n, v in vars(StoreIdentity).items() if callable(v)),
+            )
+            if not m.startswith("_") and not hasattr(identity, m)
+        ]
+        if missing:
+            raise TypeError(
+                f"the identity {identity!r} lacks the StoreIdentity members "
+                f"{', '.join(missing)}"
+            )
         self.path = os.path.abspath(os.fspath(root))
         self.trust = trust
         self.identity = identity
@@ -2815,17 +2855,21 @@ class PortableStore(ResultStore):
         corrupt candidate is quarantined (skipped, in a read-only root) and the next taken.
         If ``Reuse.served`` raises, the result is not served.
 
+        After a `Miss` that no ``REFUSE`` ended, a store with ``legacy`` roots publishes the job's
+        result from one of them (`~pydra.engine.portable.migrate.publish_legacy`) and ranks again,
+        once per lookup.
+
         Parameters
         ----------
         probe : bool
             Look only if this root holds an entry at the job's own address, which costs one
             ``lstat`` (as `read_succeeded`), and otherwise answer `Miss` with nothing read:
             what a runner's ``ready()`` asks of every released job, leaving entries of other
-            contexts and read-only roots to the lookup under the job's lease.
+            contexts, read-only roots and ``legacy`` roots to the lookup under the job's lease.
         """
         if probe and not self._present(job.checksum, job.context):
             return Miss()
-        return self._find(job.checksum, job.context, job.task)
+        return self._find(job.checksum, job.context, job.task, job=job)
 
     def lookup(
         self,
@@ -2848,12 +2892,26 @@ class PortableStore(ResultStore):
         context: Context,
         task: "Task | None",
         own: EntryRef | None = None,
+        job: "Job | None" = None,
     ) -> Lookup:
+        legacy = job is not None and bool(self.legacy)
         for _ in range(_RERANKS):
             ranked = self.reuse.rank(context, self.stored(checksum), task)
             outcome = self._consider(checksum, ranked, context, task, own)
-            if outcome is not _CONTENDED:
-                return ty.cast(Lookup, outcome)
+            if outcome is _CONTENDED:
+                continue
+            if outcome is _REFUSED:
+                return Miss()  # the hook ended the lookup: legacy is not read either
+            if isinstance(outcome, Miss) and legacy:
+                from pydra.engine.portable.migrate import LEGACY_REFUSED, publish_legacy
+
+                legacy = False  # read the old caches once per lookup
+                published = publish_legacy(self, ty.cast("Job", job))
+                if published is LEGACY_REFUSED:
+                    return Miss()
+                if published:
+                    continue
+            return ty.cast(Lookup, outcome)
         logger.warning(
             "the entries of %s changed while they were read %d times; not reused",
             checksum,
@@ -2883,7 +2941,7 @@ class PortableStore(ResultStore):
                 return Miss()  # only the own address is wanted, and it was not taken
             verdict = self.reuse.verdict(candidate, context, task)
             if verdict is Verdict.REFUSE:
-                return Miss()
+                return _REFUSED
             if verdict is Verdict.SKIP:
                 continue
             if verdict is Verdict.VERIFY:
@@ -3163,11 +3221,18 @@ class PortableStore(ResultStore):
                 "%s is not served: its reuse record failed: %r", ref.fingerprint, err
             )
             return None
-        if committed.kept is not None:
-            with self._open() as root, root.child(self.header.dirs["staging"]) as st:
-                if os.path.dirname(committed.kept) == st.path:
-                    _discard(st, os.path.basename(committed.kept))
+        self.discard_kept(committed)
         return attrs.evolve(committed, stored=True, kept=None, served=True), result
+
+    def discard_kept(self, committed: Committed) -> None:
+        """Remove the staged entry a lost race kept (``committed.kept``), when it is in this
+        store's staging directory; nothing else is touched. For a caller, such as
+        `~pydra.engine.portable.migrate.migrate`, that has no use for its own copy."""
+        if committed.kept is None:
+            return
+        with self._open() as root, root.child(self.header.dirs["staging"]) as st:
+            if os.path.dirname(committed.kept) == st.path:
+                _discard(st, os.path.basename(committed.kept))
 
     def _keep_job(self, job: "Job") -> None:
         """Write the failed job's pickle to its work directory, for ``pydracli crash``."""

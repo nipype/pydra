@@ -46,8 +46,12 @@ class ToyIdentity:
     recorded_only: frozenset = frozenset()
     name: ty.ClassVar[str] = "toy-identity@6"
     fingerprint_name: ty.ClassVar[str] = "toy-context@1"
+    scheme = None
 
     def key(self, job):
+        return None
+
+    def supplied_key(self, checksum):
         return None
 
     def check_key(self, checksum, key):
