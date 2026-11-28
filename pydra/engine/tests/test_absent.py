@@ -687,6 +687,41 @@ def test_plan_counts_propagated_elements_without_store_reads(tmp_path):
     assert not any(isinstance(v, Absent) for v in SEEN)
 
 
+# -- an Absent held as a constant ---------------------------------------------------------
+
+
+def count_key(task, inputs):
+    """A supplied checksum built from how many values a task reads, not from them"""
+    return f"keyedshow-n{len(inputs['vals'])}"
+
+
+@python.define(
+    checksum=count_key, inputs={"vals": python.arg(type=list[int], absent="accept")}
+)
+def KeyedShow(vals) -> list[str]:
+    return [f"absent:{v.cause}" if isinstance(v, Absent) else str(v) for v in vals]
+
+
+@workflow.define(inputs={"vals": workflow.arg(type=list[int], absent="accept")})
+def KeyedShowWf(vals) -> list[str]:
+    k = workflow.add(KeyedShow(vals=vals), name="K")
+    return k.out
+
+
+def test_constant_absent_enters_the_suffix(tmp_path):
+    with Submitter(worker="debug", cache_root=tmp_path / "cache") as sub:
+        # a nested workflow's node receives the list as a constant
+        nested = sub(KeyedShowWf(vals=[1, Absent("negative"), 3])).outputs.out
+        assert nested == ["1", "absent:negative", "3"]
+        # a run without the absence is not served the inner node's entry
+        assert sub(KeyedShow(vals=[1, 2, 3])).outputs.out == ["1", "2", "3"]
+        # a root job holding a constant Absent has its own suffix and cause
+        root = sub(KeyedShow(vals=[1, Absent("x"), 3])).outputs.out
+        assert root == ["1", "absent:x", "3"]
+    job_task = KeyedShow(vals=[1, 2, 3])
+    assert job_task._checksum == "keyedshow-n3"  # no Absent: no suffix
+
+
 # -- with partial expansion, placement and the store -------------------
 
 
