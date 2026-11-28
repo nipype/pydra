@@ -2192,3 +2192,559 @@ def test_by_value_function_hashed_first_keeps_its_hash_in_another_process(
             env={**os.environ, "PYTHONHASHSEED": "random"},
         )
         assert result.stdout.decode().strip() == expected
+
+
+_CLASS_BY_VALUE_SOURCE = """\
+import dataclasses
+import functools
+
+import attrs
+
+from pydra.compose import python
+
+HELP = 3
+
+
+def deco(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+class Obj:
+    x = 1
+
+    def __init__(self, n):
+        self.n = n
+
+    def __eq__(self, other):
+        return isinstance(other, Obj) and other.n == self.n
+
+    @deco
+    def w(self):
+        return HELP
+
+    @property
+    def p(self):
+        return self.n
+
+
+@attrs.define
+class Slotted:
+    a: int = 1
+
+    def m(self):
+        return self.a + HELP
+
+
+@dataclasses.dataclass
+class Params:
+    a: int = 1
+
+    def m(self):
+        return self.a + HELP
+
+
+@dataclasses.dataclass
+class Fields:
+    a: int = 1
+    b: str = "x"
+
+
+@attrs.define
+class AttrsFields:
+    b: str = "x"
+
+
+class Const:
+    x = 1
+    flag = True
+
+
+class Dup:
+    x = 1
+    x = 2
+
+
+def make_counted():
+    class Counter:
+        n = 0
+
+    class Twice:
+        x = 1
+        x = 2
+
+    return Counter, Twice
+
+
+def make_obj(n):
+    return Obj(n)
+
+
+@python.define
+def MakeObj(n: int) -> Obj:
+    return Obj(n)
+
+
+def make_cfg(flag):
+    if flag:
+        class Cfg:
+            def scale(self, x):
+                return x * 2
+
+    else:
+        class Cfg:
+            def scale(self, x):
+                return x - 100
+
+    return Cfg
+
+
+def make_wrapped(wrapped):
+    if wrapped:
+        class M:
+            @deco
+            def m(self):
+                return 1
+
+    else:
+        class M:
+            def m(self):
+                return 1
+
+    return M
+
+
+def other_scale(self, x):
+    return x * 3
+"""
+
+# Prints, for each object of a list pickled by value, the digest of a class, the hash
+# of a function, or the checksum of a task, and the encoded code of a class. The code
+# of the functions of the module file named by argv[1] is renamed "<dynamic-code>", as
+# cloudpickle >= 3.1.3 names it, also under older versions. The module named by argv[2],
+# if given, is imported first
+_DIGESTS_IN_SUBPROCESS = """\
+import json, sys, types, cloudpickle
+from pydra.utils import hash as H
+
+def dyn(code):
+    return code.replace(co_filename="<dynamic-code>", co_consts=tuple(
+        dyn(c) if isinstance(c, types.CodeType) else c for c in code.co_consts))
+
+def force(func):
+    while isinstance(func, types.FunctionType):
+        if func.__code__.co_filename == sys.argv[1]:
+            func.__code__ = dyn(func.__code__)
+        func = vars(func).get("__wrapped__")
+
+if len(sys.argv) > 2:
+    __import__(sys.argv[2])
+out = []
+for obj in cloudpickle.loads(sys.stdin.buffer.read()):
+    if isinstance(obj, type) and not hasattr(obj, "_executor_name"):
+        for member in list(vars(obj).values()):
+            for f in H._member_functions(member):
+                force(f)
+        out.append([H.class_digest(obj), H._class_code(obj, H.Cache()).decode("latin-1")])
+    elif isinstance(obj, types.FunctionType):
+        force(obj)
+        out.append([H.hash_function(obj), ""])
+    else:
+        out.append([obj._checksum, ""])
+print(json.dumps(out))
+"""
+
+
+def _digests_in_subprocess(
+    tmp_path: Path, module, objects: list, extra_path: Path | None = None
+) -> list[list[str]]:
+    """The digests `_DIGESTS_IN_SUBPROCESS` prints for `objects`, pickled by value
+    with `module` registered, in a process that cannot import `module` (unless
+    `extra_path` holds another module of its name, which it imports)"""
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        payload = cloudpickle.dumps(objects)
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    env = {**os.environ, "PYTHONHASHSEED": "random"}
+    if extra_path is not None:
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(extra_path), *filter(None, [env.get("PYTHONPATH")])]
+        )
+    args = [sys.executable, "-c", _DIGESTS_IN_SUBPROCESS, module.__file__]
+    if extra_path is not None:
+        args.append(module.__name__)
+    result = subprocess.run(
+        args,
+        input=payload,
+        capture_output=True,
+        cwd=str(tmp_path.parent),
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    return json.loads(result.stdout)
+
+
+def _force_dynamic(klass: type) -> None:
+    """Rename the code of the functions of `klass` ``"<dynamic-code>"``, as cloudpickle
+    >= 3.1.3 renames the code it unpickles by value, also under older versions"""
+    for member in list(vars(klass).values()):
+        for f in hash_module._member_functions(member):
+            while isinstance(f, types.FunctionType):
+                if not f.__code__.co_filename.startswith("<"):
+                    f.__code__ = _dynamic_code(f.__code__)
+                f = vars(f).get("__wrapped__")
+
+
+def test_by_value_class_keeps_its_digest_when_its_members_are_replaced(
+    tmp_path, monkeypatch
+):
+    """Unpickling an instance of a class pickled by value replaces the functions of the
+    live class with copies whose code is ``"<dynamic-code>"``: the class's members, its
+    digest and the checksums that read it do not change"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    classes = [module.Obj, module.Slotted]
+    members = [[n for n, _ in hash_module._class_members(k)] for k in classes]
+    digests = [hash_module.class_digest(k) for k in classes]
+    reader = hash_function(module.make_obj)
+    checksum = module.MakeObj(n=3)._checksum
+    cloudpickle.register_pickle_by_value(module)
+    try:
+        for instance in (module.Obj(1), module.Slotted()):
+            assert cloudpickle.loads(cloudpickle.dumps(instance)) == instance
+    finally:
+        cloudpickle.unregister_pickle_by_value(module)
+    for klass in classes:
+        _force_dynamic(klass)
+    assert vars(module.Obj)["__init__"].__code__.co_filename == "<dynamic-code>"
+    # the slots accessors attrs makes are closures, unpickled by value too
+    assert vars(module.Slotted)["__getstate__"].__code__.co_filename == (
+        "<dynamic-code>"
+    )
+    assert [[n for n, _ in hash_module._class_members(k)] for k in classes] == members
+    assert members == [["__eq__", "__init__", "p", "w"], ["m"]]
+    assert [hash_module.class_digest(k) for k in classes] == digests
+    assert hash_function(module.make_obj) == reader
+    assert module.MakeObj(n=3)._checksum == checksum
+
+
+def test_by_value_class_hashed_first_keeps_its_digest_in_another_process(
+    tmp_path, monkeypatch
+):
+    """A class hashed before it is pickled by value, a local class, dataclass and
+    attrs classes, a function and a task that read it keep their digests where the
+    module cannot be imported: the class's encoding travels with it"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    classes = [
+        module.Obj,
+        module.make_cfg(True),
+        module.Slotted,
+        module.Params,
+        module.Fields,
+        module.AttrsFields,
+    ]
+    objects = [*classes, module.make_obj, module.MakeObj(n=3)]
+    expected = [
+        *(hash_module.class_digest(k) for k in classes),
+        hash_function(module.make_obj),
+        module.MakeObj(n=3)._checksum,
+    ]
+    code = hash_module._class_code(module.Obj, Cache())
+    assert code.startswith(b"class:ast@1:")
+    child = _digests_in_subprocess(tmp_path, module, objects)
+    assert [d for d, _ in child] == expected
+    assert child[0][1].encode("latin-1") == code
+
+
+def test_by_value_classes_with_one_qualname_do_not_collide(tmp_path, monkeypatch):
+    """Two local classes with one qualified name, with different method bodies or with
+    a method wrapped (`functools.wraps`) or not, differ where their source cannot be
+    read, whether or not they were hashed first"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    for make in (module.make_cfg, module.make_wrapped):
+        pair = [make(True), make(False)]
+        assert pair[0].__qualname__ == pair[1].__qualname__
+        unhashed = _digests_in_subprocess(tmp_path, module, pair)
+        assert unhashed[0][0] != unhashed[1][0]
+        assert unhashed[0][1] != unhashed[1][1]
+        parent = [hash_module.class_digest(k) for k in pair]
+        hashed = _digests_in_subprocess(tmp_path, module, pair)
+        assert [d for d, _ in hashed] == parent
+        assert parent[0] != parent[1]
+
+
+@pytest.mark.parametrize("change", ["method", "wrapped", "constant"])
+def test_by_value_class_changed_after_hashing_is_not_trusted(
+    tmp_path, monkeypatch, change
+):
+    """The encoding carried on a class is not taken once a method is replaced, the
+    function a `functools.wraps` method wraps is replaced, or a constant attribute is
+    changed"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    klass = module.Obj
+    expected = hash_module.class_digest(klass)
+    code = hash_module._class_code(klass, Cache())
+    carried = vars(klass)["__pydra_hash_bytes__"]
+    assert carried[1] == code
+    if change == "method":
+        klass.__eq__ = module.other_scale
+    elif change == "wrapped":
+        wrapper = vars(klass)["w"].__code__
+        klass.w = module.deco(module.other_scale)
+        assert vars(klass)["w"].__code__ == wrapper
+    else:
+        klass.x = 2
+    assert vars(klass)["__pydra_hash_bytes__"] == carried
+    [(digest, child_code)] = _digests_in_subprocess(tmp_path, module, [klass])
+    assert not child_code.startswith("class:ast@1:")
+    assert digest != expected
+
+
+@pytest.mark.parametrize(
+    "name, edit",
+    [
+        ("Obj", ("other.n == self.n", "other.n != self.n")),
+        (
+            "Fields",
+            ('    a: int = 1\n    b: str = "x"', '    a: int = 7\n    b: str = "x"'),
+        ),
+        ("Const", ("class Const:\n    x = 1", "class Const:\n    x = 2")),
+        ("Const", ("    flag = True", "    flag = 1")),
+    ],
+)
+def test_by_value_class_is_not_read_from_another_definition(
+    tmp_path, monkeypatch, name, edit
+):
+    """A class pickled by value before it is hashed, unpickled where its module's file
+    holds another definition at its name, is not encoded from that file: one whose
+    method differs, a dataclass whose default differs, a class whose constant
+    differs in value or in type"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    other = tmp_path / "other"
+    other.mkdir()
+    assert _CLASS_BY_VALUE_SOURCE.count(edit[0]) == 1
+    (other / Path(module.__file__).name).write_text(
+        _CLASS_BY_VALUE_SOURCE.replace(*edit)
+    )
+    code = (
+        "import importlib; from pydra.utils import hash as H; "
+        f"m = importlib.import_module({module.__name__!r}); "
+        f"print(H._class_code(m.{name}, H.Cache()).decode('latin-1'))"
+    )
+    own = (
+        subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            check=True,
+            cwd=str(tmp_path.parent),
+            env={**os.environ, "PYTHONPATH": str(other)},
+        )
+        .stdout.decode()
+        .strip()
+    )
+    [(_, copy)] = _digests_in_subprocess(
+        tmp_path, module, [getattr(module, name)], extra_path=other
+    )
+    assert own.startswith("class:ast@1:")
+    assert copy != own
+    assert not copy.startswith("class:ast@1:")
+
+
+def test_by_value_code_is_classified_by_the_file_of_its_globals(monkeypatch):
+    """A function unpickled by value is library code if the ``__file__`` its globals
+    keep is, never by the module of its name loaded here; so is a class its module
+    does not hold whose body functions were unpickled by value"""
+
+    def by_value(func, name, file):
+        copy = types.FunctionType(
+            _dynamic_code(func.__code__),
+            {"__name__": name, "__file__": file},
+            closure=func.__closure__,
+        )
+        copy.__module__ = name
+        return copy
+
+    klass = attrs.define(type("A", (), {"__annotations__": {"a": int}}))
+    getstate = vars(klass)["__getstate__"]
+    assert hash_module.is_library(getstate)
+    library_file = getstate.__globals__["__file__"]
+    assert hash_module.is_library(by_value(getstate, getstate.__module__, library_file))
+    library_main = types.ModuleType("__main__")
+    library_main.__file__ = json.__file__
+    monkeypatch.setitem(sys.modules, "__main__", library_main)
+    assert not hash_module.is_library(by_value(getstate, "__main__", __file__))
+    assert not hash_module.is_library(by_value(getstate, "__main__", None))
+
+    def m(self):
+        return 1
+
+    m.__code__ = m.__code__.replace(co_qualname="Obj.m")
+    method = by_value(m, "__main__", __file__)
+    by_value_class = type("Obj", (), {"m": method, "__module__": "__main__"})
+    assert not hash_module.is_library(by_value_class)
+    method.__globals__["__file__"] = library_file
+    assert hash_module.is_library(by_value_class)
+
+
+def test_class_encoded_from_its_file_follows_an_edit(tmp_path, monkeypatch):
+    """A class this process encoded from its own source file is encoded from that file
+    again once it is edited, not from the encoding carried on it"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    code = hash_module._class_code(module.Obj, Cache())
+    path = Path(module.__file__)
+    source = path.read_text()
+    path.write_text(source.replace("class Obj:\n    x = 1", "class Obj:\n    y = 2"))
+    os.utime(path, ns=(time.time_ns() + 10**9,) * 2)
+    edited = hash_module._class_code(module.Obj, Cache())
+    assert edited.startswith(b"class:ast@1:") and edited != code
+
+
+# Prints whether each class of a list pickled by value is library code, in a process
+# where the module named argv[2] is a library module that does not hold them (as a
+# process run from a library's ``__main__``). The code of the functions of the module
+# file named by argv[1], or generated from a string, is renamed "<dynamic-code>", as
+# cloudpickle >= 3.1.3 names it, also under older versions
+_IS_LIBRARY_IN_SUBPROCESS = """\
+import json, sys, types, cloudpickle
+from pydra.utils import hash as H
+
+library = types.ModuleType(sys.argv[2])
+library.__file__ = json.__file__
+sys.modules[sys.argv[2]] = library
+out = []
+for klass in cloudpickle.loads(sys.stdin.buffer.read()):
+    for member in list(vars(klass).values()):
+        for f in H._member_functions(member):
+            if f.__code__.co_filename in (sys.argv[1], "<string>"):
+                f.__code__ = f.__code__.replace(co_filename="<dynamic-code>")
+    out.append(H.is_library(klass))
+print(json.dumps(out))
+"""
+
+
+def test_by_value_class_is_classified_as_its_parent_classified_it(
+    tmp_path, monkeypatch
+):
+    """A class unpickled by value where a library module of its module's name is
+    loaded is user code: one with no body functions is classified by the functions
+    generated for it, and one with no function of its module at all by the encoding
+    it carries"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+
+    def classified(classes: list) -> list[bool]:
+        cloudpickle.register_pickle_by_value(module)
+        try:
+            payload = cloudpickle.dumps(classes)
+        finally:
+            cloudpickle.unregister_pickle_by_value(module)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                _IS_LIBRARY_IN_SUBPROCESS,
+                module.__file__,
+                module.__name__,
+            ],
+            input=payload,
+            capture_output=True,
+            cwd=str(tmp_path.parent),
+        )
+        assert result.returncode == 0, result.stderr.decode()
+        return json.loads(result.stdout)
+
+    classes = [module.Fields, module.AttrsFields, module.Const, module.Obj]
+    assert not any(hash_module.is_library(k) for k in classes)
+    assert classified([module.Fields, module.Obj]) == [False, False]
+    for klass in classes:
+        hash_module.class_digest(klass)
+    assert classified(classes) == [False, False, False, False]
+
+
+def test_local_class_constants_are_not_checked_where_it_is_defined(
+    tmp_path, monkeypatch
+):
+    """The constants of a local class in the process that defines it are not checked
+    against its file: a name assigned twice, or an attribute changed at run time, keeps
+    the class's `ast@1` encoding; the digest follows the value it holds"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    counter, twice = module.make_counted()
+    assert hash_module._class_code(twice, Cache()).startswith(b"class:ast@1:")
+    expected = hash_module.class_digest(counter)
+    counter.n += 1
+    monkeypatch.setattr(hash_module, "_walk_memo", weakref.WeakKeyDictionary())
+    monkeypatch.setattr(hash_module, "_function_bytes_cache", hash_module._LRUCache(16))
+    assert hash_module._class_code(counter, Cache()).startswith(b"class:ast@1:")
+    assert hash_module.class_digest(counter) != expected
+
+
+def test_by_value_class_constants_are_checked_against_the_last_assignment(
+    tmp_path, monkeypatch
+):
+    """A class pickled by value before it is hashed is checked against the value the
+    last assignment of a name in its module file's definition gives"""
+    module = _by_value_module(tmp_path, monkeypatch, _CLASS_BY_VALUE_SOURCE)
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / Path(module.__file__).name).write_text(_CLASS_BY_VALUE_SOURCE)
+    code = (
+        "import importlib; from pydra.utils import hash as H; "
+        f"m = importlib.import_module({module.__name__!r}); "
+        "print(H._class_code(m.Dup, H.Cache()).decode('latin-1'))"
+    )
+    own = (
+        subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            check=True,
+            cwd=str(tmp_path.parent),
+            env={**os.environ, "PYTHONPATH": str(other)},
+        )
+        .stdout.decode()
+        .strip()
+    )
+    [(_, copy)] = _digests_in_subprocess(
+        tmp_path, module, [module.Dup], extra_path=other
+    )
+    assert own.startswith("class:ast@1:")
+    assert copy == own
+
+
+def test_library_class_carries_no_encoding(monkeypatch):
+    """Digesting a library class leaves no carried encoding on it"""
+    import string
+
+    monkeypatch.delattr(string.Template, "__pydra_hash_bytes__", raising=False)
+    try:
+        hash_module.class_digest(string.Template)
+        assert "__pydra_hash_bytes__" not in vars(string.Template)
+    finally:
+        if "__pydra_hash_bytes__" in vars(string.Template):
+            delattr(string.Template, "__pydra_hash_bytes__")
+
+
+_FACTORY_BY_VALUE_SOURCE = """
+def make(n):
+    class Made:
+        offset = n
+
+        def shift(self, x):
+            return x + self.offset
+
+    return Made
+"""
+
+
+def test_by_value_factory_classes_keep_their_computed_attributes_in_another_process(
+    tmp_path, monkeypatch
+):
+    """A class made by a factory, hashed before it is pickled by value, keeps the digest
+    of its computed attributes where its source cannot be read"""
+    module = _by_value_module(tmp_path, monkeypatch, _FACTORY_BY_VALUE_SOURCE)
+    classes = [module.make(1), module.make(2)]
+    expected = [hash_module.class_digest(k) for k in classes]
+    assert expected[0] != expected[1]
+    child = _digests_in_subprocess(tmp_path, module, classes)
+    assert [d for d, _ in child] == expected
