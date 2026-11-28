@@ -140,6 +140,11 @@ class Lease(ty.Protocol):
     """The right to run one job, held while it is entered with ``with`` or
     ``async with`` and released on exit."""
 
+    # the checksum of the job the lease is for
+    checksum: str
+    # the directory a job holding the lease writes its files in, None if it has none
+    cache_dir: "Path | None"
+
     def __enter__(self) -> "Lease":
         """Take the lease, waiting for it if another process holds it."""
 

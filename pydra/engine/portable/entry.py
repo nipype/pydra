@@ -138,6 +138,12 @@ class EntryFormat(ty.Protocol):
         """Read ``context.json``: the context and its bytes."""
         ...
 
+    def identify(self, entry: StorageDir) -> tuple[str, str]:
+        """The checksum and the writer token that the entry records, read without verifying
+        the entry (the store reads a writer's token to tell a rename whose reply was lost, and
+        an entry's checksum where its directory name is a hash of it)."""
+        ...
+
     def read(
         self,
         entry: StorageDir,
@@ -276,6 +282,23 @@ class PydraEntryV1:
         return digest
 
     # -- reading -----------------------------------------------------------------------
+
+    def identify(self, entry: StorageDir) -> tuple[str, str]:
+        """The ``checksum`` and ``writer`` that ``entry.json`` records.
+
+        Raises
+        ------
+        CorruptEntry
+            ``entry.json`` is missing, not a regular file, or lacks either.
+        """
+        doc = _json(_read_file(entry, "entry.json"), "entry.json")
+        if (
+            not isinstance(doc, dict)
+            or not isinstance(doc.get("checksum"), str)
+            or not isinstance(doc.get("writer"), str)
+        ):
+            raise CorruptEntry("entry.json records no checksum and writer")
+        return doc["checksum"], doc["writer"]
 
     def context(self, entry: StorageDir) -> tuple[Context, bytes]:
         """Read ``context.json``: the context and the file's bytes.
@@ -498,12 +521,22 @@ def _open_member(entry: StorageDir, name: str) -> ty.BinaryIO:
             d.close()
 
 
+def read_capped(f: ty.BinaryIO, name: str, cap: int = JSON_CAP) -> bytes:
+    """The bytes of the open file ``f`` (named ``name`` in errors), read in blocks of
+    `READ_BLOCK`; `CorruptEntry` past ``cap`` bytes."""
+    chunks: list[bytes] = []
+    total = 0
+    while block := f.read(READ_BLOCK):
+        chunks.append(block)
+        total += len(block)
+        if total > cap:
+            raise CorruptEntry(f"{name} is larger than {cap} bytes")
+    return b"".join(chunks)
+
+
 def _read_file(entry: StorageDir, name: str) -> bytes:
     with _open_member(entry, name) as f:
-        data = f.read(JSON_CAP + 1)
-    if len(data) > JSON_CAP:
-        raise CorruptEntry(f"{name} is larger than {JSON_CAP} bytes")
-    return data
+        return read_capped(f, name)
 
 
 def _verify_file(entry: StorageDir, name: str, rec: dict, verify: str) -> None:
@@ -524,7 +557,8 @@ def _verify_file(entry: StorageDir, name: str, rec: dict, verify: str) -> None:
 
 def _verify_blob(entry: StorageDir, name: str, rec: dict, verify: str) -> bytes:
     with _open_member(entry, name) as f:
-        data = f.read(rec["size"] + 1)
+        size = os.fstat(f.fileno()).st_size
+        data = f.read(min(size, rec["size"]) + 1)
     if len(data) != rec["size"]:
         raise CorruptEntry(
             f"{name} has size {len(data)}, the entry records {rec['size']}"
