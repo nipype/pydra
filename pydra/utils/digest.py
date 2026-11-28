@@ -354,58 +354,124 @@ def _npscalar(value: "np.generic") -> JSON:
     return {"$npscalar": [little.str, text]}
 
 
+_UNREGISTERED = object()
+
+
+class FormWalker:
+    """The walk over RFC 0003 section 6.4's table that both the digest form and the entry
+    encoder take; a subclass says how numbers, strings, tuples, members, paths and values
+    with no form are written."""
+
+    tag_tuples = True
+
+    def walk(self, value: ty.Any) -> JSON:
+        tp = type(value)
+        entry = _BY_TYPE.get(tp)
+        if entry is not None:
+            form = self.registered(entry, value)
+            if form is not _UNREGISTERED:
+                return form
+        if value is None or tp is bool:
+            return value
+        if tp is int:
+            return self.int_(value)
+        if tp is float:
+            return self.float_(value)
+        if tp is str:
+            return self.str_(value)
+        if tp is complex:
+            return {
+                "$complex": [
+                    {"$float": _float_tag(value.real)},
+                    {"$float": _float_tag(value.imag)},
+                ]
+            }
+        if tp is bytes:
+            return {"$bytes": self.bytes_(value)}
+        if tp is list:
+            return [self.walk(v) for v in value]
+        if tp is tuple:
+            items = [self.walk(v) for v in value]
+            return {"$tuple": items} if self.tag_tuples else items
+        if tp in (set, frozenset):
+            return {"$set": sorted((self.walk(v) for v in value), key=self.sort_key)}
+        if tp is dict:
+            if all(type(k) is str for k in value):
+                return {
+                    ("$" + k if k.startswith("$") else k): self.walk(v)
+                    for k, v in value.items()
+                }
+            pairs = [[self.walk(k), self.walk(v)] for k, v in value.items()]
+            return {"$dict": sorted(pairs, key=lambda p: self.sort_key(p[0]))}
+        if tp in (datetime.datetime, datetime.date):
+            return {"$datetime": self.datetime_(value)}
+        if self.is_path(value):
+            return {"$path": os.fspath(value)}
+        if is_canonical_array(value):
+            return {"$array": self.array(value)}
+        if (
+            np is not None
+            and tp.__module__ == "numpy"
+            and isinstance(value, np.generic)
+        ):
+            try:
+                return _npscalar(value)
+            except _NoDigestForm:
+                pass
+        return self.fallback(value)
+
+    def registered(self, entry: Codec, value: ty.Any) -> JSON:
+        """The form of a value whose type is registered, or ``_UNREGISTERED`` to walk on"""
+        if entry.digest is not None:
+            return {"$digest": _registered_digest(entry, value)}
+        if entry.tag is not None and not entry.fileset:
+            assert entry.encode is not None
+            return {"$codec": entry.tag, "value": self.walk(entry.encode(value))}
+        if entry.fileset and isinstance(value, FileSet):
+            return {
+                "$fileset": entry.tag,
+                "files": [[k, s] for k, s in sorted(_fileset_members(value))],
+            }
+        return _UNREGISTERED
+
+    def int_(self, value: int) -> JSON:
+        return {"$int": str(value)}
+
+    def float_(self, value: float) -> JSON:
+        return {"$float": _float_tag(value)}
+
+    def str_(self, value: str) -> JSON:
+        return value
+
+    def bytes_(self, value: bytes) -> str:
+        return _sha256(value)
+
+    def array(self, value: ty.Any) -> str:
+        return _sha256(canonical_npy(value))
+
+    def datetime_(self, value: "datetime.date") -> str:
+        return value.isoformat()
+
+    def is_path(self, value: ty.Any) -> bool:
+        return isinstance(value, os.PathLike) and not isinstance(value, FileSet)
+
+    def sort_key(self, form: JSON) -> bytes:
+        return jcs(form)
+
+    def fallback(self, value: ty.Any) -> JSON:
+        raise _NoDigestForm
+
+
+def _float_tag(x: float) -> str:
+    return x.hex() if math.isfinite(x) else str(x)
+
+
 def digest_form(value: ty.Any) -> JSON:
     """RFC 0003's output encoding with typed numbers and tagged tuples (RFC 0004 §6.2).
 
     Raises an ``Exception`` for a value that has none, which ``digest`` turns into ``py@1``.
     """
-    if value is None or isinstance(value, bool):
-        return value
-    entry = _BY_TYPE.get(type(value))
-    if entry is not None and entry.digest is not None:
-        return {"$digest": _registered_digest(entry, value)}
-    if entry is not None and entry.tag is not None and not entry.fileset:
-        assert entry.encode is not None
-        return {"$codec": entry.tag, "value": digest_form(entry.encode(value))}
-    if entry is not None and entry.fileset and isinstance(value, FileSet):
-        return {
-            "$fileset": entry.tag,
-            "files": [[k, s] for k, s in sorted(_fileset_members(value))],
-        }
-    tp = type(value)
-    if tp is int:
-        return {"$int": str(value)}
-    if tp is float:
-        return {"$float": value.hex() if math.isfinite(value) else str(value)}
-    if tp is str:
-        return value
-    if tp is complex:
-        return {"$complex": [digest_form(value.real), digest_form(value.imag)]}
-    if tp is bytes:
-        return {"$bytes": _sha256(value)}
-    if tp is list:
-        return [digest_form(v) for v in value]
-    if tp is tuple:
-        return {"$tuple": [digest_form(v) for v in value]}
-    if tp in (set, frozenset):
-        return {"$set": sorted((digest_form(v) for v in value), key=jcs)}
-    if tp is dict:
-        if all(type(k) is str for k in value):
-            return {
-                ("$" + k if k.startswith("$") else k): digest_form(v)
-                for k, v in value.items()
-            }
-        pairs = [[digest_form(k), digest_form(v)] for k, v in value.items()]
-        return {"$dict": sorted(pairs, key=lambda p: jcs(p[0]))}
-    if tp in (datetime.datetime, datetime.date):
-        return {"$datetime": value.isoformat()}
-    if isinstance(value, os.PathLike) and not isinstance(value, FileSet):
-        return {"$path": os.fspath(value)}
-    if is_canonical_array(value):
-        return {"$array": _sha256(canonical_npy(value))}
-    if np is not None and tp.__module__ == "numpy" and isinstance(value, np.generic):
-        return _npscalar(value)
-    raise _NoDigestForm
+    return FormWalker().walk(value)
 
 
 def _py_digest(value: ty.Any) -> str:

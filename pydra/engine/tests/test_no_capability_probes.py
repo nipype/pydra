@@ -50,6 +50,16 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ("engine/lease.py", "errno", "ESTALE"): "not defined on every platform",
     ("engine/lease.py", "os", "getuid"): "POSIX only",
     (
+        "engine/portable/errors.py",
+        "type",
+        "__module__",
+    ): "a type annotation may not have it",
+    (
+        "engine/portable/errors.py",
+        "type",
+        "__qualname__",
+    ): "a type annotation may not have it",
+    (
         "engine/runner.py",
         "exc",
         "recorded_traceback",
