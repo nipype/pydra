@@ -378,6 +378,9 @@ class ResultStore(ty.Protocol):
     its own slot, so results recorded in different contexts never overwrite each other.
     An implementation subclasses it to inherit the defaults of its optional members,
     which the graph runner calls directly.
+
+    A job handed out after ``find(job)`` is marked ``looked_up`` and is not looked up again under
+    a lease whose ``exclusive`` is False; an exclusive lease looks again.
     """
 
     identity: "StoreIdentity | None" = None

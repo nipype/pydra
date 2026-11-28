@@ -208,6 +208,11 @@ class Job(ty.Generic[TaskType]):
         # The stored entry the job runs against, set from a `Verify` by `_reusable` or by a
         # runner (`Candidate | None`; RFC 0003 section 7.1)
         self.verify = None
+        # Whether a runner or submitter asked the store's ``find(job)`` before dispatch and
+        # was not served (``verify`` holds its answer): a run under a lease that excludes no
+        # other taker does not ask again (RFC 0002 section 3.1). Cleared by each run and
+        # by a retry, and never pickled.
+        self.looked_up = False
         # A rerun under a store that replaces: set by the store's ``begin_rerun`` (RFC 0003
         # section 10); ``replaces`` is the output digest of the entry it evicts
         self.replace = False
@@ -249,6 +254,9 @@ class Job(ty.Generic[TaskType]):
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
         state.pop("_awaiting_run", None)
+        # A lookup made before dispatch is current only for a run in this process: a job
+        # handed to a worker may wait in a queue, so it looks the store up again
+        state.pop("looked_up", None)
         if self._propagated_absent is not None:
             # completed absent: its result is in memory only, and it has no context
             return state
@@ -276,6 +284,7 @@ class Job(ty.Generic[TaskType]):
         self.__dict__.setdefault("attempt", None)
         self.__dict__.setdefault("committed", None)
         self.__dict__.setdefault("verify", None)
+        self.__dict__.setdefault("looked_up", False)
         self.__dict__.setdefault("replace", False)
         self.__dict__.setdefault("replaces", None)
         self.__dict__.setdefault("_work_dir_memo", None)
@@ -539,30 +548,40 @@ class Job(ty.Generic[TaskType]):
             return self.store.acquire(self.checksum, self.context, resumable=True)
         return self.store.acquire(self.checksum, self.context)
 
-    def _reusable(self) -> Result | None:
+    def _reusable(self, lease, looked_up: bool = False) -> Result | None:
         """The result a run under the lease can serve instead of computing: the stored
         result for the job, if any. A store with ``find`` answers through its reuse hook
         (RFC 0003 section 7.1): a `Verify` marks the job to verify against that entry (and
-        the job runs), anything else clears the mark. A work directory's ``_committed.json``
-        is the outcome of an earlier run and is never served to a new one."""
+        the job runs), anything else clears the mark. A job ``looked_up`` before dispatch
+        is not looked up again under a lease that excludes nobody (``exclusive`` False):
+        it keeps the mark that lookup set; an exclusive lease looks again (RFC 0003
+        section 5.3).
+        A work directory's ``_committed.json`` is the outcome of an earlier run and is
+        never served to a new one."""
         if self.store.finds:
+            if looked_up and not lease.exclusive:
+                return None
             result = self.accept_found(self.store.find(self), errored=True)
             if result is not None:  # a reader in another process finds what was served
                 self.store.record_served(self, result)
             return result
         return self.result()
 
-    def accept_found(self, found: ty.Any, *, errored: bool = False) -> Result | None:
+    def accept_found(
+        self, found: ty.Any, *, errored: bool = False, complete: bool = False
+    ) -> Result | None:
         """Take what the store's ``find`` answered for the job (None: the store could not
         be read): the candidate of a `Verify` as `verify`, cleared otherwise, and the
         result of a `Hit`, keeping its `Committed`; an errored result only with
-        ``errored``. None when there is no result to serve."""
+        ``errored``. None when there is no result to serve; then ``complete`` (``found``
+        is the answer of ``find(job)``, not a probe) marks the job `looked_up`."""
         if found is None:
-            self.verify = None
+            self.verify, self.looked_up = None, False
             return None
         self.verify = found.candidate
         result = found.result
         if result is None or (result.errored and not errored):
+            self.looked_up = complete
             return None
         if result.committed is not None:
             self.committed = result.committed
@@ -696,11 +715,12 @@ class Job(ty.Generic[TaskType]):
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
         self._take_attempt()
+        looked_up, self.looked_up = self.looked_up, False
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         with lease:
             if not (rerun):
-                result = self._reusable()
+                result = self._reusable(lease, looked_up)
                 if result is not None and not result.errored:
                     self._awaiting_run = False
                     self._cached_result = result
@@ -780,11 +800,12 @@ class Job(ty.Generic[TaskType]):
         # checking if the task is fully resolved and ready to run
         self.hooks.pre_run(self)
         self._take_attempt()
+        looked_up, self.looked_up = self.looked_up, False
         lease = self._acquire()
         logger.debug("'%s' is attempting to acquire %s", self.name, lease)
         async with lease:
             if not rerun:
-                result = self._reusable()
+                result = self._reusable(lease, looked_up)
                 if result is not None and not result.errored:
                     self._awaiting_run = False
                     self._cached_result = result
