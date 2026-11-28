@@ -186,6 +186,12 @@ class Task(ty.Generic[OutputsType]):
     # last computed
     _declared_code = attrs.field(default=None, init=False, eq=False, repr=False)
 
+    # The digests of the fields and of the ``Outputs`` class computed by the submitting
+    # process, each with the value it was computed from: set by `_carry_digests` when the
+    # job is unpickled, None in the submitting process. A digest is used only while its
+    # field still holds that same object; a ``Result`` does not pickle them.
+    _carried = attrs.field(default=None, init=False, eq=False, repr=False)
+
     RESERVED_FIELD_NAMES = ("split", "combine")
     BASE_ATTRS = ()
 
@@ -499,6 +505,18 @@ class Task(ty.Generic[OutputsType]):
         from pydra.utils.identity import record_checksum, task_record
 
         return record_checksum(task_record(self))
+
+    def _carry_digests(self) -> None:
+        """Keep the digests the submitting process computed (``_hashes``), so a process
+        that unpickles the task never recomputes them from source, which it may not be
+        able to read. Only the fields that hold files are hashed again (see
+        `pydra.utils.identity.field_digests`): their content can change between the
+        submission and the run."""
+        if self._hashes:
+            self._carried = {
+                name: (None if name == "Outputs" else getattr(self, name, None), digest)
+                for name, digest in self._hashes.items()
+            }
 
     def _supplied_checksum(self) -> str:
         """The checksum returned by ``__checksum__``, which must be a single path

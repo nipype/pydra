@@ -30,11 +30,6 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ("engine/graph.py", "self", "sorted_nodes"): "in the base branch, unchanged here",
     (
         "engine/job.py",
-        "getattr(self.task, f.name)",
-        "__bytes_repr__",
-    ): "in the base branch, unchanged here",
-    (
-        "engine/job.py",
         "self.task",
         "__checksum__",
     ): "in the base branch, unchanged here",

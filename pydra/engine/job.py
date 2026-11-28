@@ -13,7 +13,7 @@ from traceback import format_exception
 import attr
 import cloudpickle as cp
 from pydra.compose.base import Task
-from pydra.utils.identity import job_record, record_checksum
+from pydra.utils.identity import job_record, record_checksum, rehashed_in_worker
 from datetime import datetime
 from fileformats.core import FileSet
 from pydra.engine.hooks import TaskHooks
@@ -273,6 +273,8 @@ class Job(ty.Generic[TaskType]):
         ):  # a job pickled before the task was inlined
             state["task"] = cp.loads(state["task"])
         self.__dict__.update(state)
+        # the digests the submitting process computed are not computed again here
+        self.task._carry_digests()
         # _cached_result is excluded from __getstate__; ensure it always exists
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
@@ -997,8 +999,6 @@ class Job(ty.Generic[TaskType]):
             return result
 
     def _check_for_hash_changes(self):
-        from pydra.utils.typing import TypeParser
-
         if hasattr(self.task, "__checksum__"):
             if (checksum := self.task._checksum) != self.unsuffixed_checksum:
                 raise RuntimeError(
@@ -1012,8 +1012,7 @@ class Job(ty.Generic[TaskType]):
         # execution (scalar/pure-Python values are immutable from Pydra's
         # perspective). Skip the expensive full recomputation in that common case.
         if not any(
-            TypeParser.contains_type(FileSet, f.type)
-            or hasattr(getattr(self.task, f.name), "__bytes_repr__")
+            rehashed_in_worker(f, getattr(self.task, f.name))
             for f in get_fields(self.task)
         ):
             logger.debug(
