@@ -263,14 +263,68 @@ def test_workflow_lazy():
     assert list(workflow_cache) == [key_set]
     assert len(workflow_cache[key_set]) == 2
 
-    # check to see that the cache is used if we provide a concrete value for one of the
-    # lazy fields
+    # check to see that a graph constructed with a lazy input is not reused when a
+    # concrete value is provided for that input, as the constructor may branch on it
     wf2.name = "tagged"
     workflow_spec.input_video = video.Mp4.mock("input.mp4")
     wf3 = Workflow.construct(workflow_spec)
-    assert wf3.name == "tagged"
-    assert list(workflow_cache) == [key_set]
+    assert wf3 is not wf2
+    assert wf3.name != "tagged"
+    assert len(workflow_cache) == 2
     assert len(workflow_cache[key_set]) == 2
+    assert len(workflow_cache[key_set | {"input_video"}]) == 1
+
+
+def test_construct_lazy_graph_not_reused_for_concrete_task(tmp_path: Path):
+
+    @python.define
+    def Fast(x: int) -> int:
+        return x + 1
+
+    @python.define
+    def Slow(x: int) -> int:
+        return x + 2
+
+    @workflow.define
+    def Inner(x: int, mode: str) -> int:
+        if mode == "fast":
+            node = workflow.add(Fast(x=x), name="fast")
+        else:
+            node = workflow.add(Slow(x=x), name="slow")
+        return node.out
+
+    Workflow.clear_cache(task=Inner)
+    Workflow.construct(Inner(x=1, mode="fast"), lazy=["mode"])
+    wf = Workflow.construct(Inner(x=1, mode="fast"))
+    assert [n.name for n in wf.nodes] == ["fast"]
+    outputs = Inner(x=1, mode="fast")(cache_root=tmp_path)
+    assert outputs.out == 2
+
+
+def test_construct_rebuilt_when_input_changes(tmp_path: Path):
+
+    @python.define
+    def Fast(x: int) -> int:
+        return x + 1
+
+    @python.define
+    def Slow(x: int) -> int:
+        return x + 2
+
+    @workflow.define
+    def Inner(x: int, mode: str) -> int:
+        if mode == "fast":
+            node = workflow.add(Fast(x=x), name="fast")
+        else:
+            node = workflow.add(Slow(x=x), name="slow")
+        return node.out
+
+    task = Inner(x=1, mode="slow")
+    assert task(cache_root=tmp_path).out == 3
+    task.mode = "fast"
+    assert [n.name for n in task.construct().nodes] == ["fast"]
+    assert task(cache_root=tmp_path).out == 2
+    assert Inner(x=1, mode="fast")(cache_root=tmp_path).out == 2
 
 
 def test_direct_access_of_workflow_object():
