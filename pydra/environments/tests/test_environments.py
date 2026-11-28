@@ -152,7 +152,9 @@ def test_singularity_1(tmp_path):
     shelly = Shelly()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(store="pickle", cache_root=newcache("singu")),
+        submitter=Submitter(
+            environment=sing, store="pickle", cache_root=newcache("singu")
+        ),
         name="singu",
     )
     assert shelly.cmdline == cmd
@@ -184,7 +186,9 @@ def test_singularity_1_subm(tmp_path, worker):
     shelly = Shelly()
     shelly_job = Job(
         task=shelly,
-        submitter=Submitter(store="pickle", cache_root=newcache("singu")),
+        submitter=Submitter(
+            environment=sing, store="pickle", cache_root=newcache("singu")
+        ),
         name="singu",
     )
     assert shelly.cmdline == cmd

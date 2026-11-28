@@ -84,7 +84,7 @@ def test_default_header_values(expected):
         "identity": {
             "name": "pydra-identity@1",
             "fingerprint": "pydra-context@1",
-            "recorded_only": ["environment_repository"],
+            "recorded_only": ["environment_facts", "environment_repository"],
         },
         "shard": "sha256-2",
         "dirs": {"staging": "staging", "quarantine": "quarantine", "sidecars": {}},
@@ -303,7 +303,9 @@ def test_v1_names():
     ident = PydraIdentityV1()
     assert ident.name == "pydra-identity@1"
     assert ident.fingerprint_name == "pydra-context@1"
-    assert ident.recorded_only == frozenset({"environment_repository"})
+    assert ident.recorded_only == frozenset(
+        {"environment_facts", "environment_repository"}
+    )
     assert isinstance(ident, StoreIdentity)
     assert ident.key(None) is None  # type: ignore[arg-type]
     assert ident.check_key("python-abc", None)
@@ -342,7 +344,12 @@ def test_header_from_identity_records_recorded_only():
     header = LayoutHeader.for_store(
         PydraIdentityV1(recorded_only=frozenset({"b", "a"}))
     )
-    assert header.identity["recorded_only"] == ["a", "b", "environment_repository"]
+    assert header.identity["recorded_only"] == [
+        "a",
+        "b",
+        "environment_facts",
+        "environment_repository",
+    ]
 
 
 @python.define
@@ -591,7 +598,9 @@ def test_empty_read_only_root_create_is_store_unavailable(tmp_path, expected):
 
 def test_recorded_only_adds_to_the_default():
     ident = PydraIdentityV1(recorded_only=frozenset({"host"}))
-    assert ident.recorded_only == frozenset({"host", "environment_repository"})
+    assert ident.recorded_only == frozenset(
+        {"host", "environment_facts", "environment_repository"}
+    )
 
 
 def test_transient_permission_error_is_retried_on_windows(root, expected, monkeypatch):

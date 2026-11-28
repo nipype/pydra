@@ -8,7 +8,7 @@ import typing as ty
 
 import attrs
 
-from pydra.engine.context import REPOSITORY_FIELD, job_context
+from pydra.engine.context import RECORDED_FIELDS, job_context
 from pydra.utils.digest import jcs
 from pydra.utils.identity import IDENTITY_SCHEME, record_checksum
 
@@ -68,7 +68,7 @@ class StoreIdentity(ty.Protocol):
 def _fields(value: ty.Iterable[str]) -> frozenset[str]:
     if isinstance(value, (str, bytes)):
         raise TypeError(f"recorded_only is a collection of field names, got {value!r}")
-    return frozenset(value) | {REPOSITORY_FIELD}
+    return frozenset(value) | RECORDED_FIELDS
 
 
 POOL_FIELD = "pool"
@@ -86,7 +86,7 @@ class PydraIdentityV1:
     the job, so both phases return it, and the fingerprint
     (``pydra-context@1``) is the full sha256 of the RFC 8785 canonical JSON of the context
     without the ``recorded_only`` fields. ``recorded_only`` always holds
-    ``environment_repository``, whatever else is given."""
+    ``environment_repository`` and ``environment_facts``, whatever else is given."""
 
     recorded_only: frozenset[str] = attrs.field(factory=frozenset, converter=_fields)
     name: ty.ClassVar[str] = "pydra-identity@1"
@@ -111,7 +111,7 @@ class PydraIdentityV1:
             )  # the one built in the submitting process and carried (section 4)
         job.checksum  # collects the library modules the task's code reaches
         return job_context(
-            job.task, job.environment, job.resolved if job.uses_image else None
+            job.task, job.environment, job.resolved if job.resolves_reference else None
         )
 
     def fingerprint(self, context: Context) -> str:

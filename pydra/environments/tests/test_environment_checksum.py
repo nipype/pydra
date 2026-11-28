@@ -21,22 +21,12 @@ def test_checksum_distinguishes_environments():
 @pytest.mark.parametrize("env", [docker.Docker, singularity.Singularity])
 def test_identity_replaces_image_resolution(env, monkeypatch):
     def fail(self):
-        raise AssertionError("must not resolve a digest when identity is given")
+        raise AssertionError("a checksum must not resolve the image")
 
-    monkeypatch.setattr(env, "_resolve_digest", fail)
+    monkeypatch.setattr(env, "resolve", fail)
     a = env(image="busybox", identity="sha256:1")
     assert a.checksum() == env(image="other", identity="sha256:1").checksum()
     assert a.checksum() != env(image="busybox", identity="sha256:2").checksum()
-
-
-def test_rebuilt_image_changes_checksum_via_digest(monkeypatch):
-    # Docker resolves its reference instead (test_env_resolution_docker.py)
-    env = singularity.Singularity
-    digest = ["sha256:a"]
-    monkeypatch.setattr(env, "_resolve_digest", lambda self: digest[0])
-    before = env(image="busybox").checksum()
-    digest[0] = "sha256:b"
-    assert env(image="busybox").checksum() != before
 
 
 @attrs.define
