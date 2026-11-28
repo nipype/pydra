@@ -14,6 +14,33 @@ Verdict = ty.Literal["fits", "too small", "unfit", "unknown"]
 CanStart = Callable[[WorkerClass], "bool | str"]
 
 
+def warm_environment_label(job: ty.Any) -> str | None:
+    """The hold label of a warm shell job's environment: the residency label (as
+    `pydra.workers.pool.storage.Ticket.residency_label` computes it) of the environment's resident
+    key alone, which names the environment and the reference the job carries. None for any other
+    job, or one whose reference cannot be read here. Warm-start faults are counted, and held, under
+    it."""
+    import hashlib
+
+    from pydra.compose.shell.task import Task as ShellTask
+    from pydra.engine.resident import ResidentKey
+    from pydra.utils.digest import jcs
+
+    if not (
+        isinstance(job.task, ShellTask)
+        and job.environment.warm_requested
+        and job.resolves_reference
+    ):
+        return None
+    try:
+        key = ResidentKey(
+            "environment", job.environment.plugin_name(), job.resolved.key
+        )
+    except Exception:
+        return None
+    return hashlib.sha256(jcs([attrs.asdict(key)])).hexdigest()
+
+
 @attrs.frozen
 class ClassTried:
     """One class the walk considered.

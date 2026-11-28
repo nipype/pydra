@@ -577,7 +577,10 @@ def pool_status(root):
 @click.option(
     "--residency",
     default=None,
-    help="Lift only the hold of this residency label (64 hex digits); default every hold.",
+    help=(
+        "Lift only the hold of this label (64 hex digits): a residency's, or a warm "
+        "environment's as the held outcomes name it; default every hold."
+    ),
 )
 def pool_release_hold(root, queue, residency):
     """Lift the holds of QUEUE on the pool at ROOT, so a later run puts its held jobs again."""
