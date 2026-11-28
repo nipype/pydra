@@ -154,6 +154,8 @@ class Job(ty.Generic[TaskType]):
         # was just written by run(). Not included in __getstate__ so it is
         # never pickled (subprocess workers will still use the disk path).
         self._cached_result = None
+        # The result reported by ``GraphRunner.complete``, as given
+        self._held = None
         # Set while the job is queued to run in this process's submitter and its run
         # has not finished
         self._awaiting_run = False
@@ -200,6 +202,7 @@ class Job(ty.Generic[TaskType]):
         # Never serialise the in-memory result cache: subprocess workers must
         # go through the normal disk-based load_result() path.
         state.pop("_cached_result", None)
+        state.pop("_held", None)
         state.pop("_awaiting_run", None)
         # Carry the submitting process's context, so a worker judges reuse as it would
         state["_context"] = self.context
@@ -215,6 +218,7 @@ class Job(ty.Generic[TaskType]):
         # so that result() works correctly on deserialized jobs.
         if "_cached_result" not in self.__dict__:
             self._cached_result = None
+        self.__dict__.setdefault("_held", None)
         self.__dict__.setdefault("_awaiting_run", False)
         self.__dict__.setdefault("persist_pickle", True)
         self.__dict__.setdefault("_context", None)
@@ -449,7 +453,7 @@ class Job(ty.Generic[TaskType]):
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
                 if lease_still_held(lease):
-                    record_error(self.cache_dir, error=traceback)
+                    record_error(self.cache_dir, error=traceback, exception=eval)
                 result.errored = True
                 raise
             finally:
@@ -517,7 +521,7 @@ class Job(ty.Generic[TaskType]):
                 etype, eval, etr = sys.exc_info()
                 traceback = format_exception(etype, eval, etr)
                 if lease_still_held(lease):
-                    record_error(self.cache_dir, error=traceback)
+                    record_error(self.cache_dir, error=traceback, exception=eval)
                 result.errored = True
                 self._errored = True
                 raise
@@ -600,6 +604,8 @@ class Job(ty.Generic[TaskType]):
         result : Result
             the result of the job
         """
+        if self._held is not None and not return_inputs:
+            return self._held
         if self.errored:
             return Result(
                 outputs=None,
@@ -751,7 +757,7 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
         if job_pkl.parent.exists():
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
-            errorfile = record_error(job_pkl.parent, error=traceback)
+            errorfile = record_error(job_pkl.parent, error=traceback, exception=eval)
             result = Result(
                 outputs=None,
                 runtime=None,
@@ -777,7 +783,7 @@ def load_and_run(job_pkl: Path, rerun: bool = False) -> Path:
         if not errorfile.exists():  # not sure if this is needed
             etype, eval, etr = sys.exc_info()
             traceback = format_exception(etype, eval, etr)
-            errorfile = record_error(job.cache_dir, error=traceback)
+            errorfile = record_error(job.cache_dir, error=traceback, exception=eval)
         if not resultfile.exists():  # not sure if this is needed
             result = Result(
                 outputs=None,

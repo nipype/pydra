@@ -100,8 +100,8 @@ async def drive(
     waiting: "dict[str, deque[Job]]" = defaultdict(deque)
     busy: "dict[str, int]" = defaultdict(int)
     sent_to: "dict[Job, str]" = {}
-    finished: set[str] = set()  # the checksums of the jobs whose runs have ended
-    failed: set[str] = set()  # the checksums of the jobs whose runs failed
+    # the outcome of each job whose run has ended, by checksum
+    finished: "dict[str, Outcome]" = {}
 
     def limit() -> int | None:
         if max_concurrent == float("inf"):
@@ -126,15 +126,24 @@ async def drive(
         if job in sent_to:
             busy[sent_to.pop(job)] -= 1
         in_flight.discard(job)
-        finished.add(job.checksum)
-        for ran in sharing.pop(job.checksum, ()):
-            ran._awaiting_run = False
-        if isinstance(outcome, Failed):
-            failed.add(job.checksum)
+        finished[job.checksum] = outcome
         runner.complete(job, outcome)
+        for ran in sharing.pop(job.checksum, ()):
+            share(ran, outcome)
         open_handles[:] = [h for h in open_handles if h.open]
         pump()
         progressed.set()
+
+    def share(job: "Job", outcome: "Outcome") -> None:
+        """Complete a job that was not run because another with its checksum was, with
+        that job's outcome; the failure itself is recorded for the job that ran"""
+        if isinstance(outcome, Failed) or outcome.errored:
+            job._awaiting_run = False
+            job._errored = True
+            if not isinstance(outcome, Failed):
+                job._held = outcome
+        else:
+            runner.complete(job, outcome)
 
     def report(job: "Job", outcome: "Outcome") -> None:
         loop.call_soon_threadsafe(on_outcome, job, outcome)
@@ -143,23 +152,13 @@ async def drive(
         executor.bind(report)
     try:
         dispatch = runner.ready(limit()).dispatch
-        stalled = 0
         while dispatch or in_flight or not runner.done:
             if not dispatch and not in_flight:
-                # nothing is running and nothing is released: results may not be visible yet
-                stalled += 1
-                if stalled > 10:
-                    raise RuntimeError(runner.stuck())
-                await asyncio.sleep(1)
-                dispatch = runner.ready(limit()).dispatch
-                continue
-            stalled = 0
+                raise RuntimeError(runner.stuck())
             by_executor: "dict[str, list[Job]]" = defaultdict(list)
             for job in dispatch:
                 if job.checksum in finished:
-                    job._awaiting_run = False
-                    if job.checksum in failed:
-                        job._errored = True
+                    share(job, finished[job.checksum])
                 elif job.checksum in futured:
                     if job is not futured[job.checksum]:
                         sharing[job.checksum].add(job)

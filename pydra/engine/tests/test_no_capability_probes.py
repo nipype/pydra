@@ -50,6 +50,11 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ("engine/lease.py", "errno", "ESTALE"): "not defined on every platform",
     ("engine/lease.py", "os", "getuid"): "POSIX only",
     (
+        "engine/runner.py",
+        "exc",
+        "recorded_traceback",
+    ): "set by result_error on an exception of any class",
+    (
         "engine/state.py",
         "self",
         "_current_combiner_all",
