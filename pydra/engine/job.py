@@ -266,10 +266,15 @@ class Job(ty.Generic[TaskType]):
         selects the job's slot in the store, is recorded on its result and is what a
         later job's context is compared with, so every process uses this one object.
         Building it reports a declared version whose stored results were computed from
-        other code (see `pydra.engine.store.check_declared_code`)."""
+        other code (see `pydra.engine.store.check_declared_code`). A store with an
+        ``identity`` supplies the context (``identity.context(job, "lookup")``)."""
         if self._context is None:
             self.checksum  # collects the library modules the task's code reaches
-            self._context = job_context(self.task, self.environment)
+            identity = self.store.identity
+            if identity is None:
+                self._context = job_context(self.task, self.environment)
+            else:
+                self._context = identity.context(self, "lookup")
             self._stored_contexts = check_declared_code(
                 self.store, self.checksum, self._context, self.task
             )
