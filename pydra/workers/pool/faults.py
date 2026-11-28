@@ -27,19 +27,26 @@ __all__ = [
     "attached",
     "classify",
     "fault_of",
+    "oom_resource",
 ]
 
 Phase = ty.Literal["load", "call", "pool"]
 Kind = ty.Literal["content", "resource", "infrastructure", "policy"]
 
-# Exceptions that are out of memory, by qualified name, so nothing is imported to match them.
-OUT_OF_MEMORY = frozenset(
+# Exceptions that are out of a device's memory, by qualified name, so nothing is imported to match
+# them. cupy's subclasses MemoryError.
+DEVICE_OUT_OF_MEMORY = frozenset(
     (
-        "builtins.MemoryError",
         "torch.OutOfMemoryError",
         "torch.cuda.OutOfMemoryError",
-        "jax.errors.ResourceExhaustedError",
+        "cupy.cuda.memory.OutOfMemoryError",
     )
+)
+# Out of memory of either kind: the device's only when its message names a device.
+EITHER_OUT_OF_MEMORY = frozenset(("jax.errors.ResourceExhaustedError",))
+# Exceptions that are out of memory, host or device.
+OUT_OF_MEMORY = (
+    frozenset(("builtins.MemoryError",)) | DEVICE_OUT_OF_MEMORY | EITHER_OUT_OF_MEMORY
 )
 
 _RECORD = "__pydra_fault__"
@@ -160,6 +167,34 @@ def classify(exc: BaseException, phase: Phase) -> FaultRecord:
     if phase == "call":
         return FaultRecord("content", name, str(exc)[:_MESSAGE], phase)
     return FaultRecord("infrastructure", name, str(exc)[:_MESSAGE], phase, gap=True)
+
+
+def _oom_kind(link: BaseException) -> ty.Literal["device", "host"] | None:
+    """Which memory one exception, raised on a GPU class, says ran out, or None when it is not out
+    of memory. A device type is the device's before the generic `MemoryError` rule (cupy's is a
+    `MemoryError`); one of `EITHER_OUT_OF_MEMORY` is the device's too, as the class the call ran
+    on grants a device (its message is never read).
+    """
+    names = _qualnames(link)
+    if names & (DEVICE_OUT_OF_MEMORY | EITHER_OUT_OF_MEMORY):
+        return "device"
+    if isinstance(link, MemoryError):
+        return "host"
+    return None
+
+
+def oom_resource(exc: BaseException, gpu_class: bool) -> ty.Literal["device", "host"]:
+    """The memory an out-of-memory ``exc`` ran out of: on a GPU class, what the first
+    out-of-memory link of the chain says (`_oom_kind`), so a loader that caught a device OOM and
+    then ran out of host memory falling back is the host's; the device's when no link says. On a
+    CPU class it is always the host's."""
+    if not gpu_class:
+        return "host"
+    for link in _chain(exc):
+        kind = _oom_kind(link)
+        if kind is not None:
+            return kind
+    return "device"
 
 
 def fault_of(

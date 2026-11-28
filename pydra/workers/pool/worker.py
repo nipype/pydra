@@ -96,6 +96,7 @@ __all__ = [
     "EXIT_HARDWARE",
     "EXIT_OK",
     "EXIT_RECYCLE",
+    "EXIT_REUSED",
     "EXIT_SETTINGS",
     "EXIT_USAGE",
     "Worker",
@@ -120,6 +121,8 @@ EXIT_HARDWARE = 4
 EXIT_RECYCLE = 5
 """A call's deadline passed or the beater died: start a fresh worker."""
 EXIT_FAULTS = 6
+EXIT_REUSED = 7
+"""The token's ready mark exists: an earlier process (a requeued Slurm job's first run) used it."""
 """The pool's classifier reference cannot be imported here or is not callable."""
 
 
@@ -537,6 +540,19 @@ class Worker:
         try:
             self.providers = tuple(_resolve(p) for p in self._provider_args)
             self.token = self._token_arg or uuid.uuid4().hex
+            if self.pool.worker_record(self.token, "ready.json") is not None:
+                # its calls, lease and claims are the earlier process's: never taken over by it
+                logger.error(
+                    "refusing to start: worker %s was already started; a token serves one "
+                    "process (a requeued job runs its command again)",
+                    self.token,
+                )
+                return EXIT_REUSED
+            if self.pool.worker_record(self.token, STOP_MARK) is not None:
+                logger.info(
+                    "worker %s was stopped before it started: exiting", self.token
+                )
+                return EXIT_OK
             self.pool.worker_dir(self.token).close()
             lease = DirectoryLease.at(
                 self.pool.path / "workers" / self.token / "lease",
@@ -1128,17 +1144,14 @@ class Worker:
         self._release(claim)
 
     def _unfit(self, claim: Claim, exc: BaseException, job: "Job | None") -> None:
-        """Keep a load of the ticket's residency that ran out of memory as an `UnfitRecord`: host
-        memory when a `MemoryError` is in the exception's chain, else the device's; the grant is
-        the class's host memory, or its share of a device; the code is the providers' versions.
+        """Keep a load of the ticket's residency that ran out of memory as an `UnfitRecord`: the
+        memory `pydra.workers.pool.faults.oom_resource` names; the grant is the class's host
+        memory, or its share of a device; the code is the providers' versions.
         """
         key = residency_key(claim.ticket.residency)
         if key is None:
             return
-        host = any(isinstance(link, MemoryError) for link in _faults._chain(exc))
-        resource: ty.Literal["device", "host"] = (
-            "host" if host or not self.cls.gpus else "device"
-        )
+        resource = _faults.oom_resource(exc, bool(self.cls.gpus))
         if resource == "host":
             grant = self.cls.mem
         else:

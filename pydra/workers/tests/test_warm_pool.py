@@ -85,6 +85,26 @@ def Many(xs: list) -> list:
     return workflow.add(Echo().split(x=xs), name="E").out
 
 
+@python.define
+def Forget(where: str) -> str:
+    # removes a directory from inside a pool job, once the outer job has started
+    import shutil
+
+    shutil.rmtree(where, ignore_errors=True)
+    return where
+
+
+@python.define
+def EchoAfter(x: int, after: str) -> int:
+    return x
+
+
+@workflow.define
+def ForgetThenMany(where: str, xs: list) -> list:
+    gone = workflow.add(Forget(where=where), name="F")
+    return workflow.add(EchoAfter(after=gone.out).split(x=xs), name="E").out
+
+
 @workflow.define
 def Marks(xs: list, where: str) -> list:
     return workflow.add(Mark(where=where).split(x=xs), name="M").out
@@ -107,31 +127,26 @@ def BigGpuMark(x: int, where: str) -> int:
     return workflow.add(Mark(x=x, where=where), name="M", resources=need).out
 
 
-@workflow.define
-def GpuMarks(xs: list, where: str) -> list:
-    gpu = ComputeResources(gpus=1)
-    return workflow.add(Mark(where=where).split(x=xs), name="M", resources=gpu).out
-
-
 @python.define
-def DeviceMark(x: int, where: str, devices: int) -> int:
-    # waits (a bound only) until jobs have run on ``devices`` devices, so no one worker runs every
-    # job before the others start
+def DeviceHold(x: int, where: str, devices: int) -> str:
+    # announce this worker's device, then hold until ``devices`` workers have announced theirs, so
+    # no worker can drain the queue before the others start; the bound only stops a hang
     d = Path(where)
-    (d / f"{x}-{os.environ.get('CUDA_VISIBLE_DEVICES', '')}-{uuid4().hex}").touch()
-    deadline = time.monotonic() + 60
-    while time.monotonic() < deadline:
-        if len({p.name.split("-")[1] for p in d.iterdir()}) >= devices:
-            break
+    device = os.environ.get("CUDA_VISIBLE_DEVICES", "none")
+    (d / f"device-{device}").touch()
+    deadline = time.monotonic() + 120
+    while len(list(d.glob("device-*"))) < devices:
+        if time.monotonic() > deadline:
+            raise RuntimeError("the other workers never ran a job")
         time.sleep(0.05)
-    return x
+    return device
 
 
 @workflow.define
-def GpuPeers(xs: list, where: str, devices: int) -> list:
+def GpuHolds(xs: list, where: str, devices: int) -> list:
     gpu = ComputeResources(gpus=1)
-    node = DeviceMark(where=where, devices=devices).split(x=xs)
-    return workflow.add(node, name="M", resources=gpu).out
+    node = DeviceHold(where=where, devices=devices).split(x=xs)
+    return workflow.add(node, name="H", resources=gpu).out
 """
 
 FAKE_NVIDIA_SMI = """#!{python}
@@ -724,7 +739,9 @@ def test_pool_never_starting_holds_jobs(tmp_path, tasks, pools, fake_nvidia_smi)
 @pytest.mark.skipif(not POSIX, reason="the fake nvidia-smi is a shebang script")
 def test_one_worker_per_gpu_local(tmp_path, tasks, pools, fake_nvidia_smi):
     """On a host whose ``nvidia-smi`` lists two GPUs, a one-GPU class runs one worker per device,
-    each given its device through ``CUDA_VISIBLE_DEVICES``; a third cannot start."""
+    each given its device through ``CUDA_VISIBLE_DEVICES``; a third cannot start. Every job holds
+    until both workers have run one, so the placement is asserted, not a race between the first
+    worker draining the queue and the second marking ready."""
     from pydra.workers.pool.substrate import LocalSubstrate
 
     fake_nvidia_smi("NVIDIA H100 80GB HBM3", "NVIDIA H100 80GB HBM3")
@@ -741,9 +758,10 @@ def test_one_worker_per_gpu_local(tmp_path, tasks, pools, fake_nvidia_smi):
         substrate=substrate,
         settings=_settings(unmeasured_workers=4),
     )
-    task = tasks.GpuPeers(xs=list(range(4)), where=str(marks), devices=2)
-    runner = _drive(sub, task, pool)
+    holds = tasks.GpuHolds(xs=list(range(4)), where=str(marks), devices=2)
+    runner = _drive(sub, holds, pool)
     assert runner.done and not runner.failed
+    assert sorted(p.name for p in marks.iterdir()) == ["device-0", "device-1"]
     assert len(substrate.handles) == 2
     assert sorted(h.devices for h in substrate.handles) == [("0",), ("1",)]
     assert substrate.can_start(gpu) is not True or not substrate.live()
@@ -1723,3 +1741,44 @@ def test_an_unreadable_refusing_ticket_is_logged_and_a_bug_propagates(
     else:
         assert coordinator._refused(("c" * 64, "f" * 64), newest) is None
         assert "cannot be read" in caplog.text
+
+
+def _without_the_run_cache(tmp_path, tasks, pools, store):
+    """Run `ForgetThenMany` on a pool over ``store`` through ``Submitter(worker=pool)``: its first
+    pool job removes this host's user run cache once the outer job has started, so the later pool
+    jobs run where it is absent, as on a worker of another host."""
+    from types import SimpleNamespace
+
+    from pydra.utils.general import default_run_cache_root
+
+    pool = _warm(tmp_path, pools, SimpleNamespace(store=store))
+    with Submitter(worker=pool) as run:
+        task = tasks.ForgetThenMany(where=str(default_run_cache_root()), xs=[1, 2, 3])
+        result = run(task, raise_errors=True)
+    assert result.outputs.out == [1, 2, 3]
+    assert not default_run_cache_root().exists()
+    return run
+
+
+def test_jobs_of_a_submitter_on_a_pool_need_no_user_cache(tmp_path, tasks, pools):
+    """A `Submitter` given a pool over a private store and no ``cache_root`` roots its cache at the
+    store, so its pool jobs keep their run files where every worker reaches, never in the user cache
+    of the submitting host."""
+    store = _submitter(tmp_path).store
+    run = _without_the_run_cache(tmp_path, tasks, pools, store)
+    assert run.cache_root == Path(store.path).resolve()
+
+
+@pytest.mark.skipif(not POSIX, reason="a shared root is PlatformUnsupported on Windows")
+def test_jobs_on_a_shared_store_pool_need_no_user_cache(tmp_path, tasks, pools):
+    """On a pool over a shared store, whose root holds no run files, a job with a work directory
+    writes nothing in the submitter's cache root, the user run cache of the submitting host.
+    """
+    from pydra.engine.portable.store import PortableStore
+
+    store = PortableStore(
+        tmp_path / "shared",
+        trust="shared",
+        work_dir=lambda c, f, a: tmp_path / "work" / f"{c}-{a}",
+    )
+    _without_the_run_cache(tmp_path, tasks, pools, store)
