@@ -525,14 +525,22 @@ def pool_probe(root, attribute_delay):
     is_flag=True,
     help="Started by a substrate: exit when no coordinator has been live for orphan_after_s.",
 )
-def pool_worker(root, cls, settings, provider, substrate):
+@click.option(
+    "--token", default=None, help="The worker's token, named by its substrate."
+)
+@click.option(
+    "--codec",
+    default=None,
+    help="The payload codec as module:qualname; default PrivatePickle.",
+)
+def pool_worker(root, cls, settings, provider, substrate, token, codec):
     """Run a warm worker of class CLS on the pool at ROOT until it is idle, orphaned or
     stopped (RFC 0005 section 4.3). Exits 3 when its lease settings differ from the
     pool's, 4 when the hardware does not match the class, 5 when it recycles."""
     import logging
 
     from pydra.workers.pool.settings import PoolSettings
-    from pydra.workers.pool.worker import run_worker
+    from pydra.workers.pool.worker import load_codec, run_worker
 
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
@@ -541,7 +549,62 @@ def pool_worker(root, cls, settings, provider, substrate):
     if settings is not None:
         loaded = PoolSettings.from_json(json.loads(Path(settings).read_text()))
     sys.exit(
-        run_worker(root, cls, providers=provider, settings=loaded, substrate=substrate)
+        run_worker(
+            root,
+            cls,
+            providers=provider,
+            settings=loaded,
+            substrate=substrate,
+            token=token,
+            codec=load_codec(codec),
+        )
+    )
+
+
+@pool.command("status", context_settings=CONTEXT_SETTINGS)
+@click.argument("root", type=click.Path(exists=True, file_okay=False))
+def pool_status(root):
+    """Print what the pool at ROOT holds as JSON: coordinator epochs, each queue's waiting
+    tickets and jobs, settled tickets and holds, and its workers."""
+    from pydra.workers.pool.pool import pool_status as status
+
+    click.echo(json.dumps(status(root), indent=2, sort_keys=True))
+
+
+@pool.command("release-hold", context_settings=CONTEXT_SETTINGS)
+@click.argument("root", type=click.Path(exists=True, file_okay=False))
+@click.option("--queue", required=True, help="The queue whose holds are lifted.")
+@click.option(
+    "--residency",
+    default=None,
+    help="Lift only the hold of this residency label (64 hex digits); default every hold.",
+)
+def pool_release_hold(root, queue, residency):
+    """Lift the holds of QUEUE on the pool at ROOT, so a later run puts its held jobs again."""
+    from pydra.workers.pool.pool import release_hold
+
+    click.echo(f"{release_hold(root, queue, residency)} hold(s) lifted")
+
+
+@pool.command("collect", context_settings=CONTEXT_SETTINGS)
+@click.argument("root", type=click.Path(exists=True, file_okay=False))
+@click.option(
+    "--payload-age",
+    type=float,
+    default=86400.0,
+    show_default=True,
+    help="Seconds a payload no unsettled ticket names must have aged before it is removed.",
+)
+def pool_collect(root, payload_age):
+    """Remove settled jobs' older follow generations, payloads no unsettled ticket names, tickets
+    resolved more than --payload-age seconds ago (with their marks and outcomes), and ended
+    coordinators' directories from the pool at ROOT."""
+    from pydra.workers.pool.pool import collect_pool
+
+    report = collect_pool(root, payload_age=payload_age)
+    click.echo(
+        f"{report['files']} file(s), {report['tickets']} settled ticket(s) and "
+        f"{len(report['coordinators'])} ended coordinator(s) removed"
     )
 
 

@@ -9,6 +9,7 @@ a worker in another process imports them as this one does (a wheel install carri
 In-process tests reach a running task through that module's ``HOOK`` table.
 """
 
+import contextlib
 import json
 import logging
 import os
@@ -766,6 +767,52 @@ def test_wedged_call_times_out(pool, tasks, processes, tmp_path):
     assert not flag.exists()  # never run again
 
 
+@pytest.mark.skipif(not POSIX, reason="kills or stops the beater by signal")
+@pytest.mark.parametrize("signum", ["SIGKILL", "SIGSTOP"])
+def test_dead_beater_under_a_hung_call_expires_and_recycles(
+    pool, tasks, processes, tmp_path, signum
+):
+    """A worker whose beater dies (killed) or hangs (stopped) while a call that never returns runs
+    stops proving its claim, writes the call's ``expired`` outcomes itself once the deadline passes,
+    and exits to be recycled; the claim goes stale and a taker types the timeout. It does not keep
+    the claim alive forever."""
+    flag = tmp_path / "wedged"
+    job = pool.job(tasks.Wedge(flag=str(flag)), "wedge")
+    digest = pool.put([job])
+    proc = _start(
+        pool,
+        processes,
+        tmp_path,
+        settings=_settings(call_timeout=10.0, timeout_grace=1.0),
+    )
+    _wait(flag.exists, "the call to start")
+    out = subprocess.run(["pgrep", "-P", str(proc.pid)], capture_output=True, text=True)
+    beaters = [int(p) for p in out.stdout.split()]
+    assert beaters, "the worker has a beater"
+    for pid in beaters:
+        os.kill(pid, getattr(signal, signum))
+    try:
+        assert proc.wait(BOUND) == 5  # EXIT_RECYCLE: neither hung nor killed
+    finally:
+        for pid in beaters:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+    [expired] = pool.outcomes()
+    assert expired["outcome"] == "expired" and expired["attempt"].endswith(".0")
+    flag.unlink()
+    _wait(lambda: _stale(pool.claim_dirs()), "the unproved claim to go stale")
+    _, code = _run(pool)  # takes the stale claim over
+    assert code == 0
+    gens = pool.generations(job)
+    assert [g["cause"] for g in gens] == ["put", "takeover"]
+    failed = pool.pool.read_outcome("cpu", digest, pool.key(job), gens[1]["attempt"])
+    assert (failed["outcome"], failed["fault"]["type"]) == (
+        "failed",
+        "ResourceExhausted",
+    )
+    assert not flag.exists()
+
+
 def test_worker_skips_withdrawn_and_superseded(pool, tasks):
     """While the worker holds a ticket, a job whose newest generation names another ticket and a job
     with a ``withdrawn`` outcome are skipped: nothing started, nothing written."""
@@ -1210,6 +1257,19 @@ def test_infrastructure_faults_are_bounded_per_job(pool, tasks):
     assert "3 infrastructure faults" in failed["fault"]["message"]
 
 
+def test_requeued_ticket_reclaimed_while_gathering(pool, tasks):
+    """A warm worker that gathers one-job tickets passes over the ticket it still holds; once that
+    ticket is released unsettled (an infrastructure requeue) the same worker claims it again at
+    once, rather than skipping it for a renewal interval and exiting idle with the job open.
+    """
+    job = pool.job(tasks.Fail(x=1), "requeued")
+    pool.put([job])
+    _, code = _run(pool, _class(quantum_jobs=4), classify=_infrastructure)
+    assert code == 0
+    assert [g["cause"] for g in pool.generations(job)] == ["put", "restart", "restart"]
+    assert [o["outcome"] for o in pool.outcomes()] == ["failed"]
+
+
 def test_crash_budget_fails_a_job_crashed_worker(pool, tasks):
     """A job with ``crashes_charged`` charged generations is ``failed`` (``JobCrashedWorker``)
     without running."""
@@ -1372,9 +1432,8 @@ def test_orphan_exit_after_a_live_coordinator_goes_stale(pool):
         )
         assert worker.run() == 0
         assert worker.live_polls > 0 and worker.polls < 400
-        assert (
-            worker.orphan_polls > 1
-        )  # it waited orphan_after_s from the last live judgement
+        # it waited orphan_after_s from the last live judgement, however slow each poll was
+        assert time.monotonic() - worker._last_live > 1.0
     finally:
         lease.__exit__(None, None, None)
 
@@ -1560,3 +1619,38 @@ def test_load_infrastructure_faults_are_bounded(pool, tasks):
         assert "3 infrastructure faults" in o["fault"]["message"]
         assert "load" in o["fault"]["message"]
     assert [kind for kind, _ in tasks.LOADS] == ["broken"] * 3
+
+
+def test_the_stop_mark_watch_outlives_a_storage_error(tmp_path):
+    """A storage error reading the stop mark (ESTALE on network storage) does not end the watch:
+    the next read finds the mark and the worker drains."""
+    import errno
+    from types import SimpleNamespace
+
+    from pydra.workers.pool.worker import Worker
+
+    reads = []
+
+    def worker_record(token, name):
+        reads.append(name)
+        if len(reads) == 1:
+            raise OSError(getattr(errno, "ESTALE", errno.EIO), "Stale file handle")
+        return {"at": 0}
+
+    stub = SimpleNamespace(
+        pool=SimpleNamespace(worker_record=worker_record, path=tmp_path),
+        token="d" * 32,
+        stop=threading.Event(),
+        settings=SimpleNamespace(poll_s=0.0),
+    )
+    drained, done = threading.Event(), threading.Event()
+    watch = threading.Thread(
+        target=Worker._watch_stop_mark, args=(stub, done, drained.set), daemon=True
+    )
+    watch.start()
+    try:
+        assert drained.wait(BOUND)
+    finally:
+        done.set()
+        watch.join(BOUND)
+    assert len(reads) == 2

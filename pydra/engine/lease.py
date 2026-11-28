@@ -62,6 +62,10 @@ RELEASE_PATIENCE = 5.0
 """Most seconds a release retries renaming the holder's directory aside while the
 storage refuses it; at most ``MISSED_BEATS * renew_interval`` for given settings."""
 
+PING_MISSES = 3
+"""Consecutive unanswered calls of `BeaterClient.ping` after which a beater is dead. One miss is not: a
+holder whose call held the GIL past the ping's timeout reads the answer late."""
+
 HOLDER_FILE = "holder.json"
 """The holder record in a lease's token directory."""
 
@@ -1434,6 +1438,8 @@ class _BeaterLoop:
             elif op == "deadline":
                 entry = self.dirs[key]
                 entry.at, entry.payload = message.get("at"), message.get("payload")
+            elif op == "ping":
+                pass
             elif op == "ack_expired":
                 if key in self.dirs:
                     self.dirs[key].kill_at = None
@@ -1618,6 +1624,8 @@ class BeaterClient:
         self._lock = threading.Lock()
         self._changed = threading.Condition(self._lock)
         self._acks: dict[int, dict] = {}
+        self._late: set[int] = set()  # pings given up on, whose answer may still come
+        self._missed = 0
         self._next = 0
         self._settings: dict[Path, LeaseSettings] = {}
         self._leases: dict[Path, DirectoryLease] = {}
@@ -1723,6 +1731,47 @@ class BeaterClient:
         self._request(
             {"op": "ack_expired", "dir": str(token_dir)}, self._interval(token_dir)
         )
+
+    def ping(self, timeout: float) -> bool:
+        """Ask the beater to answer: True once it acknowledged within ``timeout`` seconds, False when
+        it did not (a miss). A holder sends it while no other request is due, so a hung beater is
+        found. Any answer, even a late one, forgets the misses; the `PING_MISSES`-th consecutive
+        miss is the beater's death: it is stopped and `BeaterDead` is raised.
+
+        Raises
+        ------
+        BeaterDead
+            The beater is dead, or this was its `PING_MISSES`-th consecutive miss.
+        """
+        with self._changed:
+            if self.dead is not None:
+                raise BeaterDead(self.dead)
+            self._next += 1
+            ident = self._next
+        try:
+            self.process.stdin.write(
+                json.dumps({"op": "ping", "id": ident}).encode() + b"\n"
+            )
+            self.process.stdin.flush()
+        except OSError as err:
+            self._die(f"its pipe is closed ({err})")
+            raise BeaterDead(self.dead) from err
+        with self._changed:
+            self._changed.wait_for(
+                lambda: ident in self._acks or self.dead is not None, timeout
+            )
+            if self._acks.pop(ident, None) is not None:
+                self._missed = 0
+                return True
+            if self.dead is not None:
+                raise BeaterDead(self.dead)
+            self._late.add(ident)  # its answer, if it comes, is read as a sign of life
+            self._missed += 1
+            missed = self._missed
+        if missed >= PING_MISSES:
+            self._die(f"it did not acknowledge {missed} pings in a row")
+            raise BeaterDead(self.dead)
+        return False
 
     # Waiting
 
@@ -1843,7 +1892,11 @@ class BeaterClient:
             return
         if "ack" in message:
             with self._changed:
-                self._acks[message["ack"]] = message
+                if message["ack"] in self._late:  # a ping given up on, answered late
+                    self._late.discard(message["ack"])
+                    self._missed = 0
+                else:
+                    self._acks[message["ack"]] = message
                 self._changed.notify_all()
             return
         token_dir = Path(message.get("dir", ""))

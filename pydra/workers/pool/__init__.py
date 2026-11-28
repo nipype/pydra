@@ -1,4 +1,4 @@
-"""Warm worker pools: worker classes, placement and fit.
+"""Warm worker pools: worker classes, placement and fit, the pool executor and its substrates.
 
 Nothing here is imported by ``import pydra``; import the submodules directly.
 """
@@ -18,6 +18,16 @@ _EXPORTS = {
     "Unplaceable": "placement",
     "Verdict": "placement",
     "place": "placement",
+    "PoolBusy": "pool",
+    "PoolFenced": "pool",
+    "PoolJobFailed": "pool",
+    "PoolSettings": "settings",
+    "UnplaceableJob": "pool",
+    "WarmPool": "pool",
+    "ExternalSubstrate": "substrate",
+    "LocalSubstrate": "substrate",
+    "Substrate": "substrate",
+    "WorkerHandle": "substrate",
 }
 
 __all__ = sorted(_EXPORTS)

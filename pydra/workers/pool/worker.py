@@ -63,6 +63,7 @@ from pydra.workers.pool.storage import (
     PoolOwnerMismatch,
     PoolRoot,
     PoolSettingsMismatch,
+    STOP_MARK,
     TicketJob,
 )
 
@@ -222,6 +223,9 @@ class Worker:
     hardware, memory, device_memory : callable
         Read the hardware, this process's ``(current, peak)`` host bytes and device-wide bytes.
     codec : JobCodec
+    token : str, optional
+        The worker's token (32 hex digits), named by the substrate that started it so that its
+        coordinator finds its ready mark; default a fresh one.
     """
 
     def __init__(
@@ -238,8 +242,10 @@ class Worker:
         memory: ty.Callable[[], tuple[int | None, int | None]] = host_memory,
         device_memory: ty.Callable[[], int | None] = device_memory,
         codec: JobCodec | None = None,
+        token: str | None = None,
     ):
         self.root = Path(root)
+        self._token_arg = token
         self._cls_arg = cls
         self._provider_args = tuple(providers)
         self.classify = classify
@@ -278,6 +284,7 @@ class Worker:
         self._device_read = False
         self._worker_lease: DirectoryLease | None = None
         self._last_live = time.monotonic()
+        self._pinged = 0.0
 
     # -- the run -------------------------------------------------------------------------------
 
@@ -319,7 +326,7 @@ class Worker:
         )
         try:
             self.providers = tuple(_resolve(p) for p in self._provider_args)
-            self.token = uuid.uuid4().hex
+            self.token = self._token_arg or uuid.uuid4().hex
             self.pool.worker_dir(self.token).close()
             lease = DirectoryLease.at(
                 self.pool.path / "workers" / self.token / "lease",
@@ -378,19 +385,52 @@ class Worker:
 
     @contextlib.contextmanager
     def _signals(self) -> ty.Iterator[None]:
-        if threading.current_thread() is not threading.main_thread():
-            yield
-            return
+        """Drain on SIGTERM (in the main thread) and on the worker's `STOP_MARK`, which a thread
+        looks for every ``poll_s``: either sets ``stop`` and wakes the worker."""
 
-        def drain(signum, frame):
+        def drain(signum=None, frame=None):
             self.stop.set()
             self._wake.set()
 
-        previous = signal.signal(signal.SIGTERM, drain)
+        done = threading.Event()
+        watcher = threading.Thread(
+            target=self._watch_stop_mark,
+            args=(done, drain),
+            name="pydra-pool-stop-mark",
+            daemon=True,
+        )
+        watcher.start()
+        main = threading.current_thread() is threading.main_thread()
+        previous = signal.signal(signal.SIGTERM, drain) if main else None
         try:
             yield
         finally:
-            signal.signal(signal.SIGTERM, previous)
+            if main:
+                signal.signal(signal.SIGTERM, previous)
+            done.set()
+            watcher.join(self.settings.poll_s)  # a read stuck on hung storage is left
+
+    def _watch_stop_mark(self, done: threading.Event, drain) -> None:
+        failing = False
+        while not self.stop.is_set():
+            try:
+                marked = self.pool.worker_record(self.token, STOP_MARK) is not None
+            except OSError as err:
+                if not failing:
+                    logger.warning(
+                        "reading the stop mark of worker %s failed, retrying: %s",
+                        self.token,
+                        err,
+                    )
+                failing, marked = True, False
+            else:
+                failing = False
+            if marked:
+                logger.info("worker %s was told to stop: draining", self.token)
+                drain()
+                return
+            if done.wait(self.settings.poll_s):
+                return
 
     def _device(self):
         """The device providers load on: the first granted GPU on a CUDA class (an index into
@@ -897,6 +937,11 @@ class Worker:
         deadline = (
             None if limit is None else time.time() + limit + self.settings.timeout_grace
         )
+        payload = None
+        if deadline is not None:
+            payload = expiry_payload(
+                self.pool.path, self.settings.lease, claim.queue, claim.digest, listed
+            )
         self.pool.write_call(
             self.token,
             seq,
@@ -910,18 +955,9 @@ class Worker:
             },
         )
         if deadline is not None:
-            self.client.deadline(
-                token_dir,
-                deadline,
-                expiry_payload(
-                    self.pool.path,
-                    self.settings.lease,
-                    claim.queue,
-                    claim.digest,
-                    listed,
-                ),
-            )
-        call = self._run_call(claim, job)
+            with contextlib.suppress(BeaterDead):  # then the loop enforces it
+                self.client.deadline(token_dir, deadline, payload)
+        call = self._run_call(claim, job, deadline, payload)
         wall = call.wall
         if not call.abandoned:
             self.pool.call_done(self.token, seq)
@@ -958,9 +994,19 @@ class Worker:
             claim, entry, attempt, "failed", sample, fault=fault.to_json()
         )
 
-    def _run_call(self, claim: Claim, job: "Job") -> _Call:
+    def _run_call(
+        self,
+        claim: Claim,
+        job: "Job",
+        deadline: float | None = None,
+        payload: dict | None = None,
+    ) -> _Call:
         """Run ``job.run`` on a thread; meanwhile prove the claim every renewal interval, act on the
         beater's ``lost`` and ``expired``, and on SIGTERM wait ``drain_s`` before abandoning.
+
+        The beater is pinged every renewal interval. While the beater is dead the claim is not proved,
+        and once the call's ``deadline`` passes its ``expired`` outcomes are written here
+        (`pool_expire`) and the call is abandoned, so the worker recycles.
         """
         call = _Call()
         done = threading.Event()
@@ -981,18 +1027,32 @@ class Worker:
         interval = self.settings.lease.renew_interval
         proved, drain_until = time.monotonic(), None
         while not done.is_set():
-            self._wake.wait(interval)
+            wait = interval
+            if drain_until is not None:  # wake when the drain is over
+                wait = max(0.0, min(interval, drain_until - time.monotonic()))
+            self._wake.wait(wait)
             self._wake.clear()
             if done.is_set():
                 break
+            beaten = self._ping(interval)
             if not call.lost and self._lost_claim(claim):
                 call.lost = True
                 self._stop_call()
-            elif not call.lost and time.monotonic() - proved >= interval:
+            elif not call.lost and beaten and time.monotonic() - proved >= interval:
                 proved = time.monotonic()
                 if not claim.lease.prove():
                     call.lost = True
                     self._stop_call()
+            if (
+                not beaten
+                and not call.expired
+                and deadline is not None
+                and time.time() >= deadline
+            ):
+                self._expire_here(token_dir, payload)
+                call.expired = True
+                call.abandoned = True
+                break
             if not call.expired and token_dir in self._expired:
                 call.expired = True
                 self.recycle = self.recycle or "a call passed its deadline"
@@ -1013,6 +1073,37 @@ class Worker:
                     token_dir
                 )  # the call has ended: nothing for the beater to kill
         return call
+
+    def _ping(self, interval: float) -> bool:
+        """Whether the beater answers (at most one ping per renewal interval)."""
+        if self.client is None or not self.client.alive:
+            return False
+        now = time.monotonic()
+        if now - self._pinged < interval:
+            return True
+        self._pinged = now
+        try:
+            self.client.ping(
+                interval
+            )  # a miss is not a death: PING_MISSES in a row are
+        except BeaterDead as err:
+            self.recycle = self.recycle or f"the beater died: {err}"
+            return False
+        return True
+
+    def _expire_here(self, token_dir: Path, payload: dict | None) -> None:
+        """The beater is dead and the call passed its deadline: write its ``expired`` outcomes in
+        this process, leave the claim unproved to go stale, and recycle."""
+        from pydra.workers.pool.beater import pool_expire
+
+        if payload is not None:
+            try:
+                pool_expire(token_dir, payload)
+            except Exception as err:  # the claim goes stale all the same
+                logger.error("writing the expired outcomes failed: %s", err)
+        self._expired.add(Path(token_dir))
+        self.recycle = self.recycle or "a call passed its deadline with the beater dead"
+        self._stop_call()
 
     def _ack_expired(self, token_dir: Path) -> None:
         with contextlib.suppress(BeaterDead, ValueError):
@@ -1319,6 +1410,12 @@ def main(argv: ty.Sequence[str] | None = None) -> int:
         action="store_true",
         help="started by a substrate: exit when no coordinator is live",
     )
+    parser.add_argument(
+        "--token", help="the worker's token (32 hex digits), named by its substrate"
+    )
+    parser.add_argument(
+        "--codec", help="the payload codec as module:qualname; default PrivatePickle"
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
@@ -1332,7 +1429,17 @@ def main(argv: ty.Sequence[str] | None = None) -> int:
         providers=args.provider,
         settings=settings,
         substrate=args.substrate,
+        token=args.token,
+        codec=load_codec(args.codec),
     )
+
+
+def load_codec(reference: str | None) -> JobCodec | None:
+    """The codec ``module:qualname`` names, made with no arguments; None for None."""
+    if reference is None:
+        return None
+    codec = _resolve(reference)
+    return codec() if isinstance(codec, type) else codec
 
 
 if __name__ == "__main__":
