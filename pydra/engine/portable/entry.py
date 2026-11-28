@@ -245,7 +245,9 @@ class PydraEntryV1:
 
         Every file output is copied (a reflink where the filesystem has one, never a link), and
         each member's sha256 and size go into ``entry.json``. ``files_from`` does not change
-        that: a file inside it is copied as one outside it is.
+        that: a file inside it is copied as one outside it is. It is the job's work directory:
+        a ``pathlib.Path`` output naming a file or directory inside it is stored as a file
+        set (RFC 0003 section 6.4).
 
         Raises
         ------
@@ -260,6 +262,7 @@ class PydraEntryV1:
             staging,
             can_pickle=self.pickle and self.trust != "shared",
             allow_naive=self.trust != "shared",
+            work_dir=None if files_from is None else files_from.path,
         )
         encoded = encoder.encode_outputs(outputs)
         encoder.write(

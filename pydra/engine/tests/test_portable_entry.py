@@ -46,7 +46,10 @@ from pydra.utils.storagedir import (
     StoreUnavailable,
 )
 
-TRUST = "trusted" if IS_WINDOWS else "private"
+# `trusted` on Windows unless CI sets PYDRA_TEST_PORTABLE_TRUST (see test_portable_store)
+TRUST = os.environ.get("PYDRA_TEST_PORTABLE_TRUST") or (
+    "trusted" if IS_WINDOWS else "private"
+)
 posix_only = pytest.mark.skipif(IS_WINDOWS, reason="needs POSIX modes and owners")
 CTX = {"python": "3.12", "platform": "test", "n": 1, "x": 1.5, "none": None}
 IDENT = PydraIdentityV1()
@@ -294,12 +297,15 @@ def test_bytes_member(root):
 def test_list_and_tuple_decode_to_declared_type(root):
     out = {"a": 1, "b": [1.0, 2.5], "c": (7, "q")}
     enc = encoded(root, out)
-    assert enc["b"] == [1.0, 2.5] and enc["c"] == [7, "q"]
+    assert enc["b"] == [1.0, 2.5] and enc["c"] == {"$tuple": [7, "q"]}
     typed = read(root, task=Typed(x=1)).outputs
     assert typed["c"] == (7, "q") and isinstance(typed["c"], tuple)
     assert typed["b"] == [1.0, 2.5]
     plain = read(root, task=None).outputs
-    assert plain["c"] == [7, "q"]
+    assert plain["c"] == (7, "q") and plain["b"] == [
+        1.0,
+        2.5,
+    ]  # no declared type: as given
 
 
 def test_set_order_is_canonical(root, tmp_path):
@@ -382,6 +388,81 @@ def test_path_is_a_value_not_a_file(root, tmp_path):
     assert not (entry_path(root) / "files").exists()
     got = read(root).outputs["p"]
     assert got == src and isinstance(got, Path)
+
+
+def test_a_fileformats_file_set_is_stored_under_its_mime_like_name(root, tmp_path):
+    from fileformats.application import Json
+
+    src = tmp_path / "data.json"
+    src.write_text("{}")
+    enc = encoded(root, {"j": Json(src)})
+    assert enc["j"]["$fileset"] == "application/json"
+    got = read(root).outputs["j"]
+    assert isinstance(got, Json) and got.fspath.read_text() == "{}"
+    assert got.fspath.is_relative_to(entry_path(root))
+
+
+class _Unlisted(File):
+    """A file set class outside the fileformats packages, with no registered tag"""
+
+
+def test_a_file_set_without_a_tag_is_never_pickled(root, tmp_path):
+    src = tmp_path / "data.txt"
+    src.write_text("x")
+    fmt = PydraEntryV1(pickle=True, trust=TRUST)
+    with pytest.raises(UnencodableOutput, match="never pickled"):
+        publish(root, {"f": _Unlisted(src)}, fmt=fmt)
+
+
+def _work_dir(root, tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    return work, StorageDir.open_root(work, StorePolicy(), trust=TRUST)
+
+
+def test_a_path_inside_the_work_directory_is_stored_as_a_file_set(root, tmp_path):
+    work, handle = _work_dir(root, tmp_path)
+    (work / "out.txt").write_text("hello")
+    (work / "outdir").mkdir()
+    (work / "outdir" / "a.txt").write_text("in a dir")
+    with handle:
+        enc = encoded(
+            root, {"f": work / "out.txt", "d": work / "outdir"}, files_from=handle
+        )
+    assert enc["f"]["$path"]["$fileset"] == "generic/file"
+    assert enc["d"]["$path"]["$fileset"] == "generic/directory"
+    got = read(root).outputs
+    assert isinstance(got["f"], Path) and got["f"].read_text() == "hello"
+    assert got["f"].is_relative_to(entry_path(root))
+    assert (got["d"] / "a.txt").read_text() == "in a dir"
+
+
+def test_a_path_outside_the_work_directory_is_a_value(root, tmp_path):
+    work, handle = _work_dir(root, tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("kept where it is")
+    with handle:
+        enc = encoded(root, {"p": outside}, files_from=handle)
+    assert enc["p"] == {"$path": str(outside)}
+
+
+def test_a_string_naming_a_file_in_the_work_directory_warns_once(root, tmp_path):
+    work, handle = _work_dir(root, tmp_path)
+    (work / "out.txt").write_text("hello")
+    with handle, pytest.warns(UserWarning, match="pathlib.Path") as caught:
+        publish(
+            root,
+            {"s": [str(work / "out.txt"), str(work / "out.txt")]},
+            files_from=handle,
+        )
+    assert len(caught) == 1
+
+
+def test_untyped_tuples_round_trip(root):
+    out = roundtrip(root, {"pair": (1, 2), "nested": {"k": (2, 2), "l": [(2,)]}})
+    assert out["pair"] == (1, 2) and type(out["pair"]) is tuple
+    assert out["nested"] == {"k": (2, 2), "l": [(2,)]}
+    assert type(out["nested"]["k"]) is tuple
 
 
 def test_array_is_a_canonical_npy_member(root):
