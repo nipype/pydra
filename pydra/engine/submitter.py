@@ -6,6 +6,7 @@ import warnings
 import os
 from pathlib import Path
 from tempfile import mkdtemp
+from uuid import uuid4
 from copy import deepcopy
 from datetime import datetime
 import logging
@@ -452,11 +453,15 @@ class Submitter:
             environment=environment,
             hooks=hooks,
         )
+        job.attempt = "resume" if job.can_resume else uuid4().hex
         self.errors = []
         self.entries = []
         try:
             self.run_start_time = datetime.now()
-            self.submit(job, rerun=rerun)
+            if is_workflow(task):  # the runner leases, expands and commits it
+                self._run_workflow(job, rerun)
+            else:
+                self.submit(job, rerun=rerun)
         except Exception as exc:
             self.errors = exc.errors if isinstance(exc, WorkflowError) else []
             self.entries = exc.entries if isinstance(exc, WorkflowError) else []
@@ -516,8 +521,39 @@ class Submitter:
             return None
         return max(0, int(self.max_concurrent) - in_flight)
 
+    def _run_workflow(self, job: "Job[workflow.Task]", rerun: bool) -> None:
+        """Run the outer workflow job: the runner takes its lease, expands it with every
+        nested workflow and commits its result"""
+        runner = self._runner(job, rerun, is_async=self.worker.is_async, own_job=True)
+        self._drive_runner(runner, raise_first=not self.worker.is_async)
+        if runner.root_error is not None:
+            raise runner.root_error
+        if runner.errors:
+            raise workflow_error(job, runner.errors, runner.entries)
+
+    def _drive_runner(self, runner: GraphRunner, raise_first: bool = True) -> None:
+        if not any(w.is_async for w in self.workers.values()):
+            drive_inline(
+                runner,
+                InlineExecutor(self.worker, self.worker_for),
+                on_error=runner.on_error,
+                limit=self._limit(),
+            )
+        else:  # some job may run on a worker that is not inline
+            self.loop.run_until_complete(self._drive(runner))
+            if (
+                raise_first
+                and runner.on_error == "fail_fast"
+                and runner.first_error is not None
+            ):
+                raise runner.first_error
+
     def _runner(
-        self, wf_job: "Job[workflow.Task]", rerun: bool, is_async: bool
+        self,
+        wf_job: "Job[workflow.Task]",
+        rerun: bool,
+        is_async: bool,
+        own_job: bool = False,
     ) -> GraphRunner:
         runner = GraphRunner(
             wf_job.task,
@@ -527,11 +563,8 @@ class Submitter:
             propagate_rerun=self.propagate_rerun,
             submitter=self,
             job=wf_job,
+            own_job=own_job,
         )
-        wf_job.return_values = {
-            "workflow": runner.workflow,
-            "exec_graph": runner.exec_graph,
-        }
         return runner
 
     def expand_workflow(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
@@ -548,17 +581,7 @@ class Submitter:
     def _expand(self, wf_job: "Job[workflow.Task]", rerun: bool) -> None:
         """Expand and execute a workflow job synchronously, in the calling thread"""
         runner = self._runner(wf_job, rerun, is_async=False)
-        if not any(w.is_async for w in self.workers.values()):
-            drive_inline(
-                runner,
-                InlineExecutor(self.worker, self.worker_for),
-                on_error=runner.on_error,
-                limit=self._limit(),
-            )
-        else:  # some job may run on a worker that is not inline
-            self.loop.run_until_complete(self._drive(runner))
-            if runner.on_error == "fail_fast" and runner.first_error is not None:
-                raise runner.first_error
+        self._drive_runner(runner)
         if runner.errors:
             raise workflow_error(wf_job, runner.errors, runner.entries)
 

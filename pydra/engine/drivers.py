@@ -1,6 +1,7 @@
 """Drivers: the loops that run a :class:`~pydra.engine.runner.GraphRunner` to completion"""
 
 import asyncio
+import time
 import typing as ty
 from collections import defaultdict, deque
 from pydra.engine.runner import Failed, GraphRunner, OnError
@@ -39,18 +40,28 @@ def drive_inline(
     executor.bind(runner.complete)
     fail_fast = on_error == "fail_fast"
     try:
-        dispatch = runner.ready(limit).dispatch
+        rnd = runner.ready(limit)
+        dispatch = rnd.dispatch
         while dispatch or not runner.done:
             for job in dispatch:
                 executor.submit([job])
                 if fail_fast and runner.first_error is not None:
                     raise runner.first_error
-            if fail_fast and runner.errors:
+            if fail_fast and runner.failed:
                 break
-            dispatch = runner.ready(limit).dispatch
+            rnd = runner.ready(limit)
+            dispatch = rnd.dispatch
             if not dispatch and not runner.done:
-                raise RuntimeError(runner.stuck())
+                if (
+                    rnd.retry_after is not None
+                ):  # a workflow lease another process holds
+                    time.sleep(rnd.retry_after)
+                    rnd = runner.ready(limit)
+                    dispatch = rnd.dispatch
+                elif diagnosis := runner.stuck():
+                    raise RuntimeError(diagnosis)
     finally:
+        runner.close()
         executor.close()
 
 
@@ -119,7 +130,7 @@ async def drive(
     def pump() -> None:
         """Hand each one-at-a-time executor its next waiting job once it is idle"""
         for name, queue in waiting.items():
-            if queue and not busy[name] and not (fail_fast and runner.errors):
+            if queue and not busy[name] and not (fail_fast and runner.failed):
                 send(name, [queue.popleft()])
 
     def on_outcome(job: "Job", outcome: "Outcome") -> None:
@@ -151,9 +162,10 @@ async def drive(
     for executor in executors.values():
         executor.bind(report)
     try:
-        dispatch = runner.ready(limit()).dispatch
+        rnd = runner.ready(limit())
+        dispatch = rnd.dispatch
         while dispatch or in_flight or not runner.done:
-            if not dispatch and not in_flight:
+            if not dispatch and not in_flight and rnd.retry_after is None:
                 raise RuntimeError(runner.stuck())
             by_executor: "dict[str, list[Job]]" = defaultdict(list)
             for job in dispatch:
@@ -176,15 +188,27 @@ async def drive(
                 else:
                     send(name, jobs)
             pump()
-            if in_flight:
-                await progressed.wait()
+            if in_flight or rnd.retry_after is not None:
+                # the next outcome, or the next attempt at a workflow lease; no timeout
+                # context is entered, which needs a current task (none under
+                # nest_asyncio)
+                wake = None
+                if rnd.retry_after is not None:
+                    wake = loop.call_later(rnd.retry_after, progressed.set)
+                try:
+                    await progressed.wait()
+                finally:
+                    if wake is not None:
+                        wake.cancel()
                 progressed.clear()
-            if fail_fast and runner.errors:
+            if fail_fast and runner.failed:
                 break
-            dispatch = runner.ready(limit()).dispatch
-            if fail_fast and runner.errors:
+            rnd = runner.ready(limit())
+            dispatch = rnd.dispatch
+            if fail_fast and runner.failed:
                 break
     finally:
+        runner.close()
         for handle in open_handles:
             handle.executor.cancel(handle)
         for executor in executors.values():

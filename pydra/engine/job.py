@@ -89,6 +89,16 @@ class Job(ty.Generic[TaskType]):
     environment: "Environment | None"
     state_index: int
     rerun: bool = False  # Set by the graph runner when it hands the job out
+    # The names of the nested workflows that hold the job, outermost first, with the
+    # element's index where one is split; set by the graph runner
+    workflow_path: tuple[str, ...] = ()
+    # The id of this attempt at the job, set by the graph runner when it starts to
+    # expand a workflow job and by ``Submitter`` for its outer job; "resume" if the
+    # job can resume
+    attempt: str | None = None
+    # Whether the audit of a workflow job was started by the runner, so that it is
+    # finalised with the job
+    _audit_started: bool = False
     bindings: dict[str, ty.Any] | None = None  # Bindings for the job environment
 
     _inputs: dict[str, ty.Any] | None = None
@@ -400,6 +410,75 @@ class Job(ty.Generic[TaskType]):
         """The job to write beside ``result``: this job if it is to be persisted or
         has failed, otherwise None."""
         return self if self.persist_pickle or result.errored else None
+
+    def _start_workflow(self, lease) -> Result:
+        """Begin the expansion of a workflow job whose lease is held and whose stored
+        result, if any, is not to be used: withdraw its success record, prepare its
+        directory, run the ``pre_run_task`` hook and start its audit. Returns the
+        result the workflow's outputs are later put in (see `_finish_workflow`)."""
+        self._errored = False
+        self._audit_started = False
+        self._withdraw_success(lease)
+        self._populate_filesystem()
+        result = Result(
+            outputs=None,
+            runtime=None,
+            errored=False,
+            cache_dir=self.cache_dir,
+            task=self.task,
+            context=self.context,
+        )
+        self.hooks.pre_run_task(self)
+        self.audit.start_audit(odir=self.cache_dir, chdir=False)
+        self._audit_started = True
+        if self.audit.audit_check(AuditFlag.PROV):
+            self.audit.audit_task(job=self)
+        self.audit.monitor()
+        return result
+
+    def _finish_workflow(
+        self, lease, result: Result | None, error: BaseException | None
+    ) -> BaseException | None:
+        """Commit the result of a workflow job whose nodes are done, under its lease,
+        and run its ``post_run`` hook if it succeeded. Returns the error of the
+        workflow (``error``, or the one raised building its outputs), None if it
+        succeeded. Raises what the commit raises (`LeaseLost`), after which nothing is
+        stored."""
+        cwd = os.getcwd()
+        if result is None:  # it failed while starting
+            result = Result(
+                outputs=None,
+                runtime=None,
+                errored=False,
+                cache_dir=self.cache_dir,
+                task=self.task,
+                context=self.context,
+            )
+        if error is None:
+            try:
+                result.outputs = self.task.Outputs._from_job(self)
+                self._warn_if_outputs_outside_cache_dir(result.outputs, cwd)
+            except Exception as exc:
+                error = exc
+        if error is not None:
+            traceback = format_exception(type(error), error, error.__traceback__)
+            if lease_still_held(lease):
+                record_error(self.cache_dir, error=traceback)
+            result.errored = True
+            self._errored = True
+        if self._audit_started:  # not if it failed before the audit
+            self.hooks.post_run_task(self, result)
+            self.audit.finalize_audit(result=result)
+        self.store.commit(lease, result, job=self._pickle_to_commit(result))
+        self._awaiting_run = False
+        self._remove_info_file()
+        return error
+
+    def _complete_workflow(self, result: Result) -> None:
+        """What follows the release of the lease of a workflow job that succeeded"""
+        self.hooks.post_run(self, result)
+        self._check_for_hash_changes()
+        self._cached_result = result
 
     def run(self, rerun: bool = False):
         """Prepare the job working directory, execute the task, and save the

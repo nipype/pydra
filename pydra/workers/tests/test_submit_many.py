@@ -64,6 +64,7 @@ def slurm_round(tmp_path, monkeypatch, n, **kwargs):
             rerun=False,
             lockfile=tmp_path / f"c{i}.lock",
             state_index=i,
+            workflow_path=(),
         )
         for i in range(n)
     ]

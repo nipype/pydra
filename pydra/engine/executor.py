@@ -257,8 +257,11 @@ class WorkerExecutor:
     async def _run(self, job: "Job", handle: Handle) -> None:
         try:
             outcome = await self._execute(job)
-        except asyncio.CancelledError:
-            raise
+        except asyncio.CancelledError as exc:
+            task = asyncio.current_task()
+            if job not in handle.open or (task is not None and task.cancelling()):
+                raise  # cancelled by cancel() or by the loop: not reported
+            outcome = Failed(exc)  # raised by the worker: the job's outcome
         except Exception as exc:
             outcome = Failed(exc)
         self._tasks.pop(job, None)

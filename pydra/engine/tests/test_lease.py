@@ -882,6 +882,72 @@ def test_rerun_after_sigkill_takes_over(tmp_path):
     assert not any(p.suffix == ".lock" for p in (tmp_path / "cache").iterdir())
 
 
+# try_take: one attempt at a time, for a caller that must not block
+
+
+def test_try_take_returns_none_when_free(tmp_path):
+    lease = DirectoryLease("abc", tmp_path, tmp_path / "abc.lock", settings=FAST)
+    assert lease.try_take() is None
+    assert lease.held
+    lease.__exit__(None, None, None)
+    assert not lease.lockfile.exists()
+
+
+def test_try_take_returns_the_delay_while_held_then_takes_it(tmp_path):
+    lockfile = tmp_path / "abc.lock"
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
+    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
+    with holder:
+        first = waiter.try_take()
+        assert first is not None and first > 0
+        second = waiter.try_take()
+        assert second is not None and second >= first  # backs off between attempts
+        assert not waiter.held
+    assert waiter.try_take() is None
+    assert waiter.held
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_keeps_its_bounds_between_attempts(tmp_path):
+    """The first call starts the wait's clock; later calls do not restart it, so the
+    wait ends in ``LeaseTimeout`` however often it is retried"""
+    lockfile = tmp_path / "abc.lock"
+    settings = LeaseSettings(
+        stale_after=10, timeout=15, attribute_delay=0, max_wait=0.2
+    )
+    holder = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    clock = FakeTime(0.0)  # the wait's monotonic clock, moved past max_wait by hand
+    waiter = DirectoryLease(
+        "abc", tmp_path, lockfile, settings=settings, monotonic=clock.monotonic
+    )
+    with holder:
+        assert waiter.try_take() is not None
+        clock.t += 0.3
+        with pytest.raises(LeaseTimeout):
+            waiter.try_take()
+        assert not waiter.held
+    # a new wait starts afresh
+    assert waiter.try_take() is None
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_takes_over_a_stale_lease(tmp_path):
+    lockfile = tmp_path / "abc.lock"
+    plant_foreign_lease(lockfile)
+    settings = LeaseSettings(stale_after=0.3, timeout=10, attribute_delay=0)
+    waiter = DirectoryLease("abc", tmp_path, lockfile, settings=settings)
+    deadline = time.monotonic() + 60
+    while (delay := waiter.try_take()) is not None:
+        assert time.monotonic() < deadline
+        time.sleep(delay)
+    assert waiter.held
+    waiter.__exit__(None, None, None)
+
+
+def test_try_take_is_part_of_the_lease_protocol():
+    assert "try_take" in dir(Lease)
+
+
 def sharing_violation(path) -> PermissionError:
     """What Windows raises for a path another process has open: a sharing violation
     or access denied, both errno EACCES."""
@@ -955,7 +1021,7 @@ def test_waiter_takes_a_lease_released_while_it_reads_the_holder(
         if self.name == HOLDER_FILE and not refused.is_set():
             open_in.add(self.parent)
             reading.set()
-            refused.wait(10)  # held open until the holder's rename was refused
+            refused.wait(60)  # held open until the holder's rename was refused
             open_in.discard(self.parent)
         return real_read_text(self, *args, **kwargs)
 
@@ -970,21 +1036,24 @@ def test_waiter_takes_a_lease_released_while_it_reads_the_holder(
     holder = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
     holder.__enter__()
     took = []
+    waiting = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)
 
     def wait():
-        with DirectoryLease("abc", tmp_path, lockfile, settings=SLOW):
-            took.append(time.monotonic())
+        with waiting:
+            took.append(True)
 
     waiter = threading.Thread(target=wait)
     waiter.start()
-    assert reading.wait(10)
-    released = time.monotonic()
+    assert reading.wait(60)
     holder.__exit__(None, None, None)
-    waiter.join(SLOW.stale_after)
+    waiter.join(60)
     assert refused.is_set()
     assert holder.lost is None
     assert "taken over while held" not in caplog.text
-    assert took and took[0] - released < SLOW.stale_after / 2
+    # the holder's retried release went through, so the waiter took a released lease
+    # rather than taking over one left behind once it was stale
+    assert "could not be released" not in caplog.text
+    assert took and waiting.broke == []
 
 
 def test_released_remains_do_not_hold_the_lease(tmp_path):
@@ -1125,6 +1194,97 @@ def test_dead_holder_with_an_unreadable_mark_is_taken_over(tmp_path, unreadable_
         assert len(lease.broke) == 1
 
 
+def test_try_take_waits_for_a_live_holder_with_an_unreadable_mark(
+    tmp_path, unreadable_mark
+):
+    """A wait driven by try_take keeps what it saw between calls: a renewing holder
+    with a mark that cannot be read keeps the wait alive until max_wait, and is not
+    taken over"""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+
+    def holder_beats(clock):
+        os.utime(token_dir, (clock.storage(), clock.storage()))
+
+    clock = FakeTime(newest_mtime(lockfile), on_sleep=holder_beats)
+    unreadable_mark(token_dir / HOLDER_FILE)
+    settings = LeaseSettings(stale_after=10, timeout=15, attribute_delay=0, max_wait=50)
+    waiter = clock.lease(tmp_path, lockfile, settings)
+    with pytest.raises(LeaseTimeout) as excinfo:
+        while (delay := waiter.try_take()) is not None:
+            clock.sleep(delay)
+    assert type(excinfo.value) is LeaseTimeout
+    assert "max_wait" in str(excinfo.value)
+    assert 50 <= clock.t < 52
+    assert not waiter.held
+    assert waiter.broke == []
+    assert token_dir.is_dir()
+
+
+def test_try_take_takes_over_a_dead_holder_with_an_unreadable_mark(
+    tmp_path, unreadable_mark
+):
+    """try_take takes over a dead holder whose mark cannot be read once stale_after has
+    passed on the storage clock since the first unreadable sighting, not before"""
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    clock = FakeTime(newest_mtime(lockfile))
+    unreadable_mark(token_dir / HOLDER_FILE)
+    waiter = clock.lease(tmp_path, lockfile, SLOW)
+    while (delay := waiter.try_take()) is not None:
+        assert waiter.broke == []
+        clock.sleep(delay)
+    assert waiter.held
+    assert 10 <= clock.t < 15
+    assert len(waiter.broke) == 1
+    waiter.__exit__(None, None, None)
+    assert not lockfile.exists()
+
+
+def test_try_take_lease_with_a_refused_release(tmp_path, monkeypatch, caplog):
+    """A lease taken with try_take retries a refused release within its patience; one
+    refused for good is not reported taken over, and a waiter using try_take takes
+    it over only once stale"""
+    lockfile = tmp_path / "abc.lock"
+    real_rename = os.rename
+    refusing = [3]
+
+    def rename(src, dst, *args, **kwargs):
+        if Path(dst).name.startswith("gone-") and refusing[0] > 0:
+            refusing[0] -= 1
+            raise sharing_violation(src)
+        return real_rename(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(os, "rename", rename)
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=SLOW)  # patience 1 s
+    assert lease.try_take() is None
+    lease.__exit__(None, None, None)
+    assert refusing == [0]
+    assert lease.lost is None
+    assert not lockfile.exists()
+
+    clock = FakeTime(time.time())
+    holder = clock.lease(tmp_path, lockfile, FAST)
+    assert holder.try_take() is None
+    refusing[0] = 10**9  # refused for good
+    holder.__exit__(None, None, None)
+    assert holder.lost is None
+    assert "taken over while held" not in caplog.text
+    assert "could not be released" in caplog.text
+    assert lockfile.is_dir()
+
+    refusing[0] = 0
+    later = FakeTime(newest_mtime(lockfile))
+    waiter = later.lease(tmp_path, lockfile, FAST)
+    while (delay := waiter.try_take()) is not None:
+        assert waiter.broke == []
+        later.sleep(delay)
+    assert later.t > FAST.stale_after
+    assert len(waiter.broke) == 1
+    waiter.__exit__(None, None, None)
+    assert not lockfile.exists()
+
+
 def test_stale_holder_beside_remains_is_taken_over(tmp_path):
     """Remains beside a holder's token do not make the lease removable at once: the
     holder is judged and taken over once stale."""
@@ -1171,14 +1331,19 @@ def test_short_stale_after_release_refused_is_not_taken_over_mid_release(
     holder = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
     holder.__enter__()
     took = []
+    polled = threading.Event()
+
+    def poll(seconds):
+        polled.set()
+        time.sleep(seconds)
 
     def wait():
-        with DirectoryLease("abc", tmp_path, lockfile, settings=FAST):
+        with DirectoryLease("abc", tmp_path, lockfile, settings=FAST, sleep=poll):
             took.append(True)
 
     waiter = threading.Thread(target=wait)
     waiter.start()
-    time.sleep(0.2)
+    assert polled.wait(60)  # the waiter found the lease held and is waiting
     monkeypatch.setattr(os, "rename", rename)
     holder.__exit__(None, None, None)
     waiter.join(30)
@@ -1246,48 +1411,50 @@ def refused(monkeypatch):
 
 
 @pytest.mark.parametrize("windows", [True, False])
-def test_take_on_a_name_pending_deletion(tmp_path, monkeypatch, refused, windows):
+def test_try_take_on_a_name_pending_deletion(tmp_path, monkeypatch, refused, windows):
     """On Windows a mkdir on a lease a holder has just removed is refused while a
     handle to the removed directory is open. The waiter retries; elsewhere the
     refusal is a real permission error and raises."""
     lockfile = tmp_path / "abc.lock"
-    lease = FakeTime(time.time()).lease(tmp_path, lockfile, FAST)
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
     refused["mkdir"][lockfile] = 2  # the first attempt and its retry after judging
     monkeypatch.setattr(lease_module, "IS_WINDOWS", windows)
     if not windows:
         with pytest.raises(PermissionError):
-            lease.__enter__()
+            lease.try_take()
         return
-    with lease:
-        assert refused["mkdir"][lockfile] == 0
+    delay = lease.try_take()
+    assert delay is not None and delay > 0
+    assert refused["mkdir"][lockfile] == 0
+    assert lease.try_take() is None
+    lease.__exit__(None, None, None)
     assert not lockfile.exists()
 
 
-def test_take_on_a_name_pending_deletion_still_listed(tmp_path, monkeypatch, refused):
+def test_try_take_on_a_name_pending_deletion_still_listed(
+    tmp_path, monkeypatch, refused
+):
     """The name of a directory pending deletion stays in its parent until the last
     handle closes: the mkdir is refused, and so is listing it while judging. The
     waiter retries, and takes the lease once the name is gone."""
     lockfile = tmp_path / "abc.lock"
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
     lockfile.mkdir()
-
-    def last_handle_closes(clock):
-        if lockfile.exists() and not refused["listdir"][lockfile]:
-            lockfile.rmdir()
-
-    lease = FakeTime(time.time(), on_sleep=last_handle_closes).lease(
-        tmp_path, lockfile, FAST
-    )
     refused["mkdir"][lockfile] = 1
     refused["listdir"][lockfile] = 2
     monkeypatch.setattr(lease_module, "IS_WINDOWS", True)
+    delay = lease.try_take()
+    assert delay is not None and delay > 0
+    assert refused["mkdir"][lockfile] == 0 and refused["listdir"][lockfile] == 1
     assert lease.holder() is None
-    assert refused["listdir"][lockfile] == 1
-    with lease:
-        assert refused["mkdir"][lockfile] == 0 and refused["listdir"][lockfile] == 0
+    assert refused["listdir"][lockfile] == 0
+    lockfile.rmdir()  # the last handle closed
+    assert lease.try_take() is None
+    lease.__exit__(None, None, None)
     assert not lockfile.exists()
 
 
-def test_take_when_a_releaser_removes_the_new_lease(tmp_path, monkeypatch):
+def test_try_take_when_a_releaser_removes_the_new_lease(tmp_path, monkeypatch):
     """A releaser's trailing rmdir can remove the empty lease this process has just
     made, before its token mkdir; on Windows that mkdir is then refused, not ENOENT,
     and the taker tries again."""
@@ -1302,12 +1469,13 @@ def test_take_when_a_releaser_removes_the_new_lease(tmp_path, monkeypatch):
             raise delete_pending(path)
         return real_mkdir(path, *args, **kwargs)
 
-    lease = FakeTime(time.time()).lease(tmp_path, lockfile, FAST)
+    lease = DirectoryLease("abc", tmp_path, lockfile, settings=FAST)
     monkeypatch.setattr(os, "mkdir", mkdir)
     monkeypatch.setattr(lease_module, "IS_WINDOWS", True)
-    with lease:  # taken on the retry after judging the lease gone
-        assert len(refusals) == 1
-        assert isinstance(lease._refused, PermissionError)
+    assert lease.try_take() is None  # the retry after judging the lease gone
+    assert len(refusals) == 1
+    assert isinstance(lease._refused, PermissionError)
+    lease.__exit__(None, None, None)
     assert not lockfile.exists()
 
 

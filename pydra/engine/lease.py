@@ -153,6 +153,18 @@ class Lease(ty.Protocol):
     async def __aexit__(self, exc_type, exc_value, traceback) -> None:
         """Release the lease."""
 
+    def try_take(self) -> float | None:
+        """Make one attempt to take the lease without waiting for it.
+
+        Returns
+        -------
+        float or None
+            None if the lease is held now (release it with ``__exit__``), otherwise the
+            seconds to wait before the next call. The first call of a wait starts its
+            bounds; a later call continues the same wait, and raises `LeaseTimeout`
+            (leaving the lease untaken) once a bound has passed.
+        """
+
 
 @attrs.frozen
 class LeaseSettings:
@@ -390,6 +402,7 @@ class DirectoryLease:
     _deadline: float = attrs.field(default=0.0, init=False, repr=False)
     _cap: float | None = attrs.field(default=None, init=False, repr=False)
     _delay: float = attrs.field(default=POLL_MIN, init=False, repr=False)
+    _waiting: bool = attrs.field(default=False, init=False, repr=False)
 
     @property
     def held(self) -> bool:
@@ -895,6 +908,7 @@ class DirectoryLease:
         or a file in it open) is retried for `release_patience` seconds, within which no waiter sees
         the stopped holder stale; a rename still refused then leaves the lease to be taken over once
         stale."""
+        self._waiting = False
         heartbeat, self._heartbeat = self._heartbeat, None
         token, self._token = self._token, None
         if heartbeat is not None:
@@ -930,6 +944,24 @@ class DirectoryLease:
         self._remove(gone)
 
     # Protocol
+
+    def try_take(self) -> float | None:
+        """One pass of the wait of ``__enter__``: None once the lease is held, otherwise
+        the seconds before the next attempt. The first call of a wait runs
+        ``_prepare``, which sets its bounds; later calls keep them. `LeaseTimeout` ends
+        the wait."""
+        if not self._waiting:
+            self._prepare()
+            self._waiting = True
+        try:
+            delay = self._step()
+        except BaseException:
+            self._waiting = False
+            self._release()
+            raise
+        if delay is None:
+            self._waiting = False
+        return delay
 
     def __enter__(self) -> "DirectoryLease":
         self._prepare()
