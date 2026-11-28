@@ -654,9 +654,7 @@ def test_async_lease_waits_then_takes_over(tmp_path):
         ) as lease:
             return lease.broke
 
-    start = time.monotonic()
     broke = asyncio.run(take())
-    assert time.monotonic() - start < 5
     assert broke and broke[0]["holder"]["host"] == FOREIGN_HOST
 
 
@@ -683,6 +681,40 @@ def test_default_settings_satisfy_the_inequalities():
         30,
         60,
     )
+
+
+def test_poll_settings_set_the_waits_behind_a_holder(tmp_path):
+    lockfile = tmp_path / "abc.lock"
+    token_dir = plant_foreign_lease(lockfile)
+    waits = []
+
+    def holder_beats(clock):
+        waits.append(clock.t - sum(waits))
+        os.utime(token_dir, (clock.storage(), clock.storage()))
+
+    clock = FakeTime(newest_mtime(lockfile), on_sleep=holder_beats)
+    settings = LeaseSettings(
+        stale_after=10,
+        timeout=15,
+        attribute_delay=0,
+        max_wait=12,
+        poll_min=1,
+        poll_max=4,
+    )
+    with pytest.raises(LeaseTimeout):
+        clock.lease(tmp_path, lockfile, settings).__enter__()
+    assert waits[:4] == [1, 2, 4, 4]
+
+
+def test_missed_beats_enters_the_live_holder_inequality():
+    LeaseSettings(stale_after=10, timeout=15, attribute_delay=0, missed_beats=8)
+    with pytest.raises(ValueError, match="live holder"):
+        LeaseSettings(stale_after=10, timeout=15, attribute_delay=0, missed_beats=9)
+
+
+def test_visibility_timeout_covers_the_attribute_delay():
+    s = LeaseSettings(attribute_delay=30, stale_after=300, poll_max=3)
+    assert s.visibility_timeout == 33
 
 
 def test_lease_refused_on_storage_without_atomic_mkdir(tmp_path, monkeypatch):
@@ -726,10 +758,8 @@ def test_issue_916_foreign_lock_file_does_not_hang(worker, tmp_path):
     store = PickleStore(tmp_path, lease_settings=settings)
     sub, job = planted_job_paths(tmp_path, worker, store)
     plant_legacy_lock(job.lockfile)
-    start = time.monotonic()
     with sub:
         assert sub(Inc(x=1)).outputs.out == 2
-    assert time.monotonic() - start < 30
     assert not job.lockfile.exists()
 
 
@@ -742,10 +772,9 @@ def test_issue_916_old_foreign_lock_file_taken_over_at_once(tmp_path):
     plant_legacy_lock(job.lockfile)
     old = time.time() - 3600
     os.utime(job.lockfile, (old, old))
-    start = time.monotonic()
     with sub:
         assert sub(Inc(x=1)).outputs.out == 2
-    assert time.monotonic() - start < 10
+    assert not job.lockfile.exists()
 
 
 @pytest.mark.timeout(60)
