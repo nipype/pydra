@@ -214,10 +214,11 @@ class UnfitRecord:
 
 @attrs.frozen
 class TimeRecord:
-    """Per-job seconds of warm calls of ``batch`` jobs, the median of ``n``."""
+    """Seconds per unit of warm calls of ``batch`` jobs (per job where units are unknown),
+    the median over ``n`` calls."""
 
     batch: int
-    per_job_s: float
+    per_unit_s: float
     n: int
 
 
@@ -315,7 +316,7 @@ def _class_key(klass: type) -> str:
     name = f"{klass.__module__}.{klass.__qualname__}"
     if not issubclass(klass, PythonTask):
         return name
-    functions = [get_fields(klass)[klass._executor_name].default]
+    functions = [get_fields(klass)[klass._executor_name].default, klass._batched]
     code = hashlib.sha256(
         b"".join(marshal.dumps(f.__code__) for f in functions if f is not None)
     ).hexdigest()
@@ -324,7 +325,8 @@ def _class_key(klass: type) -> str:
 
 def task_key(task: ty.Any) -> str:
     """The identity of ``task``'s class, which keys its samples: its qualified name and, for a
-    Python task, a digest of the compiled code of its function"""
+    Python task, a digest of the compiled code of its function and its batched function
+    """
     return _class_key(type(task))
 
 
@@ -607,11 +609,13 @@ class DirectoryCalibration:
     def times(
         self, key: str, hardware: HardwareClass, task: str | None = None
     ) -> list[TimeRecord]:
-        """The median per-job seconds of warm calls, per batch size."""
+        """The median seconds per unit of warm calls (per job where units are unknown), per
+        batch size."""
         by_batch: dict[int, list[float]] = {}
         for s in self._warm(key, hardware, task):
             if s.batch_size >= 1:
-                by_batch.setdefault(s.batch_size, []).append(s.wall_s / s.batch_size)
+                per = s.wall_s / (s.units if s.units else s.batch_size)
+                by_batch.setdefault(s.batch_size, []).append(per)
         return [
             TimeRecord(batch, _median(times), len(times))
             for batch, times in sorted(by_batch.items())
