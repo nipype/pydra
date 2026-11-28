@@ -94,7 +94,6 @@ def test_stuck_is_immediate(submitter, monkeypatch):
             runner,
             {"debug": executor},
             lambda job: "debug",
-            max_concurrent=float("inf"),
             on_error="raise_at_end",
         )
 

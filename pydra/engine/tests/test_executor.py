@@ -41,7 +41,6 @@ def make_runner(sub, task, on_error="raise_at_end"):
 
 
 def run_drive(sub, runner, executors, router=lambda job: "default", **kwargs):
-    kwargs.setdefault("max_concurrent", float("inf"))
     kwargs.setdefault("on_error", "raise_at_end")
     sub.loop.run_until_complete(drive(runner, executors, router, **kwargs))
 
@@ -219,7 +218,6 @@ def test_interrupt_cancels_open_handles(tmp_path, monkeypatch):
                     runner,
                     {"default": ex},
                     lambda job: "default",
-                    max_concurrent=float("inf"),
                     on_error="raise_at_end",
                 )
             )

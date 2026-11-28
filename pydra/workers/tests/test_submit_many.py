@@ -297,7 +297,6 @@ def test_executor_hands_the_round_to_submit_many(tmp_path):
                 runner,
                 {"default": executor},
                 lambda job: "default",
-                max_concurrent=float("inf"),
                 on_error="raise_at_end",
             )
         )
@@ -320,7 +319,6 @@ def run_round(sub, worker, n=4):
                 runner,
                 {"default": executor},
                 lambda job: "default",
-                max_concurrent=float("inf"),
                 on_error="raise_at_end",
             ),
             20,
