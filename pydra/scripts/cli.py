@@ -348,3 +348,44 @@ def store_adopt(root, old_entries, header_spec, identity, entry_format, check, t
     click.echo(f"{report.checked} checked, {len(report.misfiled)} misfiled")
     if report.misfiled:
         sys.exit(1)  # adopted; each misfiled entry is quarantined when it is read
+
+
+def _task_class(spec: str):
+    module, sep, name = spec.partition(":")
+    if not sep or not module or not name:
+        raise click.BadParameter(f"{spec!r} is not <module:task>")
+    try:
+        return getattr(importlib.import_module(module), name)
+    except (ImportError, AttributeError) as e:
+        raise click.ClickException(f"cannot import {spec}: {e}")
+
+
+@cli.command("check-reach", context_settings=CONTEXT_SETTINGS)
+@click.argument("task")
+@click.argument("inputs", default="{}")
+def check_reach_command(task, inputs):
+    """Run the function of TASK (``module:task``) once with INPUTS (a JSON object, default
+    ``{}``) and list the user functions that ran but that the code walk did not reach,
+    which are where ``getattr`` or ``importlib`` hides a dependency; exits with 1 if
+    there are any. A development tool: it never runs during a workflow."""
+    from pydra.utils.reach import reach_report
+
+    try:
+        values = json.loads(inputs)
+    except json.JSONDecodeError as e:
+        raise click.BadParameter(f"INPUTS is not JSON: {e}")
+    if not isinstance(values, dict):
+        raise click.BadParameter("INPUTS must be a JSON object")
+    try:
+        missed, by_name = reach_report(_task_class(task), values)
+    except Exception as e:
+        raise click.ClickException(f"{task}: {type(e).__name__}: {e}")
+    for line in missed:
+        click.echo(line)
+    if by_name:
+        click.echo("keyed by name at this code_hash tier, not by code:", err=True)
+        for line in by_name:
+            click.echo(f"  {line}", err=True)
+    if not missed:
+        click.echo("the walk reached every user function that ran")
+    sys.exit(1 if missed else 0)
